@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+
+{% block content %}
+
+<div class="card">
+    {% if member %}
+        <h1>Mitglied bearbeiten</h1>
+    {% else %}
+        <h1>Mitglied anlegen</h1>
+    {% endif %}
+
+    <form method="post">
+        <h2>Stammdaten</h2>
+
+        <label>Vorname *</label><br>
+        <input type="text" name="first_name" required value="{{ member.first_name if member else '' }}"><br>
+
+        <label>Nachname *</label><br>
+        <input type="text" name="last_name" required value="{{ member.last_name if member else '' }}"><br>
+
+        <label>Spitzname</label><br>
+        <input type="text" name="nickname" value="{{ member.nickname if member and member.nickname else '' }}"><br>
+
+        <label>E-Mail-Adresse</label><br>
+        <input type="email" name="email" value="{{ member.email if member and member.email else '' }}"><br>
+
+        <label>Eintrittsdatum</label><br>
+        <input type="date" name="joined_at" value="{{ member.joined_at if member and member.joined_at else today }}"><br>
+
+        {% if member %}
+            <label>Austrittsdatum</label><br>
+            <input type="date" name="left_at" value="{{ member.left_at if member and member.left_at else '' }}"><br>
+
+            <label>
+                <input type="checkbox" name="active" {% if member.active %}checked{% endif %} style="width:auto;">
+                Aktiv
+            </label><br>
+        {% endif %}
+
+        <label>Bemerkung</label><br>
+        <textarea name="note" rows="4">{{ member.note if member and member.note else '' }}</textarea><br>
+
+        <h2>Login-Konto</h2>
+
+        <p class="muted">
+            Optional. Nicht jedes Mitglied braucht ein eigenes Login.
+        </p>
+
+        <label>
+            <input type="checkbox" name="create_login" {% if member and member.user %}checked{% endif %} style="width:auto;">
+            Login für dieses Mitglied aktivieren
+        </label><br>
+
+        <label>Benutzername</label><br>
+        <input type="text" name="username" value="{{ member.user.username if member and member.user else '' }}"><br>
+
+        <label>Rolle</label><br>
+        <select name="role">
+            <option value="viewer" {% if member and member.user and member.user.role == 'viewer' %}selected{% endif %}>Mitglied – nur lesen</option>
+            <option value="cashier" {% if member and member.user and member.user.role == 'cashier' %}selected{% endif %}>Kassierer/-in</option>
+            <option value="admin" {% if member and member.user and member.user.role == 'admin' %}selected{% endif %}>Admin</option>
+        </select><br>
+
+        <label>Passwort setzen / zurücksetzen</label><br>
+        <input type="password" name="password" placeholder="{% if member and member.user %}Leer lassen = unverändert{% else %}Nur nötig, wenn Login aktiviert ist{% endif %}"><br>
+
+        <button type="submit">Speichern</button>
+        <a class="button" href="{{ url_for('members') }}">Abbrechen</a>
+    </form>
+</div>
+
+{% endblock %}

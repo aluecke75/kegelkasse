@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+
+{% block content %}
+
+<div class="card">
+    <h1>Dashboard</h1>
+
+    <p>Angemeldet als: <strong>{{ current_user.username }}</strong></p>
+    <p>Rolle: <strong>{{ current_user.role_label() }}</strong></p>
+</div>
+
+<div class="card">
+    <h2>Kassenstand</h2>
+
+    <p>Barkasse: <strong>{{ cash_balance }} €</strong></p>
+    <p>Bankkonto: <strong>{{ bank_balance }} €</strong></p>
+
+    {% if current_user.role in ["admin", "cashier"] %}
+        <p>
+            <a class="button" href="{{ url_for('opening_balances') }}">Startbestand erfassen</a>
+        </p>
+    {% endif %}
+</div>
+
+<div class="card">
+    <h2>Mitglieder</h2>
+    <p>Aktive Mitglieder: <strong>{{ active_member_count }}</strong></p>
+    <p>Mitglieder gesamt: <strong>{{ member_count }}</strong></p>
+</div>
+
+<div class="card">
+    <h2>Nächste Module</h2>
+    <ul>
+        <li>Kegelabend anlegen</li>
+        <li>Strafen erfassen</li>
+        <li>Offene Forderungen</li>
+        <li>Auswertungen: Pumpenwertung, Kranzwertung, Fehltage, Einzahlungen</li>
+    </ul>
+</div>
+
+{% endblock %}

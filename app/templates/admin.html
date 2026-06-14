@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+
+{% block content %}
+
+<div class="card">
+    <h1>Adminbereich</h1>
+
+    <p>Benutzerübersicht</p>
+
+    <table border="1" cellpadding="8">
+        <tr>
+            <th>Benutzer</th>
+            <th>Rolle</th>
+            <th>Aktiv</th>
+        </tr>
+
+        {% for user in users %}
+        <tr>
+            <td>{{ user.username }}</td>
+            <td>{{ user.role }}</td>
+            <td>{{ "Ja" if user.active else "Nein" }}</td>
+        </tr>
+        {% endfor %}
+    </table>
+</div>
+
+{% endblock %}

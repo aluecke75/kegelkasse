@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+
+{% block content %}
+
+<div class="card">
+    <h1>Kegelabend vom {{ event.event_date }}</h1>
+
+    <p>Bahnkosten: <strong>{{ event.lane_cost_euro() }} €</strong></p>
+    <p>Status: <strong>{{ "Offen" if event.status == "open" else "Abgeschlossen" }}</strong></p>
+</div>
+
+<div class="card">
+    <h2>Gast hinzufügen</h2>
+
+    <form method="post">
+        <input type="hidden" name="action" value="add_guest">
+
+        <label>Gastname</label><br>
+        <input type="text" name="guest_name" placeholder="z. B. Peter Müller">
+
+        <button type="submit">Gast hinzufügen</button>
+    </form>
+</div>
+
+<form method="post">
+    <input type="hidden" name="action" value="save">
+
+    {% for participant in participants %}
+    <div class="card">
+        <h2>{{ participant.name() }}</h2>
+
+        <label>Status</label><br>
+        <select name="participant_{{ participant.id }}_status">
+            <option value="present" {% if participant.status == "present" %}selected{% endif %}>Anwesend</option>
+            <option value="excused" {% if participant.status == "excused" %}selected{% endif %}>Entschuldigt gefehlt</option>
+            <option value="unexcused" {% if participant.status == "unexcused" %}selected{% endif %}>Unentschuldigt gefehlt</option>
+            <option value="guest" {% if participant.status == "guest" %}selected{% endif %}>Gast</option>
+        </select><br>
+
+        <label>Pumpen</label><br>
+        <input type="number" min="0" name="participant_{{ participant.id }}_pumps" value="{{ participant.pumps }}"><br>
+
+        <label>Kränze</label><br>
+        <input type="number" min="0" name="participant_{{ participant.id }}_wreaths" value="{{ participant.wreaths }}"><br>
+
+        <label>Alle Neune</label><br>
+        <input type="number" min="0" name="participant_{{ participant.id }}_all_nines" value="{{ participant.all_nines }}"><br>
+
+        <label>Verlorene Spiele</label><br>
+        <input type="number" min="0" name="participant_{{ participant.id }}_lost_games" value="{{ participant.lost_games }}"><br>
+
+        <label>Sonstige Strafe</label><br>
+        <input type="text" name="participant_{{ participant.id }}_manual_penalty" value="{{ participant.manual_penalty_euro() }}"><br>
+
+        <label>Bemerkung zur sonstigen Strafe</label><br>
+        <textarea name="participant_{{ participant.id }}_manual_note" rows="2">{{ participant.manual_penalty_note or "" }}</textarea>
+    </div>
+    {% endfor %}
+
+    <div class="card">
+        <button type="submit">Kegelabend speichern</button>
+        <a class="button" href="{{ url_for('events') }}">Zurück</a>
+    </div>
+</form>
+
+{% endblock %}

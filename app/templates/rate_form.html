@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+
+{% block content %}
+
+<div class="card">
+    <h1>Neuen Wert anlegen</h1>
+
+    <p class="muted">
+        Bestehende Werte werden nicht überschrieben. Für Änderungen wird ein neuer Wert mit neuem Gültigkeitsdatum angelegt.
+    </p>
+
+    <form method="post">
+        <label>Typ</label><br>
+        <select name="key" required>
+            {% for key, label in rate_types.items() %}
+                <option value="{{ key }}">{{ label }}</option>
+            {% endfor %}
+        </select><br>
+
+        <label>Betrag in Euro</label><br>
+        <input type="text" name="amount" placeholder="z. B. 20,00" required><br>
+
+        <label>Gültig ab</label><br>
+        <input type="date" name="valid_from" value="{{ today }}" required><br>
+
+        <label>Bemerkung</label><br>
+        <textarea name="note" rows="4"></textarea><br>
+
+        <button type="submit">Speichern</button>
+        <a class="button" href="{{ url_for('rate_settings') }}">Abbrechen</a>
+    </form>
+</div>
+
+{% endblock %}

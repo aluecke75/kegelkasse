@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+
+{% block content %}
+
+<div class="card">
+    <h1>Einstellungen</h1>
+
+    <p class="muted">
+        Werte werden historisch gespeichert. Alte Kegelabende und alte Beiträge werden dadurch später nicht verändert.
+    </p>
+
+    {% if current_user.role == "admin" %}
+        <p>
+            <a class="button" href="{{ url_for('rate_new') }}">Neuen Wert anlegen</a>
+        </p>
+    {% endif %}
+
+    <table>
+        <tr>
+            <th>Typ</th>
+            <th>Betrag</th>
+            <th>Gültig ab</th>
+            <th>Bemerkung</th>
+        </tr>
+
+        {% for rate in rates %}
+        <tr>
+            <td>{{ rate.label }}</td>
+            <td>{{ rate.amount_euro() }} €</td>
+            <td>{{ rate.valid_from }}</td>
+            <td>{{ rate.note or "" }}</td>
+        </tr>
+        {% endfor %}
+    </table>
+</div>
+
+{% endblock %}

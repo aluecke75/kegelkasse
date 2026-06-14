@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="de">
+<head>
+    <meta charset="utf-8">
+    <title>Kegelkasse</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+
+    <style>
+        body { font-family: Arial, sans-serif; margin: 0; background: #f4f4f4; }
+        header { background: #222; color: white; padding: 14px 20px; }
+        nav a { color: white; margin-right: 16px; text-decoration: none; }
+        main { padding: 20px; }
+        .card { background: white; padding: 18px; border-radius: 8px; margin-bottom: 16px; }
+        input, textarea, select, button { padding: 8px; margin: 4px 0; max-width: 420px; width: 100%; box-sizing: border-box; }
+        button, .button { cursor: pointer; background: #222; color: white; padding: 9px 14px; border-radius: 5px; text-decoration: none; border: 0; display: inline-block; width: auto; }
+        table { border-collapse: collapse; width: 100%; background: white; }
+        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+        th { background: #eee; }
+        .danger { color: #b00020; }
+        .success { color: #006b2e; }
+        .muted { color: #777; }
+    </style>
+</head>
+
+<body>
+
+<header>
+    <strong>Kegelkasse</strong>
+
+    {% if current_user.is_authenticated %}
+        <nav style="margin-top: 10px;">
+            <a href="{{ url_for('dashboard') }}">Dashboard</a>
+            <a href="{{ url_for('members') }}">Mitglieder</a>
+			<a href="{{ url_for('events') }}">Kegelabende</a>
+            <a href="{{ url_for('rate_settings') }}">Einstellungen</a>
+
+            {% if current_user.role == "admin" %}
+                <a href="{{ url_for('admin_area') }}">Admin</a>
+            {% endif %}
+
+            <a href="{{ url_for('logout') }}">Abmelden</a>
+        </nav>
+    {% endif %}
+</header>
+
+<main>
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            {% for category, message in messages %}
+                <p class="{{ category }}">{{ message }}</p>
+            {% endfor %}
+        {% endif %}
+    {% endwith %}
+
+    {% block content %}{% endblock %}
+</main>
+
+</body>
+</html>

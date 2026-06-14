@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+
+{% block content %}
+
+<div class="card">
+    <h1>Mitglieder</h1>
+
+    {% if current_user.role in ["admin", "cashier"] %}
+        <p>
+            <a class="button" href="{{ url_for('member_new') }}">Mitglied anlegen</a>
+        </p>
+    {% endif %}
+
+    <table>
+        <tr>
+            <th>Name</th>
+            <th>Spitzname</th>
+            <th>E-Mail</th>
+            <th>Status</th>
+            <th>Login</th>
+            <th>Rolle</th>
+            <th>Eintritt</th>
+            <th>Austritt</th>
+            <th>Bemerkung</th>
+            {% if current_user.role in ["admin", "cashier"] %}
+                <th>Aktion</th>
+            {% endif %}
+        </tr>
+
+        {% for member in members %}
+        <tr>
+            <td>{{ member.first_name }} {{ member.last_name }}</td>
+            <td>{{ member.nickname or "" }}</td>
+            <td>{{ member.email or "" }}</td>
+            <td>{{ "Aktiv" if member.active else "Inaktiv" }}</td>
+
+            <td>
+                {% if member.user %}
+                    Ja
+                {% else %}
+                    Nein
+                {% endif %}
+            </td>
+
+            <td>
+                {% if member.user %}
+                    {{ member.user.role_label() }}
+                {% endif %}
+            </td>
+
+            <td>{{ member.joined_at or "" }}</td>
+            <td>{{ member.left_at or "" }}</td>
+            <td>{{ member.note or "" }}</td>
+
+            {% if current_user.role in ["admin", "cashier"] %}
+                <td>
+                    <a href="{{ url_for('member_edit', member_id=member.id) }}">Bearbeiten</a>
+
+                    <form method="post"
+                          action="{{ url_for('member_delete', member_id=member.id) }}"
+                          style="display:inline;"
+                          onsubmit="return confirm('Mitglied wirklich löschen? Diese Aktion kann nicht rückgängig gemacht werden.');">
+                        <button type="submit" style="background:#b00020; margin-left:8px;">
+                            Löschen
+                        </button>
+                    </form>
+                </td>
+            {% endif %}
+        </tr>
+        {% endfor %}
+    </table>
+</div>
+
+{% endblock %}

@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+
+{% block content %}
+
+<div class="card">
+    <h1>Kegelabend anlegen</h1>
+
+    <form method="post">
+        <label>Datum</label><br>
+        <input type="date" name="event_date" value="{{ today }}" required><br>
+
+        <label>Bahnkosten</label><br>
+        <input type="text" name="lane_cost" value="{{ lane_cost }}" required><br>
+
+        <label>Notiz</label><br>
+        <textarea name="note" rows="4"></textarea><br>
+
+        <button type="submit">Kegelabend speichern</button>
+        <a class="button" href="{{ url_for('events') }}">Abbrechen</a>
+    </form>
+</div>
+
+{% endblock %}

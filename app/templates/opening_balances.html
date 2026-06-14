@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+
+{% block content %}
+
+<div class="card">
+    <h1>Startbestand erfassen</h1>
+
+    <p class="muted">
+        Hier trägst du den vorhandenen Stand der Barkasse und des Bankkontos ein.
+        Die Werte werden als Startbuchung gespeichert.
+    </p>
+
+    <p>Aktueller Barkassenstand: <strong>{{ cash_balance }} €</strong></p>
+    <p>Aktueller Bankstand: <strong>{{ bank_balance }} €</strong></p>
+
+    <form method="post">
+        <label>Barkasse Startbestand</label><br>
+        <input type="text" name="cash_amount" placeholder="z. B. 123,40" required><br>
+
+        <label>Bankkonto Startbestand</label><br>
+        <input type="text" name="bank_amount" placeholder="z. B. 850,00" required><br>
+
+        <label>Stichtag</label><br>
+        <input type="date" name="booking_date" value="{{ today }}" required><br>
+
+        <label>Bemerkung</label><br>
+        <textarea name="description" rows="4" placeholder="z. B. Startbestand laut Kassenbuch"></textarea><br>
+
+        <button type="submit">Startbestand speichern</button>
+        <a class="button" href="{{ url_for('dashboard') }}">Abbrechen</a>
+    </form>
+</div>
+
+{% endblock %}

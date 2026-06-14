@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+
+{% block content %}
+
+<div class="card">
+    <h1>Kegelabende</h1>
+
+    {% if current_user.role in ["admin", "cashier"] %}
+        <p>
+            <a class="button" href="{{ url_for('event_new') }}">Kegelabend anlegen</a>
+        </p>
+    {% endif %}
+
+    <table>
+        <tr>
+            <th>Datum</th>
+            <th>Bahnkosten</th>
+            <th>Status</th>
+            <th>Notiz</th>
+            <th>Aktion</th>
+        </tr>
+
+        {% for event in events %}
+        <tr>
+            <td>{{ event.event_date }}</td>
+            <td>{{ event.lane_cost_euro() }} €</td>
+            <td>{{ "Offen" if event.status == "open" else "Abgeschlossen" }}</td>
+            <td>{{ event.note or "" }}</td>
+            <td>
+                <a href="{{ url_for('event_detail', event_id=event.id) }}">Öffnen</a>
+            </td>
+        </tr>
+        {% endfor %}
+    </table>
+</div>
+
+{% endblock %}
