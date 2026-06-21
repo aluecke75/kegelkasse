@@ -1,0 +1,52 @@
+{% if not payload.has_member or not payload.has_event or payload.message %}
+    <div class="my-empty">{{ payload.message or "Keine Daten gefunden." }}</div>
+{% else %}
+    <div class="my-event-note">
+        {% if payload.is_live %}
+            {% if payload.editor %}
+                <strong>Kegelabend wird aktuell von {{ payload.editor }} bearbeitet.</strong>
+                Die Ansicht aktualisiert sich automatisch.
+            {% else %}
+                <strong>Aktiver Kegelabend.</strong>
+                Die Ansicht aktualisiert sich automatisch.
+            {% endif %}
+        {% else %}
+            <strong>Kein aktiver Kegelabend.</strong>
+            Angezeigt werden deine Werte vom letzten abgeschlossenen Kegelabend.
+        {% endif %}
+        <br><span class="muted">{{ payload.event_date }}</span>
+    </div>
+
+    <div class="my-penalties">
+        {% for item in payload["items"] %}
+            {% if item.target_mode == 'others' %}
+                <div class="my-penalty-row my-penalty-others">
+                    <div class="my-penalty-name">{{ item.name }}</div>
+                    <div class="my-penalty-qty">{{ item.payable_quantity }}×</div>
+                    <div class="my-penalty-amount">{{ item.amount_euro }} €</div>
+                    <div class="my-penalty-subline">
+                        <span>geworfen: <strong>{{ item.own_quantity }}</strong></span>
+                        <span>bezahlen: <strong>{{ item.payable_quantity }}</strong></span>
+                    </div>
+                </div>
+            {% else %}
+                <div class="my-penalty-row">
+                    <div class="my-penalty-name">{{ item.name }}</div>
+                    <div class="my-penalty-qty">{% if item.kind == 'amount' %}Betrag{% else %}{{ item.quantity }}×{% endif %}</div>
+                    <div class="my-penalty-amount">{{ item.amount_euro }} €</div>
+                </div>
+            {% endif %}
+        {% endfor %}
+    </div>
+
+    <div class="my-summary my-summary-bottom">
+        <div class="my-summary-card">
+            <div class="my-summary-label">Aktueller Abend</div>
+            <div class="my-summary-value">{{ payload.current_total_euro }} €</div>
+        </div>
+        <div class="my-summary-card">
+            <div class="my-summary-label">Strafkonto gesamt</div>
+            <div class="my-summary-value">{{ payload.balance_euro }} €</div>
+        </div>
+    </div>
+{% endif %}

@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="modern-header">
+    <div class="modern-icon">🔎</div>
+    <div>
+        <h1>Kassenprüfung</h1>
+        <p>Systembestand mit gezählter Barkasse und Bankauszug vergleichen.</p>
+    </div>
+</div>
+
+<div class="modern-card">
+    <div class="modern-header"><div class="modern-icon">🧾</div><div><h2>Neue Prüfung erfassen</h2><p>Es wird keine Buchung erzeugt, sondern ein Prüfprotokoll gespeichert.</p></div></div>
+    <form method="post">
+        <div class="form-grid">
+            <label class="field-stack"><span>Prüfdatum</span><input type="date" name="audit_date" value="{{ today }}" required></label>
+            <div class="metric-card"><span>Barkasse laut System</span><strong>{{ expected_cash }} €</strong></div>
+            <label class="field-stack"><span>Barkasse gezählt</span><input class="euro-input" type="text" name="counted_cash" value="{{ expected_cash }}" inputmode="decimal" required></label>
+            <div class="metric-card"><span>Bank laut System</span><strong>{{ expected_bank }} €</strong></div>
+            <label class="field-stack"><span>Bank laut Auszug</span><input class="euro-input" type="text" name="statement_bank" value="{{ expected_bank }}" inputmode="decimal" required></label>
+        </div>
+        <label>Notiz / Bemerkung<textarea name="note" rows="3" placeholder="z. B. Kasse gezählt, Bankauszug geprüft, Differenz geklärt..."></textarea></label>
+        <button type="submit">Kassenprüfung speichern</button>
+    </form>
+</div>
+
+<div class="modern-card">
+    <div class="modern-header"><div class="modern-icon">📋</div><div><h2>Bisherige Prüfungen</h2><p>Gespeicherte Prüfprotokolle mit Differenzen und Notizen.</p></div></div>
+    <div class="mobile-table-wrap">
+        <table>
+            <thead><tr><th>Datum</th><th>Barkasse System</th><th>Barkasse gezählt</th><th>Differenz Bar</th><th>Bank System</th><th>Bank Auszug</th><th>Differenz Bank</th><th>Erfasst von</th><th>Details</th></tr></thead>
+            <tbody>
+                {% for audit in audits %}
+                    <tr>
+                        <td>{{ audit.audit_date.strftime('%d.%m.%Y') if audit.audit_date else '' }}</td>
+                        <td>{{ audit.expected_cash_euro() }} €</td>
+                        <td>{{ audit.counted_cash_euro() }} €</td>
+                        <td class="{% if audit.difference_cash_cents != 0 %}danger{% else %}success{% endif %}">{{ audit.difference_cash_euro() }} €</td>
+                        <td>{{ audit.expected_bank_euro() }} €</td>
+                        <td>{{ audit.statement_bank_euro() }} €</td>
+                        <td class="{% if audit.difference_bank_cents != 0 %}danger{% else %}success{% endif %}">{{ audit.difference_bank_euro() }} €</td>
+                        <td>{{ audit.created_by_user.username if audit.created_by_user else '-' }}</td>
+                        <td>{% if audit.note %}<details><summary>Notiz anzeigen</summary><p>{{ audit.note }}</p></details>{% else %}<span class="muted">-</span>{% endif %}</td>
+                    </tr>
+                {% else %}
+                    <tr><td colspan="9">Noch keine Kassenprüfung vorhanden.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+<style>.field-stack span { display:block; margin-bottom:0.3rem; font-weight:800; color:var(--text); }</style>
+<script>
+(function () {
+    function normalizeEuro(value) { let raw = String(value || '').trim().replace('€', '').replace(/\s/g, ''); if (!raw) return '0,00'; if (raw.startsWith(',') || raw.startsWith('.')) raw = '0' + raw; if (raw.includes(',')) raw = raw.replace(/\./g, '').replace(',', '.'); let number = Number(raw); if (!Number.isFinite(number)) return value; return number.toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+    document.querySelectorAll('.euro-input').forEach(function (field) { field.addEventListener('focus', function () { if (field.value === '0,00') field.value = ''; }); field.addEventListener('blur', function () { field.value = normalizeEuro(field.value); }); });
+})();
+</script>
+{% endblock %}

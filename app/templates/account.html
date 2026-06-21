@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+
+{% block content %}
+
+<div class="page-header">
+    <div class="page-icon">👤</div>
+    <div>
+        <h1>Mein Konto</h1>
+        <p>Benutzername, E-Mail-Adresse und Passwort für deinen eigenen Zugang verwalten.</p>
+    </div>
+</div>
+
+<form method="post">
+    <div class="two-column-grid account-grid">
+        <div class="modern-card">
+            <h2>Kontodaten</h2>
+            <p class="muted">Diese Angaben betreffen nur deinen eigenen Benutzerzugang.</p>
+
+            <label>
+                Benutzername
+                <input type="text" name="username" value="{{ current_user.username }}" required autocomplete="username">
+                <small>Der Benutzername wird beim Login verwendet.</small>
+            </label>
+
+            <label>
+                Rolle
+                <input type="text" value="{{ current_user.role_label() }}" disabled>
+                <small>Die Rolle kann nur durch Admin/Kassierer geändert werden.</small>
+            </label>
+
+            <label>
+                E-Mail-Adresse
+                <input type="email" name="email" value="{{ current_user.email or '' }}" placeholder="max.mustermann@example.de">
+                <small>Wichtig für spätere Passwort-Zurücksetzung per E-Mail.</small>
+            </label>
+        </div>
+
+        <div class="modern-card">
+            <h2>Passwort ändern</h2>
+            <p class="muted">Leer lassen, wenn das Passwort unverändert bleiben soll.</p>
+
+            <div class="info-box">
+                <strong>🔐</strong>
+                <div><strong>Aktuelle Passwortvorgabe</strong><br>{{ password_policy_text }}</div>
+            </div>
+
+            <label>
+                Aktuelles Passwort
+                <input type="password" name="current_password" autocomplete="current-password">
+            </label>
+
+            <label>
+                Neues Passwort
+                <input type="password" name="new_password" autocomplete="new-password">
+            </label>
+
+            <label>
+                Neues Passwort wiederholen
+                <input type="password" name="new_password_repeat" autocomplete="new-password">
+            </label>
+        </div>
+    </div>
+
+    <div class="modern-card action-card">
+        <button type="submit">Konto speichern</button>
+    </div>
+</form>
+
+<style>
+.account-grid { align-items: stretch; }
+.account-grid > .modern-card { height: 100%; }
+.action-card { display:flex; justify-content:flex-end; }
+@media (max-width: 760px) { .action-card { justify-content:stretch; } .action-card button { width:100%; } }
+</style>
+
+{% endblock %}

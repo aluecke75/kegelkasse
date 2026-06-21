@@ -1,0 +1,87 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="modern-header">
+    <div class="modern-icon">🚀</div>
+    <div>
+        <h1>Ersteinrichtung</h1>
+        <p>Richte die Kegelkasse mit möglichst wenigen Pflichtangaben ein. Alles Optionale kann später ergänzt werden.</p>
+    </div>
+</div>
+
+<div class="info-box">
+    <div>ℹ️</div>
+    <div>
+        <strong>Öffentliche Version / neue Installation</strong><br>
+        Pflicht sind nur Vereinsname, Admin-Benutzername und Passwort. Zahlungsdaten, Logo, Backup-Ziele und Migrationen können später ergänzt werden.
+    </div>
+</div>
+
+<form method="post" class="modern-card">
+    <h2>Pflichtangaben</h2>
+    <div class="form-grid">
+        <label>Vereins-/Clubname *
+            <input type="text" name="club_name" required value="{{ request.form.get('club_name', '') }}" placeholder="z. B. Kegelclub Musterstadt">
+        </label>
+        <label>Admin-Benutzername *
+            <input type="text" name="username" required value="{{ request.form.get('username', 'admin') }}" autocomplete="username">
+            <small>Der Admin ist ein Systembenutzer und kegelt nicht automatisch mit.</small>
+        </label>
+        <label>E-Mail-Adresse Admin
+            <input type="email" name="email" value="{{ request.form.get('email', '') }}" autocomplete="email">
+        </label>
+        <label>Passwort *
+            <input type="password" name="password" required autocomplete="new-password">
+        </label>
+        <label>Passwort wiederholen *
+            <input type="password" name="password_repeat" required autocomplete="new-password">
+        </label>
+    </div>
+
+    <details class="subtle-box" style="margin-top:16px;">
+        <summary><strong>Optionale Zahlungsdaten direkt hinterlegen</strong></summary>
+        <p class="muted">Diese Angaben helfen später bei offenen Strafzahlungen, QR-Codes und Zahlungshinweisen. Sie sind nicht erforderlich.</p>
+        <div class="form-grid">
+            <label>Kontoinhaber
+                <input type="text" name="account_holder" value="{{ request.form.get('account_holder', '') }}">
+            </label>
+            <label>IBAN
+                <input type="text" name="iban" value="{{ request.form.get('iban', '') }}">
+            </label>
+            <label>BIC
+                <input type="text" name="bic" value="{{ request.form.get('bic', '') }}">
+            </label>
+            <label>PayPal-Adresse
+                <input type="email" name="paypal_email" value="{{ request.form.get('paypal_email', '') }}">
+            </label>
+            <label>PayPal-Link
+                <input type="url" name="paypal_link" value="{{ request.form.get('paypal_link', '') }}">
+            </label>
+        </div>
+    </details>
+
+    <details class="subtle-box" style="margin-top:16px;">
+        <summary><strong>Optionale Darstellung</strong></summary>
+        <div class="form-grid">
+            <label>Primärfarbe
+                <input type="text" name="primary_color" value="{{ request.form.get('primary_color', '') }}" placeholder="#176a2f">
+            </label>
+            <label>Sekundärfarbe
+                <input type="text" name="secondary_color" value="{{ request.form.get('secondary_color', '') }}" placeholder="#d4af37">
+            </label>
+        </div>
+    </details>
+
+    <details class="subtle-box" style="margin-top:16px;">
+        <summary><strong>Daten übernehmen / Migration</strong></summary>
+        <p class="muted">
+            Der Migrationsassistent ist vorbereitet: Excel, CSV, Vereins-Export und Demo-Daten werden später direkt beim ersten Start angeboten.
+            Für diese Basis-Version kannst du nach der Einrichtung über „Verein importieren“ einen vorhandenen Vereins-Export einspielen.
+        </p>
+    </details>
+
+    <div class="inline-actions" style="margin-top:18px;">
+        <button type="submit">Kegelkasse einrichten</button>
+    </div>
+</form>
+{% endblock %}

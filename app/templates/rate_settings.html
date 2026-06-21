@@ -2,36 +2,77 @@
 
 {% block content %}
 
-<div class="card">
-    <h1>Einstellungen</h1>
-
-    <p class="muted">
-        Werte werden historisch gespeichert. Alte Kegelabende und alte Beiträge werden dadurch später nicht verändert.
-    </p>
-
-    {% if current_user.role == "admin" %}
-        <p>
-            <a class="button" href="{{ url_for('rate_new') }}">Neuen Wert anlegen</a>
-        </p>
-    {% endif %}
-
-    <table>
-        <tr>
-            <th>Typ</th>
-            <th>Betrag</th>
-            <th>Gültig ab</th>
-            <th>Bemerkung</th>
-        </tr>
-
-        {% for rate in rates %}
-        <tr>
-            <td>{{ rate.label }}</td>
-            <td>{{ rate.amount_euro() }} €</td>
-            <td>{{ rate.valid_from }}</td>
-            <td>{{ rate.note or "" }}</td>
-        </tr>
-        {% endfor %}
-    </table>
+<div class="modern-header">
+    <div class="modern-icon">⚙️</div>
+    <div>
+        <h1>Grundeinstellungen</h1>
+        <p>Aktuelle Werte kompakt anzeigen. Historie bleibt aufklappbar erhalten.</p>
+    </div>
 </div>
+
+<div class="modern-card">
+    <div class="inline-actions" style="justify-content:space-between;">
+        <div>
+            <h2 style="margin:0;">Aktuelle Werte</h2>
+            <p class="muted" style="margin:4px 0 0;">Je Einstellung wird der aktuell gültige Wert gezeigt.</p>
+        </div>
+        {% if current_user.role == "admin" %}
+            <a class="button" href="{{ url_for('rate_new') }}">+ Neuen Wert anlegen</a>
+        {% endif %}
+    </div>
+</div>
+
+<div class="settings-list">
+    {% for group in rate_groups %}
+        {% set current = group.current %}
+        <div class="modern-card setting-item">
+            <button type="button" class="setting-summary" onclick="this.closest('.setting-item').classList.toggle('open')">
+                <span class="setting-icon">€</span>
+                <span>
+                    <strong>{{ group.label }}</strong>
+                    <small>Gültig ab {{ current.valid_from }}{% if current.note %} · {{ current.note }}{% endif %}</small>
+                </span>
+                <span class="setting-value">{{ current.amount_euro() }} €</span>
+                {% if group.history|length > 1 %}
+                    <span class="muted">Verlauf anzeigen</span>
+                {% else %}
+                    <span class="muted">kein Verlauf</span>
+                {% endif %}
+            </button>
+
+            {% if group.history|length > 1 %}
+                <div class="setting-history">
+                    <div class="mobile-table-wrap">
+                        <table>
+                            <tr>
+                                <th>Wert</th>
+                                <th>Gültig ab</th>
+                                <th>Bemerkung</th>
+                            </tr>
+                            {% for rate in group.history %}
+                                <tr>
+                                    <td>{{ rate.amount_euro() }} €</td>
+                                    <td>{{ rate.valid_from }}</td>
+                                    <td>{{ rate.note or "" }}</td>
+                                </tr>
+                            {% endfor %}
+                        </table>
+                    </div>
+                </div>
+            {% endif %}
+        </div>
+    {% endfor %}
+</div>
+
+<style>
+.settings-list { display:grid; gap:12px; }
+.setting-summary { width:100%; max-width:none; border:0; background:transparent; color:var(--text); text-align:left; padding:0; display:grid; grid-template-columns:auto 1fr auto auto; gap:12px; align-items:center; }
+.setting-summary small { display:block; color:var(--muted); font-weight:400; margin-top:3px; }
+.setting-icon { width:36px; height:36px; border-radius:12px; display:flex; align-items:center; justify-content:center; background:var(--green-soft); color:var(--green); font-weight:800; }
+.setting-value { border-radius:999px; padding:5px 10px; background:#f1f5f9; font-weight:800; white-space:nowrap; }
+.setting-history { display:none; margin-top:16px; padding-top:16px; border-top:1px solid var(--line); }
+.setting-item.open .setting-history { display:block; }
+@media (max-width:760px) { .setting-summary { grid-template-columns:1fr; } }
+</style>
 
 {% endblock %}

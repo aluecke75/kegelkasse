@@ -2,73 +2,104 @@
 
 {% block content %}
 
-<div class="card">
-    <h1>Mitglieder</h1>
-
-    {% if current_user.role in ["admin", "cashier"] %}
-        <p>
-            <a class="button" href="{{ url_for('member_new') }}">Mitglied anlegen</a>
-        </p>
-    {% endif %}
-
-    <table>
-        <tr>
-            <th>Name</th>
-            <th>Spitzname</th>
-            <th>E-Mail</th>
-            <th>Status</th>
-            <th>Login</th>
-            <th>Rolle</th>
-            <th>Eintritt</th>
-            <th>Austritt</th>
-            <th>Bemerkung</th>
-            {% if current_user.role in ["admin", "cashier"] %}
-                <th>Aktion</th>
-            {% endif %}
-        </tr>
-
-        {% for member in members %}
-        <tr>
-            <td>{{ member.first_name }} {{ member.last_name }}</td>
-            <td>{{ member.nickname or "" }}</td>
-            <td>{{ member.email or "" }}</td>
-            <td>{{ "Aktiv" if member.active else "Inaktiv" }}</td>
-
-            <td>
-                {% if member.user %}
-                    Ja
-                {% else %}
-                    Nein
-                {% endif %}
-            </td>
-
-            <td>
-                {% if member.user %}
-                    {{ member.user.role_label() }}
-                {% endif %}
-            </td>
-
-            <td>{{ member.joined_at or "" }}</td>
-            <td>{{ member.left_at or "" }}</td>
-            <td>{{ member.note or "" }}</td>
-
-            {% if current_user.role in ["admin", "cashier"] %}
-                <td>
-                    <a href="{{ url_for('member_edit', member_id=member.id) }}">Bearbeiten</a>
-
-                    <form method="post"
-                          action="{{ url_for('member_delete', member_id=member.id) }}"
-                          style="display:inline;"
-                          onsubmit="return confirm('Mitglied wirklich löschen? Diese Aktion kann nicht rückgängig gemacht werden.');">
-                        <button type="submit" style="background:#b00020; margin-left:8px;">
-                            Löschen
-                        </button>
-                    </form>
-                </td>
-            {% endif %}
-        </tr>
-        {% endfor %}
-    </table>
+<div class="modern-header">
+    <div class="modern-icon">👥</div>
+    <div>
+        <h1>Mitglieder</h1>
+        <p>Mitglieder, Login-Konten und Rollen übersichtlich verwalten.</p>
+    </div>
 </div>
+
+<div class="section-grid">
+    <div class="metric-card">
+        <span>Mitglieder gesamt</span>
+        <strong>{{ members|length }}</strong>
+    </div>
+    <div class="metric-card">
+        <span>Aktive Mitglieder</span>
+        <strong>{{ members|selectattr('active')|list|length }}</strong>
+    </div>
+    <div class="metric-card">
+        <span>Mit Login</span>
+        <strong>{{ members|selectattr('user')|list|length }}</strong>
+    </div>
+</div>
+
+<div class="modern-card">
+    <div class="inline-actions" style="justify-content:space-between; margin-bottom:14px;">
+        <div>
+            <h2 style="margin:0;">Mitgliederliste</h2>
+            <p class="muted" style="margin:4px 0 0;">Kurze Übersicht. Details und Bearbeitung über die Aktionsspalte.</p>
+        </div>
+        {% if current_user.role in ["admin", "cashier"] %}
+            <a class="button" href="{{ url_for('member_new') }}">+ Mitglied anlegen</a>
+        {% endif %}
+    </div>
+
+    <div class="mobile-table-wrap">
+        <table>
+            <tr>
+                <th>Name</th>
+                <th>Spitzname</th>
+                <th>E-Mail</th>
+                <th>Status</th>
+                <th>Login</th>
+                <th>Rolle</th>
+                <th>Eintritt</th>
+                <th>Austritt</th>
+                <th>Bemerkung</th>
+                {% if current_user.role in ["admin", "cashier"] %}
+                    <th>Aktion</th>
+                {% endif %}
+            </tr>
+
+            {% for member in members %}
+            <tr>
+                <td><strong>{{ member.first_name }} {{ member.last_name }}</strong></td>
+                <td>{{ member.nickname or "–" }}</td>
+                <td>{{ member.email or "–" }}</td>
+                <td>
+                    <span class="status-pill {{ 'ok' if member.active else 'muted-pill' }}">
+                        {{ "Aktiv" if member.active else "Inaktiv" }}
+                    </span>
+                </td>
+                <td>{{ "Ja" if member.user else "Nein" }}</td>
+                <td>
+                    {% if member.user %}
+                        {{ member.user.role_label() }}
+                    {% else %}
+                        Ohne Benutzerkonto
+                    {% endif %}
+                </td>
+                <td>{{ member.joined_at or "–" }}</td>
+                <td>{{ member.left_at or "–" }}</td>
+                <td>{{ member.note or "" }}</td>
+
+                {% if current_user.role in ["admin", "cashier"] %}
+                    <td>
+                        <div class="inline-actions">
+                            <a class="button secondary" href="{{ url_for('member_edit', member_id=member.id) }}">Bearbeiten</a>
+                            <form method="post"
+                                  action="{{ url_for('member_delete', member_id=member.id) }}"
+                                  onsubmit="return confirm('Mitglied wirklich löschen? Diese Aktion kann nicht rückgängig gemacht werden.');">
+                                <button class="button danger" type="submit">Löschen</button>
+                            </form>
+                        </div>
+                    </td>
+                {% endif %}
+            </tr>
+            {% else %}
+            <tr>
+                <td colspan="10" class="muted">Noch keine Mitglieder angelegt.</td>
+            </tr>
+            {% endfor %}
+        </table>
+    </div>
+</div>
+
+<style>
+.status-pill { display:inline-block; border-radius:999px; padding:4px 9px; font-size:0.85rem; background:#eefaf1; color:#176a2f; font-weight:700; }
+.status-pill.muted-pill { background:#f1f5f9; color:#64748b; }
+</style>
 
 {% endblock %}

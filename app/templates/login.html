@@ -1,23 +1,34 @@
 {% extends "base.html" %}
-
 {% block content %}
-
-<div class="card">
-    <h1>Anmelden</h1>
-
-    <form method="post">
-        <div>
-            <label>Benutzername</label><br>
-            <input type="text" name="username" required>
+<div class="auth-wrap">
+    <div class="modern-card auth-card">
+        <div class="modern-header" style="margin-bottom:12px;">
+            <div class="modern-icon">🎳</div>
+            <div>
+                <h1>Anmelden</h1>
+                <p>Kegelkasse öffnen und aktuellen Stand ansehen.</p>
+            </div>
         </div>
 
-        <div>
-            <label>Passwort</label><br>
-            <input type="password" name="password" required>
-        </div>
+        <form method="post" class="auth-form">
+            <label>Benutzername
+                <input type="text" name="username" required autocomplete="username">
+            </label>
 
-        <button type="submit">Einloggen</button>
-    </form>
+            <label>Passwort
+                <input type="password" name="password" required autocomplete="current-password">
+            </label>
+
+            <button type="submit">Einloggen</button>
+        </form>
+
+        <p class="muted" style="margin-top:16px;"><a href="{{ url_for('password_forgot') }}">Passwort vergessen?</a></p>
+    </div>
 </div>
-
+<style>
+.auth-wrap { min-height:55vh; display:flex; align-items:center; justify-content:center; }
+.auth-card { width:100%; max-width:460px; }
+.auth-form { display:grid; gap:10px; }
+.auth-form button { width:100%; max-width:none; }
+</style>
 {% endblock %}

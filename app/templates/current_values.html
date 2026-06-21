@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="page-header">
+    <div class="page-icon">📋</div>
+    <div>
+        <h1>Aktuelle Werte</h1>
+        <p>Kompakte Nur-Lesen-Ansicht der aktuell gültigen Beiträge und Strafarten.</p>
+    </div>
+</div>
+
+<div class="two-column-grid">
+    <div class="modern-card">
+        <h2>Grundeinstellungen</h2>
+        {% for group in rate_groups %}
+            <div class="setting-row">
+                <div>
+                    <strong>{{ group.label }}</strong>
+                    <div class="muted">angelegt am {{ group.current.created_at.strftime('%d.%m.%Y') if group.current.created_at else '-' }}</div>
+                </div>
+                <strong>{{ group.current.amount_euro() }} €</strong>
+            </div>
+            {% if group.history|length > 1 %}
+                <details class="history-details">
+                    <summary>Historie anzeigen</summary>
+                    <ul>
+                        {% for rate in group.history %}
+                            <li>{{ rate.valid_from.strftime('%d.%m.%Y') }}: {{ rate.euro() }} €{% if rate.note %} – {{ rate.note }}{% endif %}</li>
+                        {% endfor %}
+                    </ul>
+                </details>
+            {% endif %}
+        {% endfor %}
+    </div>
+
+    <div class="modern-card">
+        <h2>Aktuelle Strafarten</h2>
+        {% for group in penalty_groups %}
+            <div class="setting-row">
+                <div>
+                    <strong>{{ group.current.name }}</strong>
+                    <div class="muted">{{ 'alle anderen zahlen' if group.current.target_mode == 'others' else 'Spieler zahlt selbst' }} · angelegt am {{ group.current.created_at.strftime('%d.%m.%Y') if group.current.created_at else '-' }}</div>
+                </div>
+                <strong>{{ group.current.amount_euro() }} €</strong>
+            </div>
+            {% if group.history|length > 1 %}
+                <details class="history-details">
+                    <summary>Historie anzeigen</summary>
+                    <ul>
+                        {% for penalty in group.history %}
+                            <li>{{ penalty.created_at.strftime('%d.%m.%Y') if penalty.created_at else '-' }}: {{ penalty.name }} · {{ penalty.amount_euro() }} € · {{ 'aktiv' if penalty.active else 'inaktiv' }}</li>
+                        {% endfor %}
+                    </ul>
+                </details>
+            {% endif %}
+        {% else %}
+            <p class="muted">Noch keine Strafarten angelegt.</p>
+        {% endfor %}
+    </div>
+</div>
+
+<style>
+.setting-row { display:flex; justify-content:space-between; gap:16px; align-items:flex-start; padding:12px 0; border-bottom:1px solid var(--border-color, #e5e7eb); }
+.setting-row:last-child { border-bottom:0; }
+.history-details { margin:8px 0 10px; }
+.history-details summary { cursor:pointer; color:#166534; font-weight:600; }
+@media (max-width: 640px) { .setting-row { gap:10px; } }
+</style>
+{% endblock %}

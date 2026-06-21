@@ -1,0 +1,156 @@
+{% extends "base.html" %}
+
+{% block content %}
+<style>
+        .my-event-note {
+        border: 1px solid var(--line);
+        background: #fff;
+        box-shadow: var(--shadow);
+        border-radius: 0.9rem;
+        padding: 0.8rem 1rem;
+        margin-bottom: 1rem;
+    }
+    .my-summary {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(130px, 1fr));
+        gap: 0.75rem;
+        margin-bottom: 1rem;
+    }
+    .my-summary-card {
+        background: #fff;
+        border: 1px solid var(--line);
+        border-radius: 0.9rem;
+        padding: 0.85rem;
+        box-shadow: var(--shadow);
+    }
+    .my-summary-label {
+        font-size: 0.82rem;
+        font-weight: 700;
+        color: var(--muted);
+        margin-bottom: 0.25rem;
+    }
+    .my-summary-value {
+        font-size: 1.25rem;
+        font-weight: 900;
+        color: var(--green);
+    }
+    .my-penalties {
+        background: #fff;
+        border: 1px solid var(--line);
+        border-radius: 1rem;
+        overflow: hidden;
+        box-shadow: var(--shadow);
+    }
+    .my-penalty-row {
+        display: grid;
+        grid-template-columns: minmax(130px, 1.4fr) 80px 92px;
+        gap: 0.6rem;
+        align-items: center;
+        padding: 0.75rem 0.9rem;
+        border-bottom: 1px solid #eef2ee;
+    }
+    .my-penalty-row:last-child { border-bottom: 0; }
+    .my-penalty-name { font-weight: 800; }
+    .my-penalty-qty { color: #5f6b5f; text-align: center; }
+    .my-penalty-amount { font-weight: 900; text-align: right; white-space: nowrap; }
+    .my-penalty-subline {
+        grid-column: 1 / -1;
+        display: flex;
+        justify-content: space-between;
+        gap: 0.75rem;
+        color: #5f6b5f;
+        font-size: 0.92rem;
+        padding-top: 0.15rem;
+    }
+    .my-summary-bottom { margin-top: 1rem; }
+    .my-empty {
+        background: #fff;
+        border: 1px solid var(--line);
+        border-radius: 0.9rem;
+        padding: 1rem;
+    }
+    @media (max-width: 700px) {
+        .my-summary {
+            grid-template-columns: repeat(2, minmax(105px, 1fr));
+            gap: 0.45rem;
+        }
+        .my-summary-card { padding: 0.65rem; }
+        .my-summary-label { font-size: 0.74rem; }
+        .my-summary-value { font-size: 1.05rem; }
+        .my-penalty-row {
+            grid-template-columns: minmax(105px, 1.3fr) 58px 82px;
+            padding: 0.62rem 0.7rem;
+            gap: 0.45rem;
+            font-size: 0.94rem;
+        }
+    }
+</style>
+
+<div class="page-header">
+    <div class="page-icon">👤</div>
+    <div>
+        <h1>Mein Kegelabend</h1>
+        <p>Nur-Lese-Ansicht deiner eigenen Werte. Aktive Abende werden automatisch aktualisiert.</p>
+    </div>
+</div>
+
+<div id="myEventRoot">
+    {% include "my_event_partial.html" %}
+</div>
+
+<script>
+(function () {
+    const root = document.getElementById('myEventRoot');
+    const initialLive = {{ 'true' if payload.get('is_live') else 'false' }};
+    if (!root || !initialLive) return;
+
+    function escapeHtml(value) {
+        return String(value ?? '').replace(/[&<>'"]/g, function (char) {
+            return {'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[char];
+        });
+    }
+
+    function render(data) {
+        if (!data.has_member || !data.has_event || data.message) {
+            root.innerHTML = '<div class="my-empty">' + escapeHtml(data.message || 'Keine Daten gefunden.') + '</div>';
+            return;
+        }
+        const note = data.editor
+            ? 'Kegelabend wird aktuell von ' + escapeHtml(data.editor) + ' bearbeitet. Die Ansicht aktualisiert sich automatisch.'
+            : 'Aktiver Kegelabend. Die Ansicht aktualisiert sich automatisch.';
+        let html = '<div class="my-event-note"><strong>' + note + '</strong><br><span class="muted">' + escapeHtml(data.event_date) + '</span></div>';
+        html += '<div class="my-penalties">';
+        data.items.forEach(function (item) {
+            if (item.target_mode === 'others') {
+                html += '<div class="my-penalty-row my-penalty-others">'
+                    + '<div class="my-penalty-name">' + escapeHtml(item.name) + '</div>'
+                    + '<div class="my-penalty-qty">' + escapeHtml(item.payable_quantity || 0) + '×</div>'
+                    + '<div class="my-penalty-amount">' + escapeHtml(item.amount_euro) + ' €</div>'
+                    + '<div class="my-penalty-subline"><span>geworfen: <strong>' + escapeHtml(item.own_quantity || 0) + '</strong></span><span>bezahlen: <strong>' + escapeHtml(item.payable_quantity || 0) + '</strong></span></div>'
+                    + '</div>';
+            } else {
+                const quantity = item.kind === 'amount' ? 'Betrag' : (item.quantity || 0) + '×';
+                html += '<div class="my-penalty-row">'
+                    + '<div class="my-penalty-name">' + escapeHtml(item.name) + '</div>'
+                    + '<div class="my-penalty-qty">' + escapeHtml(quantity) + '</div>'
+                    + '<div class="my-penalty-amount">' + escapeHtml(item.amount_euro) + ' €</div>'
+                    + '</div>';
+            }
+        });
+        html += '</div>';
+        html += '<div class="my-summary my-summary-bottom">'
+            + '<div class="my-summary-card"><div class="my-summary-label">Aktueller Abend</div><div class="my-summary-value">' + escapeHtml(data.current_total_euro) + ' €</div></div>'
+            + '<div class="my-summary-card"><div class="my-summary-label">Strafkonto gesamt</div><div class="my-summary-value">' + escapeHtml(data.balance_euro) + ' €</div></div>'
+            + '</div>';
+        root.innerHTML = html;
+    }
+
+    window.setInterval(function () {
+        fetch('{{ url_for('my_event_data') }}', {headers: {'Accept': 'application/json'}})
+            .then(function (response) { return response.json(); })
+            .then(render)
+            .catch(function () {});
+    }, 4000);
+})();
+</script>
+{% endblock %}

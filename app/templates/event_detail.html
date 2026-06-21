@@ -1,66 +1,1643 @@
 {% extends "base.html" %}
 
 {% block content %}
+<style>
+    /* UI-Modernisierung Teil 4: Kegelabend-Detail bleibt funktional, erhält aber modernere Kartenoptik. */
+    .page-head {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        gap: 1rem;
+        flex-wrap: wrap;
+        margin-bottom: 1rem;
+    }
 
-<div class="card">
-    <h1>Kegelabend vom {{ event.event_date }}</h1>
+    .page-head h1 {
+        margin: 0 0 0.35rem 0;
+    }
 
-    <p>Bahnkosten: <strong>{{ event.lane_cost_euro() }} €</strong></p>
-    <p>Status: <strong>{{ "Offen" if event.status == "open" else "Abgeschlossen" }}</strong></p>
+    .subline {
+        color: #5f6b5f;
+        margin: 0;
+    }
+
+    .event-status {
+        display: inline-flex;
+        align-items: center;
+        padding: 0.35rem 0.75rem;
+        border-radius: 999px;
+        background: #e7f5ea;
+        color: var(--green);
+        font-weight: 700;
+        font-size: 0.92rem;
+        margin-top: 0.4rem;
+    }
+
+    .soft-card {
+        background: #ffffff;
+        border: 1px solid var(--line);
+        border-radius: 1rem;
+        box-shadow: var(--shadow);
+    }
+
+    .calc-panel {
+        display: grid;
+        grid-template-columns: minmax(240px, 1.5fr) repeat(3, minmax(150px, 1fr));
+        gap: 0.75rem;
+        padding: 1rem;
+        margin-bottom: 1rem;
+    }
+
+    .calc-item {
+        border: 1px solid var(--line);
+        background: #fbfcfd;
+        border-radius: 0.85rem;
+        padding: 0.8rem;
+    }
+
+    .calc-label {
+        font-size: 0.85rem;
+        color: #607060;
+        margin-bottom: 0.35rem;
+        font-weight: 700;
+    }
+
+    .calc-value {
+        font-size: 1.22rem;
+        font-weight: 800;
+        color: var(--green);
+        white-space: nowrap;
+    }
+
+    .calc-detail {
+        margin-top: 0.2rem;
+        color: #667266;
+        font-size: 0.86rem;
+        line-height: 1.35;
+    }
+
+    .notice-box {
+        border: 1px solid #f0c36d;
+        background: #fff8e1;
+        border-radius: 0.85rem;
+        padding: 0.85rem 1rem;
+        margin-bottom: 1rem;
+    }
+
+    .event-table-wrap {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        background: #fff;
+        border: 1px solid #e1e5e1;
+        border-radius: 1rem;
+        box-shadow: var(--shadow);
+    }
+
+    .event-table {
+        width: 100%;
+        min-width: 940px;
+        border-collapse: separate;
+        border-spacing: 0;
+        background: #fff;
+    }
+
+    .event-table th,
+    .event-table td {
+        border: 0;
+        border-bottom: 1px solid #edf0ed;
+        border-right: 1px solid #edf0ed;
+        padding: 0.85rem 0.75rem;
+        vertical-align: middle;
+        text-align: center;
+    }
+
+    .event-table th:last-child,
+    .event-table td:last-child {
+        border-right: 0;
+    }
+
+    .event-table th {
+        position: sticky;
+        top: 0;
+        z-index: 2;
+        background: #f8fafc;
+        font-weight: 800;
+    }
+
+    .event-table tbody tr:hover {
+        background: #fbfcfd;
+    }
+
+    .event-table tfoot td {
+        background: #f8fafc;
+        font-weight: 800;
+    }
+
+    .player-cell {
+        min-width: 118px;
+        max-width: 165px;
+        font-weight: 800;
+        text-align: left !important;
+    }
+
+    .player-missing {
+        color: #536053;
+    }
+
+    .group-row td {
+        background: #f8fafc;
+        color: var(--green);
+        font-weight: 900;
+        text-align: left !important;
+        border-top: 2px solid #dbe8dc;
+    }
+
+    .participant-row.status-present {
+        border-left: 5px solid #238636;
+    }
+
+    .participant-row.status-guest {
+        border-left: 5px solid #6f42c1;
+    }
+
+    .participant-row.status-excused,
+    .participant-row.status-unexcused {
+        border-left: 5px solid #8a8f8a;
+    }
+
+    .status-badge {
+        display: inline-flex;
+        align-items: center;
+        border-radius: 999px;
+        padding: 0.35rem 0.7rem;
+        font-weight: 800;
+        font-size: 0.9rem;
+        background: #e7f5ea;
+        color: var(--green);
+        border: 1px solid #cfe8d3;
+    }
+
+    .status-badge.guest {
+        background: #f0e9ff;
+        color: #5b2ca0;
+        border-color: #decffc;
+    }
+
+    .status-column { width: 112px; }
+
+    .status-select {
+        min-width: 104px;
+        max-width: 118px;
+        font-size: 0.86rem;
+    }
+
+    .counter-control {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.45rem;
+        white-space: nowrap;
+    }
+
+    .counter-control button {
+        width: 2.45rem;
+        height: 2.45rem;
+        border: 0;
+        border-radius: 0.65rem;
+        background: #202020;
+        color: #fff;
+        font-size: 1.25rem;
+        font-weight: 800;
+        box-shadow: 0 2px 5px rgba(0,0,0,0.18);
+    }
+
+    .counter-control button:disabled {
+        opacity: 0.45;
+    }
+
+    .counter-control input {
+        width: 3.1rem;
+        text-align: center;
+        font-weight: 800;
+        margin: 0;
+    }
+
+    .quantity-input::-webkit-outer-spin-button,
+    .quantity-input::-webkit-inner-spin-button {
+        -webkit-appearance: none;
+        margin: 0;
+    }
+
+    .quantity-input {
+        -moz-appearance: textfield;
+    }
+
+    .penalty-subtotal {
+        display: block;
+        margin-top: 0.35rem;
+        font-weight: 700;
+        color: #1f2a1f;
+        white-space: nowrap;
+    }
+
+    .manual-penalty {
+        display: grid;
+        grid-template-columns: 6.8rem minmax(10rem, 1fr);
+        gap: 0.5rem;
+        align-items: center;
+    }
+
+    .manual-penalty input[type="text"] {
+        margin: 0;
+    }
+
+    .manual-amount {
+        text-align: right;
+        font-weight: 700;
+    }
+
+    .absent-calculated {
+        color: #657065;
+        font-size: 0.9rem;
+        line-height: 1.35;
+    }
+
+    .absent-symbol {
+        display: block;
+        font-size: 1.5rem;
+        line-height: 1;
+        margin-bottom: 0.25rem;
+    }
+
+    .row-total,
+    .table-grand-total {
+        font-weight: 900;
+        color: #14822f;
+        white-space: nowrap;
+        font-size: 1.08rem;
+    }
+
+    .actions {
+        display: flex;
+        justify-content: flex-end;
+        flex-wrap: wrap;
+        gap: 0.75rem;
+        margin-top: 1rem;
+    }
+
+    .btn-primary,
+    .btn-success {
+        background: #238636;
+    }
+
+    .btn-secondary {
+        background: #e9ecef;
+        color: #1f1f1f;
+    }
+
+    .btn-warning {
+        background: #f0ad4e;
+        color: #1f1f1f;
+    }
+
+    .settlement-card {
+        border: 1px solid #e1e5e1;
+        border-radius: 1rem;
+        padding: 1rem;
+        margin-top: 1rem;
+        background: #fff;
+        box-shadow: var(--shadow);
+    }
+
+    .settlement-table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-top: 0.75rem;
+    }
+
+    .settlement-table th,
+    .settlement-table td {
+        border: 1px solid #edf0ed;
+        padding: 0.65rem;
+        vertical-align: middle;
+    }
+
+    .paid-input {
+        max-width: 150px;
+        text-align: right;
+        font-weight: 700;
+    }
+
+    .lane-cost-box {
+        margin-top: 1rem;
+        max-width: 320px;
+    }
+
+    .settlement-summary {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(130px, 1fr));
+        gap: 0.75rem;
+        margin: 1rem 0;
+    }
+
+    .settlement-summary-item {
+        border: 1px solid var(--line);
+        background: #fbfcfd;
+        border-radius: 0.85rem;
+        padding: 0.8rem;
+    }
+
+    .settlement-summary-label {
+        font-size: 0.78rem;
+        color: #607060;
+        font-weight: 800;
+        margin-bottom: 0.25rem;
+    }
+
+    .settlement-summary-value {
+        font-size: 1.12rem;
+        color: var(--green);
+        font-weight: 900;
+        white-space: nowrap;
+    }
+
+    .mobile-only {
+        display: none;
+    }
+
+    .desktop-only {
+        display: block;
+    }
+
+    .guest-form-row {
+        display: flex;
+        gap: 0.5rem;
+        flex-wrap: wrap;
+        align-items: center;
+    }
+
+    .guest-form-row input {
+        max-width: 280px;
+    }
+
+    @media (max-width: 900px) {
+        .calc-panel {
+            grid-template-columns: 1fr 1fr;
+        }
+    }
+
+    @media (max-width: 760px) {
+        .calc-panel {
+            display: flex;
+            overflow-x: auto;
+            gap: 0.55rem;
+            padding: 0.65rem;
+            scroll-snap-type: x proximity;
+        }
+
+        .calc-item {
+            flex: 0 0 138px;
+            min-width: 138px;
+            padding: 0.65rem;
+            scroll-snap-align: start;
+        }
+
+        .calc-label {
+            font-size: 0.75rem;
+            white-space: nowrap;
+        }
+
+        .calc-value {
+            font-size: 1.05rem;
+        }
+
+        .calc-detail {
+            font-size: 0.73rem;
+        }
+
+        .page-head h1 {
+            font-size: 1.55rem;
+        }
+
+        .event-table-wrap {
+            overflow: auto;
+            -webkit-overflow-scrolling: touch;
+            max-height: calc(100vh - 230px);
+            min-height: 305px;
+            border: 1px solid #e1e5e1;
+            border-radius: 1rem;
+            background: #fff;
+            box-shadow: var(--shadow);
+        }
+
+        .event-table {
+            display: table;
+            width: max-content;
+            min-width: 860px;
+            border-collapse: separate;
+            border-spacing: 0;
+        }
+
+        .event-table thead {
+            display: table-header-group;
+        }
+
+        .event-table tbody {
+            display: table-row-group;
+        }
+
+        .event-table tfoot {
+            display: table-footer-group;
+        }
+
+        .event-table tr {
+            display: table-row;
+            background: #fff;
+            border: 0;
+            border-radius: 0;
+            margin: 0;
+            padding: 0;
+            box-shadow: none;
+        }
+
+        .event-table th,
+        .event-table td {
+            display: table-cell;
+            width: auto;
+            border-bottom: 1px solid #edf0ed;
+            border-right: 1px solid #edf0ed;
+            padding: 0.65rem 0.55rem;
+            text-align: center;
+            vertical-align: middle;
+            background: #fff;
+        }
+
+        .event-table th {
+            position: sticky;
+            top: 0;
+            z-index: 6;
+            background: #f8fafc;
+            white-space: nowrap;
+            font-size: 0.86rem;
+        }
+
+        .event-table td::before {
+            content: none;
+            display: none;
+        }
+
+        .event-table th:first-child,
+        .event-table td:first-child {
+            position: sticky;
+            left: 0;
+            z-index: 5;
+            background: #fff;
+            box-shadow: 3px 0 6px rgba(0,0,0,0.06);
+        }
+
+        .event-table th:first-child {
+            z-index: 8;
+            background: #f8fafc;
+        }
+
+        .group-row td {
+            position: sticky;
+            left: 0;
+            z-index: 4;
+            background: #f8fafc;
+            box-shadow: none;
+        }
+
+        .player-cell {
+            min-width: 92px;
+            max-width: 128px;
+            font-size: 0.95rem;
+            white-space: normal;
+            line-height: 1.2;
+        }
+
+        .counter-control {
+            justify-content: center;
+            gap: 0.25rem;
+        }
+
+        .counter-control button {
+            width: 2.25rem;
+            height: 2.25rem;
+        }
+
+        .counter-control input {
+            width: 2.6rem;
+        }
+
+        .manual-penalty {
+            grid-template-columns: minmax(5.5rem, 6.5rem) minmax(8rem, 1fr);
+        }
+
+        .manual-penalty input {
+            max-width: none;
+        }
+
+        .actions {
+            justify-content: stretch;
+        }
+
+        .actions button,
+        .actions a {
+            width: 100%;
+            text-align: center;
+        }
+
+        .desktop-only {
+            display: none !important;
+        }
+
+        .mobile-only {
+            display: block;
+        }
+
+        .settlement-summary {
+            display: flex;
+            overflow-x: auto;
+            gap: 0.55rem;
+            margin: 0.85rem 0;
+            padding-bottom: 0.2rem;
+        }
+
+        .settlement-summary-item {
+            flex: 0 0 135px;
+            min-width: 135px;
+            padding: 0.7rem;
+        }
+
+        .settlement-summary-label {
+            font-size: 0.75rem;
+        }
+
+        .settlement-summary-value {
+            font-size: 1.02rem;
+        }
+
+        .settlement-mobile-list {
+            display: grid;
+            gap: 0.75rem;
+            margin-top: 0.8rem;
+        }
+
+        .settlement-mobile-card {
+            border: 1px solid var(--line);
+            border-radius: 1rem;
+            padding: 0.85rem;
+            background: #fff;
+            box-shadow: 0 4px 14px rgba(0,0,0,0.04);
+        }
+
+        .settlement-mobile-name {
+            font-weight: 900;
+            font-size: 1.05rem;
+            margin-bottom: 0.7rem;
+        }
+
+        .settlement-mobile-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 0.65rem;
+            align-items: end;
+        }
+
+        .settlement-mobile-field label {
+            display: block;
+            color: #687568;
+            font-weight: 800;
+            font-size: 0.78rem;
+            margin-bottom: 0.25rem;
+        }
+
+        .settlement-mobile-number {
+            font-weight: 900;
+            font-size: 1.05rem;
+            white-space: nowrap;
+        }
+
+        .settlement-mobile-card .paid-input {
+            max-width: none;
+            width: 100%;
+            min-height: 44px;
+            font-size: 1.05rem;
+        }
+
+        .lane-cost-box {
+            max-width: none;
+        }
+
+        .lane-cost-box input {
+            min-height: 44px;
+            font-size: 1.05rem;
+        }
+    }
+
+    @media (max-width: 760px) {
+        .event-table {
+            min-width: max-content;
+        }
+
+        .event-table th,
+        .event-table td {
+            padding: 0.55rem 0.45rem;
+        }
+
+        .event-table th:first-child,
+        .event-table td.player-cell {
+            position: sticky;
+            left: 0;
+            z-index: 3;
+            background: #fff;
+            min-width: 7.2rem;
+            max-width: 10.5rem;
+            width: max-content;
+            white-space: nowrap;
+        }
+
+        .event-table th:first-child {
+            z-index: 5;
+            background: #f8fafc;
+        }
+
+        .event-table .counter-control {
+            gap: 0.25rem;
+        }
+
+        .event-table .counter-control button {
+            width: 2.2rem;
+            height: 2.2rem;
+        }
+
+        .event-table .counter-control input {
+            width: 2.55rem;
+        }
+    }
+
+</style>
+
+<div class="page-head">
+    <div>
+        <h1>
+            {% if event.status == "settlement" %}
+                Barzahlungen erfassen
+            {% elif event.status == "lane_cost" %}
+                Bahnkosten erfassen
+            {% elif event.status == "closed" %}
+                Kegelabend abgeschlossen
+            {% elif event.status == "cancelled" %}
+                Kegelabend ausgefallen
+            {% else %}
+                Strafen erfassen
+            {% endif %}
+        </h1>
+        <p class="subline">Kegelabend vom {{ event.event_date.strftime('%d.%m.%Y') }}</p>
+        <div class="event-status">
+            {% if event.status == "open" %}
+                Offen
+            {% elif event.status == "settlement" %}
+                Barzahlungen
+            {% elif event.status == "lane_cost" %}
+                Bahnkosten
+            {% elif event.status == "cancelled" %}
+                Ausgefallen
+            {% else %}
+                Abgeschlossen
+            {% endif %}
+        </div>
+    </div>
+    <a class="button btn-secondary" href="{{ url_for('events') }}">← Zurück</a>
 </div>
 
-<div class="card">
-    <h2>Gast hinzufügen</h2>
-
-    <form method="post">
-        <input type="hidden" name="action" value="add_guest">
-
-        <label>Gastname</label><br>
-        <input type="text" name="guest_name" placeholder="z. B. Peter Müller">
-
-        <button type="submit">Gast hinzufügen</button>
-    </form>
+{% if event.status == "open" %}
+<div class="calc-panel soft-card">
+    <div class="calc-item">
+        <div class="calc-label">Durchschnittsstrafe der Anwesenden</div>
+        <div class="calc-value" id="averageDisplay">{{ average_present_euro }} €</div>
+        <div class="calc-detail" id="averageDetail">
+            {{ average_rounding_text }}{% if average_present_raw_euro != average_present_euro %} · ungerundet {{ average_present_raw_euro }} €{% endif %}
+        </div>
+    </div>
+    <div class="calc-item">
+        <div class="calc-label">Gastbeitrag</div>
+        <div class="calc-value">{{ guest_fee_euro }} €</div>
+        <div class="calc-detail">wird bei Gästen sofort addiert</div>
+    </div>
+    <div class="calc-item">
+        <div class="calc-label">Fehlt entschuldigt</div>
+        <div class="calc-value">{{ absence_excused_euro }} €</div>
+        <div class="calc-detail">plus gerundeter Durchschnitt</div>
+    </div>
+    <div class="calc-item">
+        <div class="calc-label">Fehlt unentschuldigt</div>
+        <div class="calc-value">{{ absence_unexcused_euro }} €</div>
+        <div class="calc-detail">plus gerundeter Durchschnitt</div>
+    </div>
 </div>
+{% endif %}
 
-<form method="post">
-    <input type="hidden" name="action" value="save">
+{% set readonly = (event.status == "cancelled") or (event.status == "closed" and not can_edit_closed) or not lock_allowed %}
+{% set entry_locked = readonly or event.status != "open" %}
 
-    {% for participant in participants %}
-    <div class="card">
-        <h2>{{ participant.name() }}</h2>
-
-        <label>Status</label><br>
-        <select name="participant_{{ participant.id }}_status">
-            <option value="present" {% if participant.status == "present" %}selected{% endif %}>Anwesend</option>
-            <option value="excused" {% if participant.status == "excused" %}selected{% endif %}>Entschuldigt gefehlt</option>
-            <option value="unexcused" {% if participant.status == "unexcused" %}selected{% endif %}>Unentschuldigt gefehlt</option>
-            <option value="guest" {% if participant.status == "guest" %}selected{% endif %}>Gast</option>
-        </select><br>
-
-        <label>Pumpen</label><br>
-        <input type="number" min="0" name="participant_{{ participant.id }}_pumps" value="{{ participant.pumps }}"><br>
-
-        <label>Kränze</label><br>
-        <input type="number" min="0" name="participant_{{ participant.id }}_wreaths" value="{{ participant.wreaths }}"><br>
-
-        <label>Alle Neune</label><br>
-        <input type="number" min="0" name="participant_{{ participant.id }}_all_nines" value="{{ participant.all_nines }}"><br>
-
-        <label>Verlorene Spiele</label><br>
-        <input type="number" min="0" name="participant_{{ participant.id }}_lost_games" value="{{ participant.lost_games }}"><br>
-
-        <label>Sonstige Strafe</label><br>
-        <input type="text" name="participant_{{ participant.id }}_manual_penalty" value="{{ participant.manual_penalty_euro() }}"><br>
-
-        <label>Bemerkung zur sonstigen Strafe</label><br>
-        <textarea name="participant_{{ participant.id }}_manual_note" rows="2">{{ participant.manual_penalty_note or "" }}</textarea>
+{% if not lock_allowed and active_lock %}
+    <div class="notice-box">
+        <strong>Lesemodus:</strong> Dieser Kegelabend wird gerade von {{ active_lock.user.username }} bearbeitet.
+        Du kannst die Daten ansehen, aber nicht speichern.
+        {% if can_override_lock %}
+            <form method="post" class="inline-lock-form">
+                <button class="button btn-warning" type="submit" name="action" value="take_lock">Sperre übernehmen</button>
+            </form>
+        {% endif %}
     </div>
-    {% endfor %}
-
-    <div class="card">
-        <button type="submit">Kegelabend speichern</button>
-        <a class="button" href="{{ url_for('events') }}">Zurück</a>
+{% elif not lock_allowed %}
+    <div class="notice-box">
+        <strong>Lesemodus:</strong> Deine Rolle darf diesen Kegelabend nicht bearbeiten.
     </div>
+{% endif %}
+
+{% if event.status == "cancelled" %}
+    <div class="notice-box">
+        <strong>Dieser Kegelabend ist ausgefallen.</strong><br>
+        {% if event.note %}Grund/Notiz: {{ event.note }}{% else %}Es wurde kein Grund hinterlegt.{% endif %}
+    </div>
+{% endif %}
+
+{% if event.status == "closed" %}
+    <div class="settlement-summary" aria-label="Barkasse aktuell">
+        <div class="settlement-summary-item">
+            <div class="settlement-summary-label">Barkasse aktuell</div>
+            <div class="settlement-summary-value">{{ current_cash_balance_euro }} €</div>
+        </div>
+        <div class="settlement-summary-item">
+            <div class="settlement-summary-label">Bahnkosten dieses Abend</div>
+            <div class="settlement-summary-value">{{ cents_to_euro(event.lane_cost_cents or 0) }} €</div>
+        </div>
+    </div>
+{% endif %}
+
+<form method="post" id="eventForm" enctype="multipart/form-data" data-event-status="{{ event.status }}">
+    {% if event.status not in ["settlement", "lane_cost"] %}
+    <div class="event-table-wrap">
+        <table class="event-table">
+            <thead>
+                <tr>
+                    <th>Spieler</th>
+                    <th class="status-column">Status</th>
+                    {% for penalty_type in penalty_types %}
+                        <th>{{ penalty_type.name }}{% if penalty_type.kind != "amount" %} <small>{{ cents_to_euro(penalty_type.amount_cents or 0) }} €</small>{% endif %}</th>
+                    {% endfor %}
+                    <th>Aktueller Abend</th>
+                    <th>Strafkonto gesamt</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% set ns = namespace(group='') %}
+                {% for row in participant_rows %}
+                    {% set participant = row.participant %}
+                    {% if participant.status == 'guest' %}
+                        {% set group_label = 'Gäste' %}
+                    {% elif participant.status in ['excused', 'unexcused'] %}
+                        {% set group_label = 'Fehlt' %}
+                    {% else %}
+                        {% set group_label = 'Da' %}
+                    {% endif %}
+                    {% if ns.group != group_label %}
+                        {% set ns.group = group_label %}
+                        <tr class="group-row">
+                            <td colspan="{{ penalty_types|length + 4 }}">{{ group_label }}</td>
+                        </tr>
+                    {% endif %}
+                    <tr class="participant-row status-{{ participant.status }}" data-participant-id="{{ participant.id }}" data-sort-name="{{ row.display_name|lower }}" data-previous-balance-cents="{{ row.previous_balance_cents }}">
+                        <td class="player-cell {% if participant.status in ['excused', 'unexcused'] %}player-missing{% endif %}" data-label="Spieler">
+                            {{ row.display_name }}{% if participant.status in ['excused', 'unexcused'] %}<br><small>(fehlend)</small>{% endif %}
+                        </td>
+                        <td class="status-column" data-label="Status">
+                            {% if participant.member_id %}
+                                <select class="form-control status-select status-input" name="participant_{{ participant.id }}_status" {% if entry_locked %}disabled{% endif %}>
+                                    <option value="present" {% if participant.status == "present" %}selected{% endif %}>Da</option>
+                                    <option value="excused" {% if participant.status == "excused" %}selected{% endif %}>Fehlt entsch.</option>
+                                    <option value="unexcused" {% if participant.status == "unexcused" %}selected{% endif %}>Fehlt unentsch.</option>
+                                </select>
+                            {% else %}
+                                <input type="hidden" class="status-input" name="participant_{{ participant.id }}_status" value="guest">
+                                <span class="status-badge guest">Gast</span>
+                            {% endif %}
+                        </td>
+
+                        {% for penalty_type in penalty_types %}
+                            {% set value = row.penalty_values[penalty_type.id] %}
+                            <td data-label="{{ penalty_type.name }}">
+                                {% if penalty_type.kind == "amount" %}
+                                    <div class="manual-penalty">
+                                        <input
+                                            type="text"
+                                            class="form-control amount-input manual-amount money-input"
+                                            name="penalty_{{ participant.id }}_{{ penalty_type.id }}_amount"
+                                            value="{{ cents_to_euro(value.amount_cents or 0) }}"
+                                            inputmode="decimal"
+                                            autocomplete="off"
+                                            data-price="1" data-target-mode="{{ penalty_type.target_mode }}"
+                                            {% if entry_locked %}disabled{% endif %}
+                                        >
+                                        <input
+                                            type="text"
+                                            class="form-control note-input"
+                                            name="penalty_{{ participant.id }}_{{ penalty_type.id }}_note"
+                                            value="{{ value.note or '' }}"
+                                            placeholder="Notiz"
+                                            {% if entry_locked %}disabled{% endif %}
+                                        >
+                                    </div>
+                                    <span class="penalty-subtotal manual-subtotal">0,00 €</span>
+                                {% else %}
+                                    <div class="counter-control count-penalty-control">
+                                        <button type="button" class="counter-minus" {% if entry_locked %}disabled{% endif %}>−</button>
+                                        <input
+                                            type="text"
+                                            class="form-control quantity-input"
+                                            name="penalty_{{ participant.id }}_{{ penalty_type.id }}_quantity"
+                                            value="{{ value.quantity or 0 }}"
+                                            min="0"
+                                            inputmode="none"
+                                            data-price="{{ penalty_type.amount_cents or 0 }}" data-target-mode="{{ penalty_type.target_mode }}"
+                                            {% if entry_locked %}disabled{% endif %}
+                                        >
+                                        <button type="button" class="counter-plus" {% if entry_locked %}disabled{% endif %}>+</button>
+                                    </div>
+                                    <span class="penalty-subtotal count-subtotal">0,00 €</span>
+                                {% endif %}
+                            </td>
+                        {% endfor %}
+
+                        <td data-label="Aktueller Abend" class="row-total">
+                            <span class="participant-total">{{ row.penalty_euro }}</span> €
+                        </td>
+                        <td data-label="Strafkonto gesamt">
+                            <span class="participant-balance-total">{{ row.balance_euro }}</span> €
+                        </td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% endif %}
+
+    {% if not readonly and event.status == "open" %}
+        {% if allow_guest_add %}
+            <div class="settlement-card" id="guestAddSection">
+                <h2>Gast-Kegler hinzufügen</h2>
+                <div class="guest-form-row">
+                    <input class="form-control" type="text" name="guest_name" placeholder="Max Mustermann">
+                    <button class="button btn-secondary" type="submit" name="action" value="add_guest">Gast hinzufügen</button>
+                </div>
+            </div>
+        {% endif %}
+
+        <div class="actions">
+            <button class="button btn-secondary" type="button" onclick="window.location.href='{{ url_for('events') }}'">Abbrechen</button>
+            <button class="button btn-primary" id="saveButton" type="submit" name="action" value="save">💾 Speichern</button>
+            <span id="autosaveStatus" class="muted" style="align-self:center;font-weight:700;"></span>
+            <button class="button btn-success" type="submit" name="action" value="start_close">Kegelabend abschließen</button>
+        </div>
+    {% endif %}
+
+    {% if not readonly and event.status == "settlement" %}
+        <div class="settlement-card">
+            <h2>Barzahlungen erfassen</h2>
+            <p class="subline">Wer nichts bar zahlt, bleibt mit offenem Strafbetrag im Strafkonto stehen. Mehrzahlungen werden als Guthaben gespeichert.</p>
+
+            <div class="settlement-summary" aria-label="Abrechnungsübersicht">
+                <div class="settlement-summary-item">
+                    <div class="settlement-summary-label">Heute bar eingezahlt</div>
+                    <div class="settlement-summary-value"><span id="settlementPaidTotal">0,00</span> €</div>
+                </div>
+                <div class="settlement-summary-item">
+                    <div class="settlement-summary-label">Neue Guthaben</div>
+                    <div class="settlement-summary-value"><span id="settlementCreditTotal">0,00</span> €</div>
+                </div>
+                <div class="settlement-summary-item">
+                    <div class="settlement-summary-label">Neue offene Beträge</div>
+                    <div class="settlement-summary-value"><span id="settlementOpenTotal">0,00</span> €</div>
+                </div>
+                <div class="settlement-summary-item">
+                    <div class="settlement-summary-label">Barkasse danach</div>
+                    <div class="settlement-summary-value"><span id="cashAfterTotal">{{ current_cash_balance_euro }}</span> €</div>
+                </div>
+            </div>
+
+            <table class="settlement-table desktop-only">
+                <thead>
+                    <tr>
+                        <th>Spieler</th>
+                        <th>Strafen</th>
+                        <th>Bezahlt</th>
+                        <th>Rest/Offen</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in settlement_rows %}
+                        {% if row.participant.member_id %}
+                            <tr class="settlement-row" data-participant-id="{{ row.participant.id }}">
+                                <td data-label="Spieler"><strong>{{ row.display_name }}</strong></td>
+                                <td data-label="Strafen"><span class="settlement-penalty" data-penalty-cents="{{ row.penalty_cents }}">{{ row.penalty_euro }}</span> €</td>
+                                <td data-label="Bezahlt">
+                                    <input class="form-control paid-input money-input" type="text" inputmode="decimal" autocomplete="off" name="paid_{{ row.participant.id }}" value="{{ row.paid_euro }}" placeholder="Betrag" data-participant-id="{{ row.participant.id }}">
+                                </td>
+                                <td data-label="Rest/Offen"><span class="settlement-rest">{{ row.penalty_euro }}</span> €</td>
+                            </tr>
+                        {% endif %}
+                    {% endfor %}
+                </tbody>
+            </table>
+
+            <div class="settlement-mobile-list mobile-only">
+                {% for row in settlement_rows %}
+                    {% if row.participant.member_id %}
+                        <div class="settlement-mobile-card settlement-row" data-participant-id="{{ row.participant.id }}">
+                            <div class="settlement-mobile-name">{{ row.display_name }}</div>
+                            <div class="settlement-mobile-grid">
+                                <div class="settlement-mobile-field">
+                                    <label>Strafen</label>
+                                    <div class="settlement-mobile-number"><span class="settlement-penalty" data-penalty-cents="{{ row.penalty_cents }}">{{ row.penalty_euro }}</span> €</div>
+                                </div>
+                                <div class="settlement-mobile-field">
+                                    <label>Bezahlt</label>
+                                    <input class="form-control paid-input money-input" type="text" inputmode="decimal" autocomplete="off" name="paid_{{ row.participant.id }}" value="{{ row.paid_euro }}" placeholder="Betrag" data-participant-id="{{ row.participant.id }}">
+                                </div>
+                                <div class="settlement-mobile-field">
+                                    <label>Rest/Offen</label>
+                                    <div class="settlement-mobile-number"><span class="settlement-rest">{{ row.penalty_euro }}</span> €</div>
+                                </div>
+                            </div>
+                        </div>
+                    {% endif %}
+                {% endfor %}
+            </div>
+
+            <div class="actions">
+                <button class="button btn-success" type="submit" name="action" value="save_settlement">Barzahlungen verbuchen und weiter zu Bahnkosten</button>
+            </div>
+        </div>
+    {% endif %}
+
+    {% if not readonly and event.status == "lane_cost" %}
+        <div class="settlement-card">
+            <h2>Bahnkosten erfassen</h2>
+            <p class="subline">Die Barzahlungen sind bereits verbucht. Jetzt kann vorne an der Kasse der tatsächliche Bahnpreis eingetragen werden.</p>
+
+            <div class="settlement-summary" aria-label="Barkasse nach Bahnkosten">
+                <div class="settlement-summary-item">
+                    <div class="settlement-summary-label">Barkasse aktuell</div>
+                    <div class="settlement-summary-value">{{ current_cash_balance_euro }} €</div>
+                </div>
+                <div class="settlement-summary-item">
+                    <div class="settlement-summary-label">Bahnkosten</div>
+                    <div class="settlement-summary-value"><span id="laneCostPreview">{{ lane_cost_prefill_euro }}</span> €</div>
+                </div>
+                <div class="settlement-summary-item">
+                    <div class="settlement-summary-label">Barkasse danach</div>
+                    <div class="settlement-summary-value"><span id="cashAfterLaneCost">{{ current_cash_balance_euro }}</span> €</div>
+                </div>
+            </div>
+
+            <div class="lane-cost-box">
+                <label for="lane_cost"><strong>Bahnkosten</strong></label>
+                <input class="form-control money-input clear-on-first-focus" id="lane_cost" type="text" inputmode="decimal" autocomplete="off" name="lane_cost" value="{{ lane_cost_prefill_euro }}">
+                <div class="calc-detail">Standard aus Einstellungen: {{ lane_cost_default_euro }} €</div>
+            </div>
+
+            <div class="lane-cost-box">
+                <label for="lane_receipt_file"><strong>Rechnung/Beleg fotografieren oder hochladen</strong></label>
+                <input class="form-control" id="lane_receipt_file" type="file" name="lane_receipt_file" accept="image/*,.pdf" capture="environment">
+                <div class="calc-detail">Optional: Foto vom Handy oder PDF. Wird automatisch als Dokument „Kegelbahn-Rechnung“ zum Kegelabend gespeichert.</div>
+            </div>
+
+            <div class="actions">
+                <button class="button btn-success" type="submit" name="action" value="final_close">Bahnkosten speichern und endgültig abschließen</button>
+            </div>
+        </div>
+    {% endif %}
 </form>
 
+{% if event.status in ["closed", "cancelled"] %}
+    <div class="actions final-actions">
+        {% if can_edit_closed %}
+            <form method="post" style="margin:0;">
+                <button class="button btn-warning" type="submit" name="action" value="reopen">{% if event.status == "cancelled" %}Ausgefallenen Kegelabend wieder öffnen{% else %}Kegelabend wieder öffnen{% endif %}</button>
+            </form>
+        {% else %}
+            <span></span>
+        {% endif %}
+        <a class="button btn-success" href="{{ url_for('dashboard') }}">Fertig</a>
+    </div>
+{% endif %}
+
+<style>
+.inline-lock-form {
+    margin-top: 0.75rem;
+}
+.final-actions {
+    justify-content: space-between;
+    align-items: center;
+}
+.final-actions form {
+    display: inline-block;
+}
+
+    @media (max-width: 760px) {
+        .event-table {
+            min-width: max-content;
+        }
+
+        .event-table th,
+        .event-table td {
+            padding: 0.55rem 0.45rem;
+        }
+
+        .event-table th:first-child,
+        .event-table td.player-cell {
+            position: sticky;
+            left: 0;
+            z-index: 3;
+            background: #fff;
+            min-width: 7.2rem;
+            max-width: 10.5rem;
+            width: max-content;
+            white-space: nowrap;
+        }
+
+        .event-table th:first-child {
+            z-index: 5;
+            background: #f8fafc;
+        }
+
+        .event-table .counter-control {
+            gap: 0.25rem;
+        }
+
+        .event-table .counter-control button {
+            width: 2.2rem;
+            height: 2.2rem;
+        }
+
+        .event-table .counter-control input {
+            width: 2.55rem;
+        }
+    }
+
+</style>
+
+<script>
+(function () {
+    const guestFee = {{ guest_fee_cents }};
+    const absenceExcused = {{ absence_excused_cents }};
+    const absenceUnexcused = {{ absence_unexcused_cents }};
+    const currentCashBalance = {{ current_cash_balance_cents }};
+
+    function parseEuroToCents(value) {
+        if (!value) return 0;
+        let raw = String(value).replace('€', '').replace(/\s/g, '').trim();
+        if (!raw) return 0;
+
+        // Komfort für mobile Eingabe: ,5 oder .5 bedeutet 0,50 €.
+        if (raw.startsWith(',') || raw.startsWith('.')) {
+            raw = '0' + raw;
+        }
+
+        if (raw.includes(',')) {
+            raw = raw.replace(/\./g, '').replace(',', '.');
+        } else if ((raw.match(/\./g) || []).length > 1) {
+            raw = raw.replace(/\./g, '');
+        }
+
+        if (!/^\d+(\.\d{0,2})?$/.test(raw)) return 0;
+        const parsed = Number.parseFloat(raw);
+        if (Number.isNaN(parsed)) return 0;
+        return Math.round(parsed * 100);
+    }
+
+    function normalizeMoneyInput(input) {
+        let value = String(input.value || '').replace('€', '').replace(/\s/g, '');
+        value = value.replace(/[^0-9,.]/g, '');
+
+        // Komfort für mobile Eingabe: ,5 oder .5 während der Eingabe zulassen.
+        if (value.startsWith(',') || value.startsWith('.')) {
+            value = '0' + value;
+        }
+
+        const commaIndex = value.indexOf(',');
+        if (commaIndex !== -1) {
+            value = value.slice(0, commaIndex + 1) + value.slice(commaIndex + 1).replace(/,/g, '');
+            const parts = value.split(',');
+            parts[0] = parts[0].replace(/\./g, '');
+            parts[1] = (parts[1] || '').replace(/\./g, '').slice(0, 2);
+            value = parts[0] + ',' + parts[1];
+        } else {
+            const dotCount = (value.match(/\./g) || []).length;
+            if (dotCount === 1) {
+                const parts = value.split('.');
+                if ((parts[1] || '').length <= 2) {
+                    value = parts[0] + ',' + parts[1];
+                }
+            }
+        }
+
+        input.value = value;
+    }
+
+    function formatMoneyInput(input) {
+        const cents = parseEuroToCents(input.value);
+        input.value = formatCents(cents);
+    }
+
+    function formatCents(cents) {
+        return (cents / 100).toLocaleString('de-DE', {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2
+        });
+    }
+
+    function roundToTenCents(cents) {
+        cents = cents || 0;
+        if (cents <= 0) {
+            return 0;
+        }
+        return Math.round(cents / 10) * 10;
+    }
+
+    function averageRoundingText(raw, rounded) {
+        if (raw === rounded) return 'exakt auf 0,10 €';
+        if (rounded > raw) return 'aufgerundet auf 0,10 €';
+        return 'abgerundet auf 0,10 €';
+    }
+
+    function rowBasePenalty(row, mode = 'self') {
+        let total = 0;
+
+        row.querySelectorAll('.quantity-input').forEach(input => {
+            if ((input.dataset.targetMode || 'self') !== mode) return;
+            const quantity = Number.parseInt(input.value || '0', 10) || 0;
+            const price = Number.parseInt(input.dataset.price || '0', 10) || 0;
+            total += quantity * price;
+        });
+
+        row.querySelectorAll('.manual-amount').forEach(input => {
+            if ((input.dataset.targetMode || 'self') !== mode) return;
+            total += parseEuroToCents(input.value);
+        });
+
+        return total;
+    }
+
+    function rowPenaltyForParticipant(row, allRows) {
+        const status = row.querySelector('.status-input').value;
+        if (!(status === 'present' || status === 'guest')) return 0;
+
+        let total = rowBasePenalty(row, 'self');
+        allRows.forEach(other => {
+            if (other === row) return;
+            const otherStatus = other.querySelector('.status-input').value;
+            if (!(otherStatus === 'present' || otherStatus === 'guest')) return;
+            total += rowBasePenalty(other, 'others');
+        });
+        return total;
+    }
+
+    function hasAnyPenaltyEntry() {
+        return Array.from(document.querySelectorAll('.participant-row')).some(row => rowBasePenalty(row, 'self') > 0 || rowBasePenalty(row, 'others') > 0);
+    }
+
+    function updateEntryLockVisuals() {
+        const hasPenalty = hasAnyPenaltyEntry();
+        const guestAddSection = document.getElementById('guestAddSection');
+
+        if (guestAddSection) {
+            guestAddSection.style.display = hasPenalty ? 'none' : '';
+        }
+
+        document.querySelectorAll('.status-column').forEach(element => {
+            element.style.display = hasPenalty ? 'none' : '';
+        });
+    }
+
+
+    function participantGroup(row) {
+        const statusInput = row.querySelector('.status-input');
+        const status = statusInput ? statusInput.value : '';
+        if (status === 'guest') return 'Gäste';
+        if (status === 'excused' || status === 'unexcused') return 'Fehlend';
+        return 'Anwesend';
+    }
+
+    function participantGroupOrder(group) {
+        if (group === 'Anwesend') return 1;
+        if (group === 'Gäste') return 2;
+        return 3;
+    }
+
+    function sortParticipantRowsLive() {
+        const tableBody = document.querySelector('.event-table tbody');
+        if (!tableBody) return;
+        const rows = Array.from(tableBody.querySelectorAll('tr.participant-row'));
+        if (!rows.length) return;
+        tableBody.querySelectorAll('tr.group-row').forEach(row => row.remove());
+        rows.sort((a, b) => {
+            const ga = participantGroup(a);
+            const gb = participantGroup(b);
+            const go = participantGroupOrder(ga) - participantGroupOrder(gb);
+            if (go !== 0) return go;
+            return (a.dataset.sortName || '').localeCompare((b.dataset.sortName || ''), 'de');
+        });
+        let currentGroup = '';
+        const colspan = (document.querySelectorAll('.event-table thead th').length || 1);
+        rows.forEach(row => {
+            const group = participantGroup(row);
+            if (group !== currentGroup) {
+                currentGroup = group;
+                const groupRow = document.createElement('tr');
+                groupRow.className = 'group-row';
+                const cell = document.createElement('td');
+                cell.colSpan = colspan;
+                cell.textContent = group;
+                groupRow.appendChild(cell);
+                tableBody.appendChild(groupRow);
+            }
+            row.classList.remove('status-present', 'status-guest', 'status-excused', 'status-unexcused');
+            const statusInput = row.querySelector('.status-input');
+            const status = statusInput ? statusInput.value : 'present';
+            row.classList.add('status-' + status);
+            const nameCell = row.querySelector('.player-cell');
+            if (nameCell) nameCell.classList.toggle('player-missing', status === 'excused' || status === 'unexcused');
+            tableBody.appendChild(row);
+        });
+    }
+
+    function copyEntryStatusToGuestForm() {
+        const guestForm = document.getElementById('guestAddSection');
+        if (!guestForm) return;
+        guestForm.querySelectorAll('input[data-copied-status="1"]').forEach(input => input.remove());
+        document.querySelectorAll('.status-input').forEach(input => {
+            if (!input.name) return;
+            const hidden = document.createElement('input');
+            hidden.type = 'hidden';
+            hidden.name = input.name;
+            hidden.value = input.value;
+            hidden.dataset.copiedStatus = '1';
+            guestForm.appendChild(hidden);
+        });
+    }
+
+    function penaltyTypeIdFromInput(input) {
+        const match = String(input.name || '').match(/^penalty_\d+_(\d+)_(quantity|amount)$/);
+        return match ? match[1] : '';
+    }
+
+    function penaltyEntryValueCents(input) {
+        if (input.classList.contains('quantity-input')) {
+            const quantity = Number.parseInt(input.value || '0', 10) || 0;
+            const price = Number.parseInt(input.dataset.price || '0', 10) || 0;
+            return quantity * price;
+        }
+        return parseEuroToCents(input.value);
+    }
+
+    function activePenaltyRow(row) {
+        const statusInput = row.querySelector('.status-input');
+        const status = statusInput ? statusInput.value : '';
+        return status === 'present' || status === 'guest';
+    }
+
+    function subtotalForVisibleCell(row, input, allRows) {
+        const mode = input.dataset.targetMode || 'self';
+
+        // Normale Strafarten: Der Wert in der Zeile gehört dem Spieler selbst.
+        if (mode !== 'others') {
+            return penaltyEntryValueCents(input);
+        }
+
+        // Sonder-Strafarten wie Kranz / Alle Neune:
+        // Eingetragen wird beim Werfer, zahlen sollen aber alle anderen Anwesenden/Gäste.
+        // Deshalb zeigt die Zelle beim Werfer selbst 0,00 €, bei allen anderen den Anteil.
+        if (!activePenaltyRow(row)) {
+            return 0;
+        }
+
+        const penaltyTypeId = penaltyTypeIdFromInput(input);
+        let total = 0;
+
+        allRows.forEach(otherRow => {
+            if (otherRow === row || !activePenaltyRow(otherRow)) return;
+
+            otherRow.querySelectorAll('.quantity-input, .manual-amount').forEach(otherInput => {
+                if ((otherInput.dataset.targetMode || 'self') !== 'others') return;
+                if (penaltyTypeIdFromInput(otherInput) !== penaltyTypeId) return;
+                total += penaltyEntryValueCents(otherInput);
+            });
+        });
+
+        return total;
+    }
+
+    function updateCellSubtotals(row, status, allRows) {
+        row.querySelectorAll('.quantity-input').forEach(input => {
+            const cell = input.closest('td');
+            const subtotal = cell ? cell.querySelector('.count-subtotal') : null;
+            if (subtotal) subtotal.textContent = formatCents(subtotalForVisibleCell(row, input, allRows)) + ' €';
+        });
+
+        row.querySelectorAll('.manual-amount').forEach(input => {
+            const cell = input.closest('td');
+            const subtotal = cell ? cell.querySelector('.manual-subtotal') : null;
+            if (subtotal) subtotal.textContent = formatCents(subtotalForVisibleCell(row, input, allRows)) + ' €';
+        });
+
+        const isAbsent = status === 'excused' || status === 'unexcused';
+        row.querySelectorAll('.count-penalty-control').forEach(control => {
+            control.style.display = isAbsent ? 'none' : 'inline-flex';
+        });
+        row.querySelectorAll('.count-subtotal').forEach(subtotal => {
+            if (isAbsent) {
+                subtotal.innerHTML = '<span class="absent-symbol">⊘</span><span class="absent-calculated">wird berechnet</span>';
+            }
+        });
+    }
+
+    function calculateAverageRaw() {
+        const rows = Array.from(document.querySelectorAll('.participant-row'));
+        const presentRows = rows.filter(row => {
+            const status = row.querySelector('.status-input').value;
+            return status === 'present' || status === 'guest';
+        });
+
+        if (!presentRows.length) return 0;
+
+        const total = presentRows.reduce((sum, row) => sum + rowPenaltyForParticipant(row, rows), 0);
+        return Math.round(total / presentRows.length);
+    }
+
+    function updateTotals() {
+        updateEntryLockVisuals();
+        sortParticipantRowsLive();
+        const rawAverage = calculateAverageRaw();
+        const roundedAverage = roundToTenCents(rawAverage);
+        const averageDisplay = document.getElementById('averageDisplay');
+        const averageDetail = document.getElementById('averageDetail');
+
+        if (averageDisplay) {
+            averageDisplay.textContent = formatCents(roundedAverage) + ' €';
+        }
+        if (averageDetail) {
+            if (rawAverage !== roundedAverage) {
+                averageDetail.textContent = averageRoundingText(rawAverage, roundedAverage) + ' · ungerundet ' + formatCents(rawAverage) + ' €';
+            } else {
+                averageDetail.textContent = averageRoundingText(rawAverage, roundedAverage);
+            }
+        }
+
+        const allRows = Array.from(document.querySelectorAll('.participant-row'));
+        allRows.forEach(row => {
+            const status = row.querySelector('.status-input').value;
+            let total = 0;
+
+            updateCellSubtotals(row, status, allRows);
+
+            if (status === 'present') {
+                total = rowPenaltyForParticipant(row, allRows);
+            } else if (status === 'guest') {
+                total = guestFee + rowPenaltyForParticipant(row, allRows);
+            } else if (status === 'excused') {
+                total = roundedAverage + absenceExcused;
+            } else if (status === 'unexcused') {
+                total = roundedAverage + absenceUnexcused;
+            }
+
+            const target = row.querySelector('.participant-total');
+            if (target) {
+                target.textContent = formatCents(total);
+            }
+            const balanceTarget = row.querySelector('.participant-balance-total');
+            if (balanceTarget) {
+                const previousBalance = Number.parseInt(row.dataset.previousBalanceCents || '0', 10) || 0;
+                balanceTarget.textContent = formatCents(previousBalance + total);
+            }
+        });
+    }
+
+    document.querySelectorAll('.counter-plus').forEach(button => {
+        button.addEventListener('click', () => {
+            const input = button.parentElement.querySelector('.quantity-input');
+            input.value = (Number.parseInt(input.value || '0', 10) || 0) + 1;
+            updateTotals();
+        });
+    });
+
+    document.querySelectorAll('.counter-minus').forEach(button => {
+        button.addEventListener('click', () => {
+            const input = button.parentElement.querySelector('.quantity-input');
+            const current = Number.parseInt(input.value || '0', 10) || 0;
+            input.value = Math.max(0, current - 1);
+            updateTotals();
+        });
+    });
+
+    document.querySelectorAll('.quantity-input, .manual-amount, .status-input').forEach(input => {
+        input.addEventListener('input', updateTotals);
+        input.addEventListener('change', updateTotals);
+    });
+
+
+
+    function syncPaidInputs(changedInput) {
+        const participantId = changedInput.dataset.participantId;
+        if (!participantId) return;
+        document.querySelectorAll('.paid-input[data-participant-id="' + participantId + '"]').forEach(input => {
+            if (input !== changedInput) {
+                input.value = changedInput.value;
+            }
+        });
+    }
+
+    function updateLaneCostPreview() {
+        const laneInput = document.getElementById('lane_cost');
+        const preview = document.getElementById('laneCostPreview');
+        const cashAfterLaneCost = document.getElementById('cashAfterLaneCost');
+        if (!laneInput) return;
+        const laneCents = parseEuroToCents(laneInput.value || '0');
+        if (preview) preview.textContent = formatCents(laneCents);
+        if (cashAfterLaneCost) cashAfterLaneCost.textContent = formatCents(currentCashBalance - laneCents);
+    }
+
+    function updateSettlementRest() {
+        let paidTotal = 0;
+        let creditTotal = 0;
+        let openTotal = 0;
+        const seen = new Set();
+
+        document.querySelectorAll('.settlement-row').forEach(row => {
+            const participantId = row.dataset.participantId || '';
+            const penalty = Number.parseInt((row.querySelector('.settlement-penalty') || {}).dataset?.penaltyCents || '0', 10) || 0;
+            const paid = parseEuroToCents((row.querySelector('.paid-input') || {}).value || '0');
+            const rest = penalty - paid;
+            const restTarget = row.querySelector('.settlement-rest');
+            if (restTarget) restTarget.textContent = formatCents(rest);
+
+            if (participantId && !seen.has(participantId)) {
+                seen.add(participantId);
+                paidTotal += paid;
+                if (rest > 0) openTotal += rest;
+                if (rest < 0) creditTotal += Math.abs(rest);
+            }
+        });
+
+        const laneCost = parseEuroToCents((document.getElementById('lane_cost') || {}).value || '0');
+        const paidTarget = document.getElementById('settlementPaidTotal');
+        const creditTarget = document.getElementById('settlementCreditTotal');
+        const openTarget = document.getElementById('settlementOpenTotal');
+        const cashTarget = document.getElementById('cashAfterTotal');
+        if (paidTarget) paidTarget.textContent = formatCents(paidTotal);
+        if (creditTarget) creditTarget.textContent = formatCents(creditTotal);
+        if (openTarget) openTarget.textContent = formatCents(openTotal);
+        if (cashTarget) cashTarget.textContent = formatCents(currentCashBalance + paidTotal - laneCost);
+        updateLaneCostPreview();
+    }
+
+    document.querySelectorAll('.money-input').forEach(input => {
+        input.addEventListener('focus', () => {
+            if (input.classList.contains('clear-on-first-focus') && input.dataset.wasCleared !== '1') {
+                input.value = '';
+                input.dataset.wasCleared = '1';
+                updateSettlementRest();
+                updateLaneCostPreview();
+                return;
+            }
+            if ((input.value || '').trim() === '0,00' || (input.value || '').trim() === '0.00') {
+                input.value = '';
+            }
+        });
+        input.addEventListener('input', () => {
+            normalizeMoneyInput(input);
+            if (input.classList.contains('paid-input')) syncPaidInputs(input);
+            updateTotals();
+            updateSettlementRest();
+        });
+        input.addEventListener('blur', () => {
+            formatMoneyInput(input);
+            if (input.classList.contains('paid-input')) syncPaidInputs(input);
+            updateTotals();
+            updateSettlementRest();
+        });
+    });
+
+
+
+    const guestForm = document.getElementById('guestAddSection');
+    if (guestForm) {
+        guestForm.addEventListener('submit', copyEntryStatusToGuestForm);
+    }
+
+    const eventForm = document.getElementById('eventForm');
+    if (eventForm) {
+        eventForm.addEventListener('keydown', function (event) {
+            if (event.key !== 'Enter') return;
+            const tag = (event.target && event.target.tagName || '').toLowerCase();
+            if (tag === 'textarea') return;
+            event.preventDefault();
+            if (event.target && event.target.classList && event.target.classList.contains('money-input')) {
+                formatMoneyInput(event.target);
+                if (event.target.classList.contains('paid-input')) syncPaidInputs(event.target);
+                updateTotals();
+                updateSettlementRest();
+            }
+        });
+    }
+
+    {% if not readonly and event.status == "open" %}
+    let autosaveTimer = null;
+    let autosaveBusy = false;
+    let autosaveQueued = false;
+
+    function autosaveEventNow() {
+        if (!eventForm) return;
+        if (autosaveBusy) {
+            autosaveQueued = true;
+            return;
+        }
+        autosaveBusy = true;
+        const formData = new FormData(eventForm);
+        formData.set('action', 'autosave');
+        fetch(window.location.href, {
+            method: 'POST',
+            body: formData,
+            headers: {'X-Requested-With': 'fetch'},
+            credentials: 'same-origin'
+        })
+        .then(response => response.json().catch(() => ({ok:false})))
+        .then(data => {
+            if (data && data.ok) {
+                const flash = document.getElementById('autosaveStatus');
+                if (flash) flash.textContent = '✓ automatisch gespeichert ' + (data.saved_at || '');
+            }
+        })
+        .catch(() => {})
+        .finally(() => {
+            autosaveBusy = false;
+            if (autosaveQueued) {
+                autosaveQueued = false;
+                autosaveEventSoon(250);
+            }
+        });
+    }
+
+    function autosaveEventSoon(delay) {
+        window.clearTimeout(autosaveTimer);
+        autosaveTimer = window.setTimeout(autosaveEventNow, delay || 600);
+    }
+
+    document.querySelectorAll('.counter-plus, .counter-minus').forEach(button => {
+        button.addEventListener('click', () => autosaveEventSoon(250));
+    });
+    document.querySelectorAll('.quantity-input, .manual-amount, .note-input, .status-input').forEach(input => {
+        input.addEventListener('input', () => autosaveEventSoon(700));
+        input.addEventListener('change', () => autosaveEventSoon(250));
+        input.addEventListener('blur', () => autosaveEventSoon(250));
+    });
+    {% endif %}
+
+    {% if readonly and event.status == "open" %}
+    window.setInterval(function () {
+        window.location.reload();
+    }, 4000);
+    {% endif %}
+
+    {% if lock_allowed and not readonly %}
+    const lockPingUrl = "{{ url_for('event_lock_ping', event_id=event.id) }}";
+    const lockReleaseUrl = "{{ url_for('event_lock_release', event_id=event.id) }}";
+
+    function pingEventLock() {
+        fetch(lockPingUrl, { method: 'POST', credentials: 'same-origin' })
+            .then(response => {
+                if (!response.ok && response.status === 409) {
+                    window.location.reload();
+                }
+            })
+            .catch(() => {});
+    }
+
+    setInterval(pingEventLock, 60000);
+
+    window.addEventListener('pagehide', () => {
+        if (navigator.sendBeacon) {
+            navigator.sendBeacon(lockReleaseUrl, new Blob([], { type: 'application/x-www-form-urlencoded' }));
+        }
+    });
+    {% endif %}
+
+    updateTotals();
+    updateSettlementRest();
+    updateLaneCostPreview();
+})();
+</script>
 {% endblock %}

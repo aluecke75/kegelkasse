@@ -2,33 +2,64 @@
 
 {% block content %}
 
-<div class="card">
-    <h1>Startbestand erfassen</h1>
-
-    <p class="muted">
-        Hier trägst du den vorhandenen Stand der Barkasse und des Bankkontos ein.
-        Die Werte werden als Startbuchung gespeichert.
-    </p>
-
-    <p>Aktueller Barkassenstand: <strong>{{ cash_balance }} €</strong></p>
-    <p>Aktueller Bankstand: <strong>{{ bank_balance }} €</strong></p>
-
-    <form method="post">
-        <label>Barkasse Startbestand</label><br>
-        <input type="text" name="cash_amount" placeholder="z. B. 123,40" required><br>
-
-        <label>Bankkonto Startbestand</label><br>
-        <input type="text" name="bank_amount" placeholder="z. B. 850,00" required><br>
-
-        <label>Stichtag</label><br>
-        <input type="date" name="booking_date" value="{{ today }}" required><br>
-
-        <label>Bemerkung</label><br>
-        <textarea name="description" rows="4" placeholder="z. B. Startbestand laut Kassenbuch"></textarea><br>
-
-        <button type="submit">Startbestand speichern</button>
-        <a class="button" href="{{ url_for('dashboard') }}">Abbrechen</a>
-    </form>
+<div class="modern-header">
+    <div class="modern-icon">🏦</div>
+    <div>
+        <h1>Startbestand erfassen</h1>
+        <p>Vorhandene Barkasse und Bank als Ausgangswert eintragen.</p>
+    </div>
 </div>
+
+<div class="metric-grid">
+    <div class="metric-card"><span>Aktueller Barkassenstand</span><strong>{{ cash_balance }} €</strong></div>
+    <div class="metric-card"><span>Aktueller Bankstand</span><strong>{{ bank_balance }} €</strong></div>
+</div>
+
+<form method="post">
+    <div class="modern-card">
+        <h2>Startwerte</h2>
+        <div class="form-grid">
+            <label>Barkasse Startbestand
+                <input class="money-normalize" type="text" name="cash_amount" placeholder="z. B. 123,40" required>
+            </label>
+
+            <label>Bankkonto Startbestand
+                <input class="money-normalize" type="text" name="bank_amount" placeholder="z. B. 850,00" required>
+            </label>
+
+            <label>Stichtag
+                <input type="date" name="booking_date" value="{{ today }}" required>
+            </label>
+        </div>
+
+        <label>Bemerkung
+            <textarea name="description" rows="4" placeholder="z. B. Startbestand laut Kassenbuch"></textarea>
+        </label>
+    </div>
+
+    <div class="modern-card">
+        <div class="inline-actions">
+            <button type="submit">Startbestand speichern</button>
+            <a class="button secondary" href="{{ url_for('dashboard') }}">Abbrechen</a>
+        </div>
+    </div>
+</form>
+
+<script>
+function normalizeMoneyValue(value) {
+    if (!value) return value;
+    let v = String(value).trim().replace('.', ',');
+    if (!v) return v;
+    if (v.startsWith(',')) v = '0' + v;
+    if (!v.includes(',')) return v + ',00';
+    const parts = v.split(',');
+    const euros = parts[0] || '0';
+    let cents = (parts[1] || '').padEnd(2, '0').slice(0, 2);
+    return euros + ',' + cents;
+}
+document.querySelectorAll('.money-normalize').forEach(function(input) {
+    input.addEventListener('blur', function() { input.value = normalizeMoneyValue(input.value); });
+});
+</script>
 
 {% endblock %}

@@ -1,37 +1,74 @@
 {% extends "base.html" %}
 
 {% block content %}
-
-<div class="card">
-    <h1>Kegelabende</h1>
-
-    {% if current_user.role in ["admin", "cashier"] %}
-        <p>
-            <a class="button" href="{{ url_for('event_new') }}">Kegelabend anlegen</a>
-        </p>
-    {% endif %}
-
-    <table>
-        <tr>
-            <th>Datum</th>
-            <th>Bahnkosten</th>
-            <th>Status</th>
-            <th>Notiz</th>
-            <th>Aktion</th>
-        </tr>
-
-        {% for event in events %}
-        <tr>
-            <td>{{ event.event_date }}</td>
-            <td>{{ event.lane_cost_euro() }} €</td>
-            <td>{{ "Offen" if event.status == "open" else "Abgeschlossen" }}</td>
-            <td>{{ event.note or "" }}</td>
-            <td>
-                <a href="{{ url_for('event_detail', event_id=event.id) }}">Öffnen</a>
-            </td>
-        </tr>
-        {% endfor %}
-    </table>
+<div class="page-header">
+    <div class="page-icon">🎳</div>
+    <div>
+        <h1>Kegelabende</h1>
+        <p>Übersicht aller Kegelabende mit Status, Notizen und Schnellzugriff.</p>
+    </div>
 </div>
 
+<div class="section-grid">
+    <div class="modern-card">
+        <h2>Neuer Kegelabend</h2>
+        <p class="muted">Starte einen neuen Abend oder trage einen ausgefallenen Abend nach.</p>
+        {% if current_user.role in ["admin", "cashier", "member"] %}
+            <a class="button" href="{{ url_for('event_new') }}">Kegelabend anlegen</a>
+        {% else %}
+            <span class="muted">Nur Benutzer mit Schreibrechten können neue Abende anlegen.</span>
+        {% endif %}
+    </div>
+
+    <div class="modern-card">
+        <h2>Hinweis</h2>
+        <p class="muted">Offene Abende sollten zuerst abgeschlossen werden, bevor ein neuer Abend gestartet wird.</p>
+    </div>
+</div>
+
+<div class="modern-card">
+    <h2>Alle Kegelabende</h2>
+    <div class="mobile-table-wrap">
+        <table>
+            <tr>
+                <th>Datum</th>
+                <th>Bahnkosten</th>
+                <th>Status</th>
+                <th>Notiz</th>
+                <th>Aktion</th>
+            </tr>
+
+            {% for event in events %}
+            <tr>
+                <td><strong>{{ event.event_date }}</strong></td>
+                <td>{% if event.status == "cancelled" %}–{% else %}{{ event.lane_cost_euro() }} €{% endif %}</td>
+                <td>
+                    {% if event.status == "open" %}<span class="status-badge">Offen</span>
+                    {% elif event.status == "settlement" %}<span class="status-badge">Barzahlungen</span>
+                    {% elif event.status == "lane_cost" %}<span class="status-badge">Bahnkosten</span>
+                    {% elif event.status == "cancelled" %}<span class="status-badge" style="background:#fff7ed;color:#9a3412;border-color:#fed7aa;">Ausgefallen</span>
+                    {% else %}<span class="status-badge" style="background:#eef2ff;color:#3730a3;border-color:#c7d2fe;">Abgeschlossen</span>{% endif %}
+                </td>
+                <td>{{ event.note or "" }}</td>
+                <td>
+                    <div class="inline-actions">
+                        <a class="button secondary" href="{{ url_for('event_detail', event_id=event.id) }}">Öffnen</a>
+                        {% if current_user.role == "admin" %}
+                            <form method="post"
+                                  action="{{ url_for('event_delete', event_id=event.id) }}"
+                                  onsubmit="return confirm('Kegelabend wirklich komplett löschen? Diese Aktion kann nicht rückgängig gemacht werden.');">
+                                <button type="submit" class="danger">Löschen</button>
+                            </form>
+                        {% endif %}
+                    </div>
+                </td>
+            </tr>
+            {% else %}
+            <tr>
+                <td colspan="5" class="muted">Noch keine Kegelabende vorhanden.</td>
+            </tr>
+            {% endfor %}
+        </table>
+    </div>
+</div>
 {% endblock %}

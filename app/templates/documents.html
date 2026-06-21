@@ -1,0 +1,185 @@
+{% extends "base.html" %}
+{% block content %}
+
+<style>
+.document-page { max-width:1220px; margin:0 auto; }
+.document-header { display:flex; align-items:flex-start; gap:14px; margin-bottom:18px; }
+.document-icon { width:44px; height:44px; border-radius:14px; display:flex; align-items:center; justify-content:center; background:#ecfdf5; color:#047857; font-size:24px; flex:0 0 auto; }
+.document-title h1 { margin:0; }
+.document-title p { margin:6px 0 0; color:#667085; }
+.document-card { background:#fff; border:1px solid #e5e7eb; border-radius:16px; padding:18px; margin-bottom:16px; box-shadow:0 4px 18px rgba(15, 23, 42, 0.06); }
+.document-card h2 { margin-top:0; }
+.document-sub { color:#667085; margin-top:-4px; }
+.document-grid { display:grid; grid-template-columns:1.15fr .85fr; gap:18px; }
+.form-grid { display:grid; grid-template-columns:repeat(2, minmax(180px, 1fr)); gap:14px; }
+.form-grid-wide { grid-column:1 / -1; }
+.document-list { display:grid; grid-template-columns:repeat(2, minmax(260px, 1fr)); gap:14px; }
+.document-item { border:1px solid #e5e7eb; border-radius:14px; padding:14px; background:#fafafa; }
+.document-item-head { display:flex; gap:10px; align-items:flex-start; justify-content:space-between; }
+.document-item-title { display:flex; gap:10px; align-items:flex-start; }
+.document-item-icon { width:38px; height:38px; border-radius:12px; display:flex; align-items:center; justify-content:center; background:#fff; border:1px solid #e5e7eb; font-size:20px; flex:0 0 auto; }
+.document-meta { color:#667085; font-size:.92rem; margin-top:6px; line-height:1.5; }
+.document-desc { margin-top:10px; color:#374151; }
+.document-actions { display:flex; flex-wrap:wrap; gap:8px; margin-top:12px; }
+.preview-box { margin-top:12px; border:1px solid #e5e7eb; border-radius:12px; overflow:hidden; background:#fff; }
+.preview-box summary { cursor:pointer; padding:10px 12px; font-weight:700; background:#f9fafb; }
+.preview-frame { width:100%; min-height:260px; border:0; display:block; background:white; }
+.preview-image { width:100%; max-height:360px; object-fit:contain; display:block; background:#f8fafc; }
+.btn-primary { background:#047857; color:white; border:0; border-radius:9px; padding:10px 14px; width:auto; font-weight:bold; }
+.btn-secondary { background:white; color:#111827; border:1px solid #d1d5db; border-radius:9px; padding:9px 13px; width:auto; text-decoration:none; display:inline-block; }
+.btn-danger { background:#fff; color:#b91c1c; border:1px solid #fecaca; border-radius:9px; padding:9px 13px; width:auto; }
+.info-box { display:flex; gap:12px; align-items:flex-start; padding:14px; border-radius:12px; background:#eff6ff; border:1px solid #bfdbfe; color:#1e3a8a; margin-bottom:16px; }
+.filter-bar { display:grid; grid-template-columns: 1fr 220px auto; gap:10px; align-items:end; }
+.badge { display:inline-block; padding:3px 9px; border-radius:999px; font-size:.82rem; background:#dcfce7; color:#166534; border:1px solid #86efac; }
+.empty-state { border:1px dashed #d1d5db; border-radius:14px; padding:24px; text-align:center; color:#667085; background:#fafafa; }
+@media (max-width:900px) {
+  .document-grid, .document-list, .form-grid, .filter-bar { grid-template-columns:1fr; }
+  .document-actions { align-items:stretch; }
+  .document-actions a, .document-actions button { width:100%; text-align:center; }
+}
+</style>
+
+<div class="document-page">
+    <div class="document-header">
+        <div class="document-icon">📁</div>
+        <div class="document-title">
+            <h1>Dokumente</h1>
+            <p>Rechnungen, Kontoauszüge und Vereinsunterlagen zentral in der Kegelkasse ablegen.</p>
+        </div>
+    </div>
+
+    <div class="document-grid">
+        <section class="document-card">
+            <h2>Dokument hochladen</h2>
+            <p class="document-sub">PDF, Bilder, Text- und Office-Dateien hochladen und optional einem Kegelabend oder einer Kassenbuchbuchung zuordnen. Am Handy kann über die Dateiauswahl auch direkt die Kamera genutzt werden.</p>
+            <form method="post" enctype="multipart/form-data">
+                <input type="hidden" name="form_action" value="upload">
+                <div class="form-grid">
+                    <label>Titel
+                        <input type="text" name="title" required placeholder="z. B. Rechnung Kegelbahn Juli">
+                    </label>
+                    <label>Kategorie
+                        <select name="category">
+                            {% for category in categories %}
+                                <option value="{{ category }}">{{ category }}</option>
+                            {% endfor %}
+                        </select>
+                    </label>
+                    <label>Dokumentdatum
+                        <input type="date" name="document_date">
+                    </label>
+                    <label>Datei
+                        <input type="file" name="document_file" required accept=".pdf,.jpg,.jpeg,.png,.gif,.webp,.doc,.docx,.xls,.xlsx,.txt,.csv,.json,.html,.htm,.rtf,image/*">
+                    </label>
+                    <label>Kegelabend zuordnen
+                        <select name="event_id">
+                            <option value="">Keine Zuordnung</option>
+                            {% for event in events %}
+                                <option value="{{ event.id }}">{{ event.event_date.strftime('%d.%m.%Y') }} · {{ event.status }}</option>
+                            {% endfor %}
+                        </select>
+                    </label>
+                    <label>Kassenbuch zuordnen
+                        <select name="cashbook_entry_id">
+                            <option value="">Keine Zuordnung</option>
+                            {% for entry in cashbook_entries %}
+                                <option value="{{ entry.id }}">{{ entry.booking_date.strftime('%d.%m.%Y') }} · {{ entry.direction_label() }} · {{ entry.amount_euro() }} € · {{ entry.reason }}</option>
+                            {% endfor %}
+                        </select>
+                    </label>
+                    <label class="form-grid-wide">Beschreibung
+                        <textarea name="description" rows="3" placeholder="Optionale Notiz zum Dokument"></textarea>
+                    </label>
+                </div>
+                <p><button class="btn-primary" type="submit">📤 Dokument hochladen</button></p>
+            </form>
+        </section>
+
+        <aside class="document-card">
+            <h2>Hinweise</h2>
+            <div class="info-box">
+                <strong>ℹ️</strong>
+                <div>Gelöschte Dokumente werden zuerst nur aus der Liste entfernt. Die Datei bleibt zur Sicherheit auf dem Server erhalten, damit nicht aus Versehen Belege verloren gehen.</div>
+            </div>
+            <p><strong>Typische Ablage</strong></p>
+            <ul>
+                <li>Kegelbahn-Rechnungen direkt dem Kegelabend zuordnen.</li>
+                <li>PDFs, Bilder und Textdateien können direkt als Vorschau geöffnet werden.</li>
+                <li>Kontoauszüge als Banknachweis ablegen.</li>
+                <li>Tour-Rechnungen als Kegeltour kategorisieren.</li>
+            </ul>
+        </aside>
+    </div>
+
+    <section class="document-card">
+        <h2>Dokumentenliste</h2>
+        <form class="filter-bar" method="get">
+            <label>Suche
+                <input type="text" name="q" value="{{ search }}" placeholder="Titel, Beschreibung oder Dateiname">
+            </label>
+            <label>Kategorie
+                <select name="category" onchange="this.form.submit()">
+                    <option value="all">Alle Kategorien</option>
+                    {% for category in categories %}
+                        <option value="{{ category }}" {% if category_filter == category %}selected{% endif %}>{{ category }}</option>
+                    {% endfor %}
+                </select>
+            </label>
+            <button class="btn-secondary" type="submit">Suchen</button>
+        </form>
+    </section>
+
+    {% if documents %}
+        <div class="document-list">
+            {% for doc in documents %}
+                <article class="document-item">
+                    <div class="document-item-head">
+                        <div class="document-item-title">
+                            <div class="document-item-icon">{{ doc.category_icon() }}</div>
+                            <div>
+                                <h3 style="margin:0;">{{ doc.title }}</h3>
+                                <span class="badge">{{ doc.category }}</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="document-meta">
+                        {% if doc.document_date %}Datum: {{ doc.document_date.strftime('%d.%m.%Y') }} · {% endif %}
+                        Größe: {{ doc.size_label() }}<br>
+                        Datei: {{ doc.original_filename }}<br>
+                        Hochgeladen: {{ doc.uploaded_at.strftime('%d.%m.%Y, %H:%M Uhr') }}{% if doc.uploaded_by_user %} von {{ doc.uploaded_by_user.username }}{% endif %}
+                        {% if doc.event %}<br>Kegelabend: {{ doc.event.event_date.strftime('%d.%m.%Y') }}{% endif %}
+                        {% if doc.cashbook_entry %}<br>Kassenbuch: {{ doc.cashbook_entry.booking_date.strftime('%d.%m.%Y') }} · {{ doc.cashbook_entry.reason }}{% endif %}
+                    </div>
+                    {% if doc.description %}
+                        <div class="document-desc">{{ doc.description }}</div>
+                    {% endif %}
+                    {% set ext = doc.original_filename.rsplit('.', 1)[1].lower() if '.' in doc.original_filename else '' %}
+                    {% set previewable = ext in ['pdf', 'jpg', 'jpeg', 'png', 'gif', 'webp', 'txt', 'csv', 'json', 'html', 'htm', 'rtf'] %}
+                    {% if previewable %}
+                        <details class="preview-box">
+                            <summary>👁 Vorschau anzeigen</summary>
+                            {% if ext in ['jpg', 'jpeg', 'png', 'gif', 'webp'] %}
+                                <img class="preview-image" src="{{ url_for('document_preview', document_id=doc.id) }}" alt="Vorschau {{ doc.title }}">
+                            {% else %}
+                                <iframe class="preview-frame" src="{{ url_for('document_preview', document_id=doc.id) }}"></iframe>
+                            {% endif %}
+                        </details>
+                    {% endif %}
+                    <div class="document-actions">
+                        {% if not previewable %}<span class="document-meta">Für diesen Dateityp ist aktuell nur Download möglich.</span>{% endif %}
+                        <a class="btn-secondary" href="{{ url_for('document_download', document_id=doc.id) }}">⬇ Herunterladen</a>
+                        <form method="post" onsubmit="return confirm('Dokument wirklich aus der Liste entfernen?');">
+                            <input type="hidden" name="form_action" value="delete">
+                            <input type="hidden" name="document_id" value="{{ doc.id }}">
+                            <button class="btn-danger" type="submit">Löschen</button>
+                        </form>
+                    </div>
+                </article>
+            {% endfor %}
+        </div>
+    {% else %}
+        <div class="empty-state">Noch keine Dokumente vorhanden oder keine Treffer für den aktuellen Filter.</div>
+    {% endif %}
+</div>
+
+{% endblock %}

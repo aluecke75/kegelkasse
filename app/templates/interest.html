@@ -1,0 +1,118 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="modern-header">
+    <div class="modern-icon">📈</div>
+    <div>
+        <h1>Zinsen</h1>
+        <p>Zinssatz pflegen, erwartete Zinsen vorschlagen und tatsächliche Gutschriften buchen.</p>
+    </div>
+</div>
+
+<div class="section-grid">
+    <div class="modern-card">
+        <div class="modern-header"><div class="modern-icon">%</div><div><h2>Aktuelle Einstellung</h2><p>Grundlage für die automatische Vorschlagsrechnung.</p></div></div>
+        {% if active_setting %}
+            <div class="metric-grid">
+                <div class="metric-card"><span>Zinssatz</span><strong>{{ active_setting.rate_percent() }} % p. a.</strong></div>
+                <div class="metric-card"><span>Gültig ab</span><strong>{{ active_setting.valid_from.strftime('%d.%m.%Y') }}</strong></div>
+                <div class="metric-card"><span>Rhythmus</span><strong>{{ active_setting.frequency_label() }}</strong></div>
+            </div>
+            {% if active_setting.note %}<p class="muted">{{ active_setting.note }}</p>{% endif %}
+        {% else %}<p class="muted">Noch keine Zinseinstellung gespeichert.</p>{% endif %}
+    </div>
+
+    <div class="modern-card">
+        <div class="modern-header"><div class="modern-icon">⚙️</div><div><h2>Zinseinstellung</h2><p>Der Zinssatz ist ein Prozentwert, kein Eurobetrag.</p></div></div>
+        <form method="post">
+            <input type="hidden" name="form_type" value="setting">
+            <div class="form-grid">
+                <label>Zinssatz p. a.
+                    <div style="display:flex; align-items:center; gap:8px;"><input id="annual_rate" name="annual_rate" inputmode="decimal" placeholder="z. B. ,3 oder 1,25" value="{{ active_setting.rate_percent() if active_setting else '' }}"><strong>%</strong></div>
+                </label>
+                <label>Gültig ab
+                    <input id="valid_from" name="valid_from" type="date" value="{{ active_setting.valid_from.isoformat() if active_setting else today }}">
+                </label>
+                <label>Auszahlungsrhythmus
+                    <select id="payout_frequency" name="payout_frequency">
+                        {% set selected_frequency = active_setting.payout_frequency if active_setting else 'yearly' %}
+                        <option value="monthly" {% if selected_frequency == 'monthly' %}selected{% endif %}>monatlich</option>
+                        <option value="quarterly" {% if selected_frequency == 'quarterly' %}selected{% endif %}>vierteljährlich</option>
+                        <option value="half_yearly" {% if selected_frequency == 'half_yearly' %}selected{% endif %}>halbjährlich</option>
+                        <option value="yearly" {% if selected_frequency == 'yearly' %}selected{% endif %}>jährlich</option>
+                    </select>
+                </label>
+            </div>
+            <label>Notiz<textarea id="note" name="note" rows="3" placeholder="optional"></textarea></label>
+            <button type="submit">Zinseinstellung speichern</button>
+        </form>
+    </div>
+</div>
+
+<div class="modern-card">
+    <div class="modern-header"><div class="modern-icon">🏦</div><div><h2>Zinsgutschrift buchen</h2><p>Vorschlag prüfen und tatsächliche Bankgutschrift eintragen.</p></div></div>
+    {% if not active_setting %}
+        <p class="muted">Bitte zuerst eine Zinseinstellung speichern.</p>
+    {% else %}
+        <div class="metric-grid">
+            <div class="metric-card"><span>Bankbestand laut System</span><strong>{{ bank_balance }} €</strong></div>
+            <div class="metric-card"><span>Erwartete Zinsen brutto</span><strong>{{ expected_interest }} €</strong></div>
+            <div class="metric-card"><span>Kapitalertragsteuer</span><strong id="taxPreview" class="money-nowrap">{{ default_tax }} €</strong></div>
+            <div class="metric-card"><span>Netto-Gutschrift</span><strong id="netPreview" class="money-nowrap">{{ default_net_interest }} €</strong></div>
+        </div>
+        <form method="post" style="margin-top:14px;">
+            <input type="hidden" name="form_type" value="booking">
+            <div class="form-grid">
+                <label>Buchungsdatum<input id="booking_date" name="booking_date" type="date" value="{{ today }}"></label>
+                <label>Zeitraum von<input id="period_start" name="period_start" type="date" value="{{ default_start }}"></label>
+                <label>Zeitraum bis<input id="period_end" name="period_end" type="date" value="{{ default_end }}"></label>
+                <label>Tatsächliche Zinsen brutto<input id="actual_interest" name="actual_interest" inputmode="decimal" placeholder="z. B. ,37 oder 12,45" value="{{ expected_interest }}"></label>
+                <label>Kapitalertragsteuer %<input id="tax_rate" name="tax_rate" inputmode="decimal" value="{{ default_tax_rate }}"></label>
+            </div>
+            <div class="tip-box"><span>ℹ️</span><div>Gebucht wird die Netto-Gutschrift auf dem Bankkonto. Brutto-Zinsen minus Kapitalertragsteuer werden im Revisionsprotokoll und Zinsverlauf dokumentiert.</div></div>
+            <label for="booking_note" class="field-label">Notiz</label>
+            <textarea id="booking_note" name="booking_note" rows="3" placeholder="optional, z. B. laut Kontoauszug"></textarea>
+            <button type="submit">Zinsgutschrift buchen</button>
+        </form>
+    {% endif %}
+</div>
+
+<div class="two-column-grid">
+    <div class="modern-card">
+        <h2>Gebuchte Zinsen</h2>
+        {% if bookings %}<div class="mobile-table-wrap"><table><thead><tr><th>Datum</th><th>Zeitraum</th><th>Erwartet</th><th>Brutto</th><th>KESt</th><th>Netto</th><th>Notiz</th></tr></thead><tbody>{% for booking in bookings %}<tr><td>{{ booking.booking_date.strftime('%d.%m.%Y') }}</td><td>{{ booking.period_start.strftime('%d.%m.%Y') }} - {{ booking.period_end.strftime('%d.%m.%Y') }}</td><td>{{ booking.expected_interest_euro() }} €</td><td>{{ booking.actual_interest_euro() }} €</td><td>{{ booking.tax_euro() }} €</td><td><strong>{{ booking.net_interest_euro() }} €</strong></td><td>{{ booking.note or '-' }}</td></tr>{% endfor %}</tbody></table></div>{% else %}<p class="muted">Noch keine Zinsgutschrift gebucht.</p>{% endif %}
+    </div>
+    <div class="modern-card">
+        <h2>Zinseinstellungen Verlauf</h2>
+        {% if settings %}<div class="mobile-table-wrap"><table><thead><tr><th>Gültig ab</th><th>Zinssatz</th><th>Rhythmus</th><th>Status</th></tr></thead><tbody>{% for setting in settings %}<tr><td>{{ setting.valid_from.strftime('%d.%m.%Y') }}</td><td>{{ setting.rate_percent() }} %</td><td>{{ setting.frequency_label() }}</td><td>{{ 'aktiv' if setting.active else 'alt' }}</td></tr>{% endfor %}</tbody></table></div>{% else %}<p class="muted">Noch keine Einstellungen vorhanden.</p>{% endif %}
+    </div>
+</div>
+
+<style>
+.money-nowrap { white-space: nowrap; display:inline-block; }
+.field-label { display:block; margin-top:14px; margin-bottom:8px; }
+</style>
+<script>
+(function () {
+    function normalizeDecimalCommaInput(input, decimalPlaces) { if (!input) return; input.addEventListener('blur', function () { var value = input.value.trim(); if (!value) return; value = value.replace('€', '').replace('%', '').replace(/\s/g, ''); if (value.charAt(0) === ',' || value.charAt(0) === '.') value = '0' + value; value = value.replace('.', ','); if (value.indexOf(',') === -1) value += ',' + ''.padEnd(decimalPlaces, '0'); else { var parts = value.split(','); parts[1] = (parts[1] || '').padEnd(decimalPlaces, '0').slice(0, decimalPlaces); value = parts[0] + ',' + parts[1]; } input.value = value; }); }
+    function normalizePercentInput(input) { if (!input) return; input.addEventListener('blur', function () { var value = input.value.trim(); if (!value) return; value = value.replace('%', '').replace(/\s/g, ''); if (value.charAt(0) === ',' || value.charAt(0) === '.') value = '0' + value; input.value = value.replace('.', ','); }); }
+    function parseEuro(value) { value = (value || '').toString().replace('€','').replace('%','').replace(/\s/g,'').replace('.', ','); if (value.charAt(0) === ',') value = '0' + value; return parseFloat(value.replace(',', '.')) || 0; }
+    function formatEuro(number) { return number.toFixed(2).replace('.', ','); }
+    function updateTaxPreview() {
+        var gross = parseEuro(document.getElementById('actual_interest') && document.getElementById('actual_interest').value);
+        var rate = parseEuro(document.getElementById('tax_rate') && document.getElementById('tax_rate').value);
+        var tax = Math.round(gross * rate) / 100;
+        var net = Math.max(0, gross - tax);
+        var taxPreview = document.getElementById('taxPreview');
+        var netPreview = document.getElementById('netPreview');
+        if (taxPreview) taxPreview.textContent = formatEuro(tax) + ' €';
+        if (netPreview) netPreview.textContent = formatEuro(net) + ' €';
+    }
+    normalizePercentInput(document.getElementById('annual_rate'));
+    normalizeDecimalCommaInput(document.getElementById('actual_interest'), 2);
+    normalizePercentInput(document.getElementById('tax_rate'));
+    ['actual_interest','tax_rate'].forEach(function(id){ var el = document.getElementById(id); if (el) { el.addEventListener('input', updateTaxPreview); el.addEventListener('blur', updateTaxPreview); }});
+    updateTaxPreview();
+})();
+</script>
+{% endblock %}

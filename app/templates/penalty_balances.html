@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="modern-header">
+    <div class="modern-icon">⚖️</div>
+    <div>
+        <h1>Strafkonten / Guthaben</h1>
+        <p>Offene Strafzahlungen und Guthaben je Mitglied verwalten.</p>
+    </div>
+</div>
+
+<div class="section-grid">
+    <div class="modern-card">
+        <div class="modern-header"><div class="modern-icon">🏦</div><div><h2>Überweisung buchen</h2><p>Bankeingang unabhängig von einem Kegelabend erfassen.</p></div></div>
+        <form method="post">
+            <label>Mitglied
+                <select name="member_id" required>{% for member in members %}<option value="{{ member.id }}">{{ member.display_name() }}</option>{% endfor %}</select>
+            </label>
+            <label>Betrag<input class="euro-input" type="text" name="amount" placeholder="z. B. ,50 oder 20,00" inputmode="decimal" required></label>
+            <label>Datum<input type="date" name="booking_date" value="{{ today }}" required></label>
+            <label>Bemerkung<textarea name="note" rows="3" placeholder="z. B. gesammeltes Strafgeld"></textarea></label>
+            <button type="submit">Überweisung buchen</button>
+        </form>
+    </div>
+    <div class="modern-card">
+        <div class="modern-header"><div class="modern-icon">ℹ️</div><div><h2>Hinweis</h2><p>Positive Beträge sind offene Strafzahlungen. Guthaben entsteht durch Überzahlungen.</p></div></div>
+        <div class="tip-box"><span>💡</span><div>Eine Überweisung reduziert offene Strafen. Bei Überzahlung entsteht automatisch Guthaben.</div></div>
+    </div>
+</div>
+
+<div class="modern-card">
+    <div class="modern-header"><div class="modern-icon">👥</div><div><h2>Übersicht</h2><p>Aktueller Stand aller Strafkonten und Guthaben.</p></div></div>
+    <div class="mobile-table-wrap">
+        <table>
+            <thead><tr><th>Mitglied</th><th>Status</th><th>Betrag</th></tr></thead>
+            <tbody>{% for row in rows %}<tr><td>{{ row.member.display_name() }}</td><td>{{ row.status }}</td><td><strong>{{ row.balance_euro }} €</strong></td></tr>{% else %}<tr><td colspan="3">Noch keine Einträge vorhanden.</td></tr>{% endfor %}</tbody>
+        </table>
+    </div>
+</div>
+<script>
+(function () {
+    function normalizeEuro(value) { let raw = String(value || '').trim().replace('€', '').replace(/\s/g, ''); if (!raw) return ''; if (raw.startsWith(',') || raw.startsWith('.')) raw = '0' + raw; if (raw.includes(',')) raw = raw.replace(/\./g, '').replace(',', '.'); let number = Number(raw); if (!Number.isFinite(number)) return value; return number.toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+    document.querySelectorAll('.euro-input').forEach(function (field) { field.addEventListener('blur', function () { field.value = normalizeEuro(field.value); }); });
+})();
+</script>
+{% endblock %}

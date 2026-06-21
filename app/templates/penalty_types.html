@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+
+{% block content %}
+
+<div class="modern-header">
+    <div class="modern-icon">⚖️</div>
+    <div>
+        <h1>Strafarten</h1>
+        <p>Strafen, Beträge, Reihenfolge und Berechnungsmodus kompakt verwalten.</p>
+    </div>
+</div>
+
+<div class="modern-card">
+    <div class="inline-actions" style="justify-content:space-between;">
+        <div>
+            <h2 style="margin:0;">Übersicht</h2>
+            <p class="muted" style="margin:4px 0 0;">Details erscheinen erst nach dem Anklicken.</p>
+        </div>
+        <div class="inline-actions">
+            <a class="button" href="{{ url_for('penalty_type_new') }}">+ Strafart anlegen</a>
+            <a class="button secondary" href="{{ url_for('rate_settings') }}">Zurück</a>
+        </div>
+    </div>
+</div>
+
+<div class="penalty-list">
+    {% for penalty_type in penalty_types %}
+        <div class="modern-card penalty-item">
+            <button type="button" class="penalty-summary" onclick="this.closest('.penalty-item').classList.toggle('open')">
+                <span class="penalty-order">{{ penalty_type.sort_order }}</span>
+                <span>
+                    <strong>{{ penalty_type.name }}</strong>
+                    <small>{{ penalty_type.kind_label() }} · {{ penalty_type.target_mode_label() }}</small>
+                </span>
+                <span class="penalty-badge">{{ penalty_type.amount_euro() }} €</span>
+                <span class="penalty-badge {{ 'active' if penalty_type.active else 'inactive' }}">
+                    {{ "Aktiv" if penalty_type.active else "Inaktiv" }}
+                </span>
+                <span class="muted">Änderung anzeigen</span>
+            </button>
+
+            <div class="penalty-details">
+                <div class="metric-grid">
+                    <div class="metric-card"><span>Typ</span><strong>{{ penalty_type.kind_label() }}</strong></div>
+                    <div class="metric-card"><span>Betrag</span><strong>{{ penalty_type.amount_euro() }} €</strong></div>
+                    <div class="metric-card"><span>Berechnung</span><strong>{{ penalty_type.target_mode_label() }}</strong></div>
+                    <div class="metric-card"><span>Reihenfolge</span><strong>{{ penalty_type.sort_order }}</strong></div>
+                    <div class="metric-card"><span>Status</span><strong>{{ "Aktiv" if penalty_type.active else "Inaktiv" }}</strong></div>
+                </div>
+
+                <div class="inline-actions" style="margin-top:14px;">
+                    <a class="button" href="{{ url_for('penalty_type_edit', type_id=penalty_type.id) }}">Bearbeiten</a>
+                    <form method="post"
+                          action="{{ url_for('penalty_type_delete', type_id=penalty_type.id) }}"
+                          onsubmit="return confirm('Strafart wirklich löschen/deaktivieren?');">
+                        <button class="button danger" type="submit">Löschen/Deaktivieren</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    {% else %}
+        <div class="modern-card"><p class="muted">Noch keine Strafarten angelegt.</p></div>
+    {% endfor %}
+</div>
+
+<style>
+.penalty-list { display:grid; gap:12px; }
+.penalty-summary { width:100%; max-width:none; border:0; background:transparent; color:var(--text); text-align:left; padding:0; display:grid; grid-template-columns:auto 1fr auto auto auto; gap:12px; align-items:center; }
+.penalty-summary small { display:block; color:var(--muted); font-weight:400; margin-top:3px; }
+.penalty-order { width:34px; height:34px; border-radius:12px; display:flex; align-items:center; justify-content:center; background:var(--green-soft); color:var(--green); font-weight:800; }
+.penalty-badge { display:inline-block; border-radius:999px; padding:5px 10px; font-size:0.86rem; background:#f1f5f9; color:#334155; font-weight:700; white-space:nowrap; }
+.penalty-badge.active { background:#eaf7ee; color:#176a2f; }
+.penalty-badge.inactive { background:#fff1f1; color:#b91c1c; }
+.penalty-details { display:none; margin-top:16px; padding-top:16px; border-top:1px solid var(--line); }
+.penalty-item.open .penalty-details { display:block; }
+@media (max-width: 760px) { .penalty-summary { grid-template-columns:1fr; } }
+</style>
+
+{% endblock %}

@@ -92,3 +92,22 @@ docker-compose.override.yml
 # GitHub / Backup
 # ------------------------------------------------------------
 .github/workflows/*.local
+# Backup-Dateien
+*.bak
+*.old
+
+# Synology Metadaten
+@eaDir/
+**/@eaDir/
+
+# Backup-/Arbeitsdateien
+*.bak
+*.bak2
+*_fixed.py
+*.old
+*.tmp
+*.swp
+
+# Daten / Uploads / Backups
+data/database_backup_*/
+data/uploads/

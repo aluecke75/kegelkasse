@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="modern-header">
+    <div class="modern-icon">📦</div>
+    <div>
+        <h1>Jahresabschluss</h1>
+        <p>Jahresstand prüfen und als unveränderliches Protokoll speichern.</p>
+    </div>
+</div>
+
+<div class="modern-card">
+    <form method="get" class="form-grid" style="align-items:end;">
+        <label>Jahr
+            <select name="year" onchange="this.form.submit()">{% for year in years %}<option value="{{ year }}" {% if year == selected_year %}selected{% endif %}>{{ year }}</option>{% endfor %}</select>
+        </label>
+        <noscript><button type="submit">Anzeigen</button></noscript>
+    </form>
+</div>
+
+<div class="modern-card">
+    <div class="modern-header"><div class="modern-icon">📊</div><div><h2>Vorschau für {{ selected_year }}</h2><p>Der Abschluss erzeugt keine Buchung, sondern friert den Stand als Protokoll ein.</p></div></div>
+    {% if existing_closing %}<div class="info-box"><span>✅</span><div>Für {{ selected_year }} wurde bereits ein Jahresabschluss gespeichert.</div></div>{% endif %}
+    {% if summary.open_event_count > 0 %}<div class="tip-box"><span>⚠️</span><div>Für dieses Jahr gibt es noch {{ summary.open_event_count }} offene Kegelabende. Bitte zuerst abschließen oder korrigieren.</div></div>{% endif %}
+
+    <div class="metric-grid">
+        <div class="metric-card"><span>Barkasse</span><strong>{{ cash_balance }} €</strong></div>
+        <div class="metric-card"><span>Bank</span><strong>{{ bank_balance }} €</strong></div>
+        <div class="metric-card"><span>Gesamtbestand</span><strong>{{ total_balance }} €</strong></div>
+        <div class="metric-card"><span>Offene Strafen</span><strong>{{ open_penalties }} €</strong></div>
+        <div class="metric-card"><span>Guthaben Mitglieder</span><strong>{{ member_credits }} €</strong></div>
+        <div class="metric-card"><span>Einnahmen im Jahr</span><strong>{{ income }} €</strong></div>
+        <div class="metric-card"><span>Ausgaben im Jahr</span><strong>{{ expense }} €</strong></div>
+        <div class="metric-card"><span>Abgeschlossene Abende</span><strong>{{ summary.event_count }}</strong></div>
+        <div class="metric-card"><span>Ausgefallen</span><strong>{{ summary.cancelled_event_count }}</strong></div>
+        <div class="metric-card"><span>Offen</span><strong>{{ summary.open_event_count }}</strong></div>
+        <div class="metric-card"><span>Letzte Kassenprüfung</span><strong>{% if summary.last_audit %}{{ summary.last_audit.audit_date.strftime('%d.%m.%Y') }}{% else %}keine{% endif %}</strong></div>
+    </div>
+
+    <form method="post" style="margin-top:14px;">
+        <input type="hidden" name="year" value="{{ selected_year }}">
+        <label>Notiz zum Jahresabschluss<textarea name="note" rows="3" placeholder="z. B. geprüft am ..., Bankauszug liegt vor, Barkasse gezählt..."></textarea></label>
+        <button type="submit" {% if existing_closing or summary.open_event_count > 0 %}disabled{% endif %}>Jahresabschluss {{ selected_year }} speichern</button>
+    </form>
+</div>
+
+<div class="modern-card">
+    <div class="modern-header"><div class="modern-icon">🗂️</div><div><h2>Gespeicherte Jahresabschlüsse</h2><p>Archiv der bereits gespeicherten Jahresstände.</p></div></div>
+    <div class="mobile-table-wrap">
+        <table>
+            <thead><tr><th>Jahr</th><th>Datum</th><th>Barkasse</th><th>Bank</th><th>Gesamt</th><th>Offene Strafen</th><th>Guthaben</th><th>Erfasst von</th><th>Details</th></tr></thead>
+            <tbody>
+                {% for closing in closings %}
+                    <tr>
+                        <td>{{ closing.year }}</td><td>{{ closing.closing_date.strftime('%d.%m.%Y') if closing.closing_date else '' }}</td><td>{{ closing.cash_balance_euro() }} €</td><td>{{ closing.bank_balance_euro() }} €</td><td>{{ closing.total_balance_euro() }} €</td><td>{{ closing.open_penalties_euro() }} €</td><td>{{ closing.member_credits_euro() }} €</td><td>{{ closing.created_by_user.username if closing.created_by_user else '-' }}</td>
+                        <td><details><summary>Details anzeigen</summary><p>Abgeschlossene Kegelabende: {{ closing.event_count }}</p><p>Ausgefallene Kegelabende: {{ closing.cancelled_event_count }}</p><p>Offene Kegelabende beim Abschluss: {{ closing.open_event_count }}</p><p>Einnahmen im Jahr: {{ closing.income_euro() }} €</p><p>Ausgaben im Jahr: {{ closing.expense_euro() }} €</p><p>Letzte Kassenprüfung: {% if closing.last_cash_audit %}{{ closing.last_cash_audit.audit_date.strftime('%d.%m.%Y') }}{% else %}-{% endif %}</p><p>Notiz: {{ closing.note or '-' }}</p></details></td>
+                    </tr>
+                {% else %}<tr><td colspan="9">Noch kein Jahresabschluss gespeichert.</td></tr>{% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+<style>button:disabled { opacity:0.55; cursor:not-allowed; }</style>
+{% endblock %}

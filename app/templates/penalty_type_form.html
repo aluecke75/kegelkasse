@@ -1,0 +1,89 @@
+{% extends "base.html" %}
+
+{% block content %}
+
+<div class="modern-header">
+    <div class="modern-icon">⚖️</div>
+    <div>
+        <h1>{{ "Strafart bearbeiten" if penalty_type else "Strafart anlegen" }}</h1>
+        <p>Betrag, Typ und Berechnungsziel festlegen.</p>
+    </div>
+</div>
+
+<form method="post">
+    <div class="two-column-grid">
+        <div class="modern-card">
+            <h2>Grunddaten</h2>
+            <div class="form-grid">
+                <label>Name
+                    <input type="text" name="name" required value="{{ penalty_type.name if penalty_type else '' }}" placeholder="z. B. Pumpe">
+                </label>
+
+                <label>Betrag in Euro
+                    <input class="money-normalize" type="text" name="amount" required value="{{ penalty_type.amount_euro() if penalty_type else '' }}" placeholder="z. B. 0,50">
+                    <small>Komforteingabe: <strong>1</strong> wird zu <strong>1,00</strong>, <strong>,3</strong> zu <strong>0,30</strong>.</small>
+                </label>
+
+                <label>Reihenfolge
+                    <input type="number" name="sort_order" value="{{ penalty_type.sort_order if penalty_type else 0 }}">
+                </label>
+            </div>
+
+            <label class="checkbox-row">
+                <input type="checkbox" name="active" {% if not penalty_type or penalty_type.active %}checked{% endif %}>
+                <span>Strafart ist aktiv</span>
+            </label>
+        </div>
+
+        <div class="modern-card">
+            <h2>Berechnung</h2>
+
+            <label>Typ
+                <select name="kind">
+                    <option value="count" {% if penalty_type and penalty_type.kind == 'count' %}selected{% endif %}>Zählstrafe</option>
+                    <option value="amount" {% if penalty_type and penalty_type.kind == 'amount' %}selected{% endif %}>Euro-Betrag</option>
+                </select>
+                <small>Zählstrafe nutzt Plus/Minus. Euro-Betrag bleibt freie Betragseingabe.</small>
+            </label>
+
+            <label>Wer bezahlt?
+                <select name="target_mode">
+                    <option value="self" {% if penalty_type and penalty_type.target_mode == 'self' %}selected{% endif %}>Wer es verursacht, bezahlt selbst</option>
+                    <option value="others" {% if penalty_type and penalty_type.target_mode == 'others' %}selected{% endif %}>Alle anderen zahlen</option>
+                </select>
+                <small>Für Alle Neune / Kranz: Wer wirft, wird separat gezählt; bezahlen müssen die anderen.</small>
+            </label>
+
+            <div class="info-box">
+                <div>ℹ️</div>
+                <div>Änderungen werden im Revisionsprotokoll mit Vorher/Nachher-Werten festgehalten.</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="modern-card">
+        <div class="inline-actions">
+            <button type="submit">Speichern</button>
+            <a class="button secondary" href="{{ url_for('penalty_types') }}">Abbrechen</a>
+        </div>
+    </div>
+</form>
+
+<script>
+function normalizeMoneyValue(value) {
+    if (!value) return value;
+    let v = String(value).trim().replace('.', ',');
+    if (!v) return v;
+    if (v.startsWith(',')) v = '0' + v;
+    if (!v.includes(',')) return v + ',00';
+    const parts = v.split(',');
+    const euros = parts[0] || '0';
+    let cents = (parts[1] || '').padEnd(2, '0').slice(0, 2);
+    return euros + ',' + cents;
+}
+document.querySelectorAll('.money-normalize').forEach(function(input) {
+    input.addEventListener('blur', function() { input.value = normalizeMoneyValue(input.value); });
+});
+</script>
+
+{% endblock %}

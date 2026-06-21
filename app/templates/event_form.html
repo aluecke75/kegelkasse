@@ -1,23 +1,100 @@
 {% extends "base.html" %}
 
 {% block content %}
+<div class="page-header">
+    <div class="page-icon">➕</div>
+    <div>
+        <h1>Kegelabend anlegen</h1>
+        <p>Datum vorschlagen lassen, Ausfall erfassen oder einen neuen Abend starten.</p>
+    </div>
+</div>
 
-<div class="card">
-    <h1>Kegelabend anlegen</h1>
+{% if open_event %}
+    <div class="info-box" style="background:#fff7ed;border-color:#fed7aa;color:#9a3412;">
+        <div>⚠️</div>
+        <div>
+            <strong>Es gibt bereits einen offenen Kegelabend.</strong><br>
+            Offener Abend vom {{ open_event.event_date.strftime('%d.%m.%Y') }}.
+            Falls dort schon Abmeldungen oder Strafen eingetragen wurden, solltest du diesen Abend öffnen statt einen neuen anzulegen.
+            <div class="inline-actions" style="margin-top:.75rem;">
+                <a class="button" href="{{ url_for('event_detail', event_id=open_event.id) }}">Offenen Kegelabend öffnen</a>
+            </div>
+        </div>
+    </div>
+{% endif %}
 
-    <form method="post">
-        <label>Datum</label><br>
-        <input type="date" name="event_date" value="{{ today }}" required><br>
+<div class="modern-card">
+    <form method="post" id="event-create-form">
+        <input type="hidden" id="force-new" name="force_new" value="{% if require_force_new %}1{% else %}0{% endif %}">
 
-        <label>Bahnkosten</label><br>
-        <input type="text" name="lane_cost" value="{{ lane_cost }}" required><br>
+        <div class="form-grid">
+            <label>Datum
+                <small>Vorschlag aus dem eingestellten Kegelabend-Rhythmus.</small>
+                <input type="date" name="event_date" value="{{ today }}" required>
+            </label>
+        </div>
 
-        <label>Notiz</label><br>
-        <textarea name="note" rows="4"></textarea><br>
+        <div class="subtle-box" style="margin: 1rem 0;">
+            <label class="checkbox-row" style="margin:0;">
+                <input type="checkbox" id="is-cancelled" name="is_cancelled" value="1" {% if form_data and form_data.get('is_cancelled') == '1' %}checked{% endif %}>
+                <span>Kegelabend fällt aus <small>Der Abend wird dokumentiert, aber ohne Strafen/Bahnkosten geführt.</small></span>
+            </label>
+        </div>
 
-        <button type="submit">Kegelabend speichern</button>
-        <a class="button" href="{{ url_for('events') }}">Abbrechen</a>
+        <div id="cancel-fields" class="subtle-box" style="display: none; margin-bottom: 1rem;">
+            <div class="form-grid">
+                <label>Grund
+                    <select name="cancel_reason" id="cancel-reason">
+                        <option value="">Grund auswählen</option>
+                        {% set selected_reason = form_data.get('cancel_reason') if form_data else '' %}
+                        <option value="Weihnachtsessen des Klubs" {% if selected_reason == 'Weihnachtsessen des Klubs' %}selected{% endif %}>Weihnachtsessen des Klubs</option>
+                        <option value="Sommerfest" {% if selected_reason == 'Sommerfest' %}selected{% endif %}>Sommerfest</option>
+                        <option value="Bahn geschlossen" {% if selected_reason == 'Bahn geschlossen' %}selected{% endif %}>Bahn geschlossen</option>
+                        <option value="Feiertag" {% if selected_reason == 'Feiertag' %}selected{% endif %}>Feiertag</option>
+                        <option value="Krankheit / zu wenige Teilnehmer" {% if selected_reason == 'Krankheit / zu wenige Teilnehmer' %}selected{% endif %}>Krankheit / zu wenige Teilnehmer</option>
+                        <option value="Sonstiges" {% if selected_reason == 'Sonstiges' %}selected{% endif %}>Sonstiges</option>
+                    </select>
+                </label>
+            </div>
+            <label>Notiz
+                <textarea name="cancel_note" id="cancel-note" rows="3" placeholder="Optional, bei Sonstiges sinnvoll">{{ form_data.get('cancel_note') if form_data else '' }}</textarea>
+            </label>
+        </div>
+
+        <div id="normal-note-fields">
+            <label>Notiz
+                <small>Optionaler Hinweis zum Abend.</small>
+                <textarea name="note" rows="4">{{ form_data.get('note') if form_data else '' }}</textarea>
+            </label>
+        </div>
+
+        <div class="inline-actions" style="margin-top:1rem;">
+            {% if open_event %}
+                <button type="submit" onclick="document.getElementById('force-new').value='1';">Trotzdem neuen Kegelabend starten</button>
+            {% else %}
+                <button type="submit">Kegelabend starten</button>
+            {% endif %}
+            <a class="button secondary" href="{{ url_for('events') }}">Abbrechen</a>
+        </div>
     </form>
 </div>
 
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    const checkbox = document.getElementById('is-cancelled');
+    const cancelFields = document.getElementById('cancel-fields');
+    const normalNoteFields = document.getElementById('normal-note-fields');
+    const cancelReason = document.getElementById('cancel-reason');
+
+    function updateCancelledFields() {
+        const checked = checkbox.checked;
+        cancelFields.style.display = checked ? 'block' : 'none';
+        normalNoteFields.style.display = checked ? 'none' : 'block';
+        cancelReason.required = checked;
+    }
+
+    checkbox.addEventListener('change', updateCancelledFields);
+    updateCancelledFields();
+});
+</script>
 {% endblock %}

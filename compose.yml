@@ -31,6 +31,9 @@ services:
       # Backups
       - ./data/backups:/app/backups
 
+      # Dokumente / Uploads
+      - ./data/uploads:/app/uploads
+
       # Logs
       - ./logs:/app/logs
 

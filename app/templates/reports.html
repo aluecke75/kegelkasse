@@ -1,0 +1,348 @@
+{% extends "base.html" %}
+
+{% block content %}
+
+<style>
+    .report-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+        gap: 16px;
+    }
+
+    .report-card h2,
+    .report-card h3 {
+        margin-top: 0;
+    }
+
+    .stat-number {
+        font-size: 2rem;
+        font-weight: bold;
+        margin: 4px 0 0;
+    }
+
+    .rank-table td:first-child,
+    .rank-table th:first-child {
+        width: 56px;
+        text-align: center;
+    }
+
+    .filter-row {
+        display: flex;
+        gap: 12px;
+        align-items: end;
+        flex-wrap: wrap;
+    }
+
+    .filter-row label {
+        font-weight: bold;
+    }
+
+    .filter-row select {
+        min-width: 180px;
+    }
+
+    .table-scroll {
+        overflow-x: auto;
+    }
+
+    .small-table th,
+    .small-table td {
+        white-space: nowrap;
+    }
+
+    .section-note {
+        margin-top: -6px;
+        margin-bottom: 14px;
+    }
+
+    @media (max-width: 700px) {
+        .stat-number {
+            font-size: 1.6rem;
+        }
+    }
+</style>
+
+<div class="card">
+    <h1>Auswertungen</h1>
+    <p class="muted">Übersicht für Spieler, Strafgeld, Einzahlungen, Fehlzeiten und Kegelabende.</p>
+
+    <form method="get" class="filter-row">
+        <div>
+            <label for="year">Zeitraum</label><br>
+            <select id="year" name="year" onchange="this.form.submit()">
+                <option value="all" {% if selected_year_value == "all" %}selected{% endif %}>Alle Jahre</option>
+                {% for year in years %}
+                    <option value="{{ year }}" {% if selected_year == year %}selected{% endif %}>{{ year }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <noscript><button type="submit">Anzeigen</button></noscript>
+    </form>
+</div>
+
+<div class="report-grid">
+    <div class="card report-card">
+        <h2>Gespielte Kegelabende</h2>
+        <p class="stat-number">{{ closed_events }}</p>
+        <p class="muted">Nur endgültig abgeschlossene Abende.</p>
+    </div>
+
+    <div class="card report-card">
+        <h2>Ausgefallen</h2>
+        <p class="stat-number">{{ cancelled_events }}</p>
+        <p class="muted">Ausgefallene Abende zählen nicht in Straf-/Fehlstatistiken.</p>
+    </div>
+
+    <div class="card report-card">
+        <h2>Strafgeld gesamt</h2>
+        <p class="stat-number">{{ report_totals.total_penalties_euro }} €</p>
+    </div>
+
+    <div class="card report-card">
+        <h2>Bahnkosten gesamt</h2>
+        <p class="stat-number">{{ report_totals.total_lane_costs_euro }} €</p>
+    </div>
+
+    <div class="card report-card">
+        <h2>Ø Teilnehmer</h2>
+        <p class="stat-number">{{ report_totals.average_participants }}</p>
+        <p class="muted">Anwesende Mitglieder und Gäste.</p>
+    </div>
+</div>
+
+<div class="card">
+    <h2>Könige</h2>
+    <p class="muted section-note">Die wichtigsten Zählstrafen auf einen Blick.</p>
+    <div class="report-grid">
+        <div>
+            <h3>Pumpenkönig</h3>
+            {% if pump_rows %}
+                <table class="rank-table small-table">
+                    <thead><tr><th>Platz</th><th>Spieler</th><th>Pumpen</th></tr></thead>
+                    <tbody>
+                        {% for row in pump_rows %}
+                            <tr><td>{{ loop.index }}</td><td>{{ row.name }}</td><td>{{ row.total }}</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            {% else %}
+                <p class="muted">Noch keine Pumpen im gewählten Zeitraum.</p>
+            {% endif %}
+        </div>
+
+        <div>
+            <h3>Kranzkönig</h3>
+            {% if wreath_rows %}
+                <table class="rank-table small-table">
+                    <thead><tr><th>Platz</th><th>Spieler</th><th>Kränze</th></tr></thead>
+                    <tbody>
+                        {% for row in wreath_rows %}
+                            <tr><td>{{ loop.index }}</td><td>{{ row.name }}</td><td>{{ row.total }}</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            {% else %}
+                <p class="muted">Noch keine Kränze im gewählten Zeitraum.</p>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<div class="card">
+    <h2>Spielerstatistik</h2>
+    <p class="muted section-note">Strafgeld, Anwesenheit, Fehlzeiten und höchste Einzelbelastung je Mitglied.</p>
+    {% if player_rows %}
+        <div class="table-scroll">
+            <table class="small-table">
+                <thead>
+                    <tr>
+                        <th>Spieler</th>
+                        <th>Anwesend</th>
+                        <th>Fehlt</th>
+                        <th>Entschuldigt</th>
+                        <th>Unentschuldigt</th>
+                        <th>Strafgeld</th>
+                        <th>Höchster Abend</th>
+                        <th>Eingezahlt</th>
+                        {% if current_user.role in ["admin", "cashier"] %}
+                            <th>Offen aktuell</th>
+                            <th>Guthaben aktuell</th>
+                        {% endif %}
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in player_rows|sort(attribute='penalty_total_cents', reverse=true) %}
+                        <tr>
+                            <td>{{ row.name }}</td>
+                            <td>{{ row.attended }}</td>
+                            <td>{{ row.absences }}</td>
+                            <td>{{ row.excused }}</td>
+                            <td>{{ row.unexcused }}</td>
+                            <td>{{ row.penalty_total_euro }} €</td>
+                            <td>{{ row.highest_single_euro }} €</td>
+                            <td>{{ row.paid_euro }} €</td>
+                            {% if current_user.role in ["admin", "cashier"] %}
+                                <td>{{ row.open_euro }} €</td>
+                                <td>{{ row.credit_euro }} €</td>
+                            {% endif %}
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    {% else %}
+        <p class="muted">Noch keine Spielerdaten im gewählten Zeitraum.</p>
+    {% endif %}
+</div>
+
+<div class="report-grid">
+    <div class="card">
+        <h2>Meiste Strafen</h2>
+        {% if most_penalties_rows %}
+            <table class="rank-table small-table">
+                <thead><tr><th>Platz</th><th>Spieler</th><th>Strafgeld</th></tr></thead>
+                <tbody>
+                    {% for row in most_penalties_rows %}
+                        <tr><td>{{ loop.index }}</td><td>{{ row.name }}</td><td>{{ row.penalty_total_euro }} €</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        {% else %}<p class="muted">Keine Daten.</p>{% endif %}
+    </div>
+
+    <div class="card">
+        <h2>Wenigste Strafen</h2>
+        {% if least_penalties_rows %}
+            <table class="rank-table small-table">
+                <thead><tr><th>Platz</th><th>Spieler</th><th>Strafgeld</th></tr></thead>
+                <tbody>
+                    {% for row in least_penalties_rows %}
+                        <tr><td>{{ loop.index }}</td><td>{{ row.name }}</td><td>{{ row.penalty_total_euro }} €</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        {% else %}<p class="muted">Keine Daten.</p>{% endif %}
+    </div>
+
+    <div class="card">
+        <h2>Höchste Einzelstrafe</h2>
+        {% if highest_single_rows %}
+            <table class="rank-table small-table">
+                <thead><tr><th>Platz</th><th>Spieler</th><th>Abend</th></tr></thead>
+                <tbody>
+                    {% for row in highest_single_rows %}
+                        <tr><td>{{ loop.index }}</td><td>{{ row.name }}</td><td>{{ row.highest_single_euro }} €</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        {% else %}<p class="muted">Keine Daten.</p>{% endif %}
+    </div>
+
+    <div class="card">
+        <h2>Meiste Anwesenheiten</h2>
+        {% if most_attended_rows %}
+            <table class="rank-table small-table">
+                <thead><tr><th>Platz</th><th>Spieler</th><th>Anwesend</th></tr></thead>
+                <tbody>
+                    {% for row in most_attended_rows %}
+                        <tr><td>{{ loop.index }}</td><td>{{ row.name }}</td><td>{{ row.attended }}</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        {% else %}<p class="muted">Keine Daten.</p>{% endif %}
+    </div>
+</div>
+
+<div class="card">
+    <h2>Fehlstatistik</h2>
+    {% if absence_rows %}
+        <table class="rank-table small-table">
+            <thead>
+                <tr><th>Platz</th><th>Spieler</th><th>Entschuldigt</th><th>Unentschuldigt</th><th>Gesamt</th></tr>
+            </thead>
+            <tbody>
+                {% for row in absence_rows %}
+                    <tr>
+                        <td>{{ loop.index }}</td><td>{{ row.name }}</td><td>{{ row.excused }}</td><td>{{ row.unexcused }}</td><td>{{ row.total }}</td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    {% else %}
+        <p class="muted">Keine Fehlzeiten im gewählten Zeitraum.</p>
+    {% endif %}
+</div>
+
+{% if current_user.role in ["admin", "cashier"] %}
+<div class="card">
+    <h2>Finanzstatistik</h2>
+    <p class="muted section-note">Nur sichtbar für Admin und Kassierer.</p>
+
+    <div class="report-grid">
+        <div class="card report-card"><h3>Gesamt eingezahlt</h3><p class="stat-number">{{ payment_total_euro }} €</p></div>
+        <div class="card report-card"><h3>Ø je Mitglied</h3><p class="stat-number">{{ payment_average_euro }} €</p></div>
+        <div class="card report-card"><h3>Offene Strafen aktuell</h3><p class="stat-number">{{ report_totals.total_open_euro }} €</p></div>
+        <div class="card report-card"><h3>Guthaben aktuell</h3><p class="stat-number">{{ report_totals.total_credit_euro }} €</p></div>
+        <div class="card report-card"><h3>Kassenbuch Einnahmen</h3><p class="stat-number">{{ report_totals.cashbook_income_euro }} €</p></div>
+        <div class="card report-card"><h3>Kassenbuch Ausgaben</h3><p class="stat-number">{{ report_totals.cashbook_expense_euro }} €</p></div>
+    </div>
+
+    <div class="report-grid">
+        <div>
+            <h3>Höchste offene Strafen</h3>
+            {% if most_open_rows %}
+                <table class="rank-table small-table">
+                    <thead><tr><th>Platz</th><th>Mitglied</th><th>Offen</th></tr></thead>
+                    <tbody>{% for row in most_open_rows %}<tr><td>{{ loop.index }}</td><td>{{ row.name }}</td><td>{{ row.open_euro }} €</td></tr>{% endfor %}</tbody>
+                </table>
+            {% else %}<p class="muted">Keine offenen Strafen.</p>{% endif %}
+        </div>
+        <div>
+            <h3>Höchstes Guthaben</h3>
+            {% if most_credit_rows %}
+                <table class="rank-table small-table">
+                    <thead><tr><th>Platz</th><th>Mitglied</th><th>Guthaben</th></tr></thead>
+                    <tbody>{% for row in most_credit_rows %}<tr><td>{{ loop.index }}</td><td>{{ row.name }}</td><td>{{ row.credit_euro }} €</td></tr>{% endfor %}</tbody>
+                </table>
+            {% else %}<p class="muted">Kein Guthaben vorhanden.</p>{% endif %}
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<div class="card">
+    <h2>Kegelabendstatistik</h2>
+    <p class="muted section-note">Teuerste/günstigste Abende nach Strafsumme. Bahnkosten werden separat angezeigt.</p>
+
+    <div class="report-grid">
+        <div>
+            <h3>Höchste Strafsumme</h3>
+            {% if highest_event_rows %}
+                <table class="small-table">
+                    <thead><tr><th>Datum</th><th>Strafen</th><th>Bahnkosten</th><th>Teilnehmer</th></tr></thead>
+                    <tbody>
+                        {% for row in highest_event_rows %}
+                            <tr><td>{{ row.date.strftime('%d.%m.%Y') }}</td><td>{{ row.penalty_sum_euro }} €</td><td>{{ row.lane_cost_euro }} €</td><td>{{ row.present_count }}</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            {% else %}<p class="muted">Keine Daten.</p>{% endif %}
+        </div>
+
+        <div>
+            <h3>Niedrigste Strafsumme</h3>
+            {% if lowest_event_rows %}
+                <table class="small-table">
+                    <thead><tr><th>Datum</th><th>Strafen</th><th>Bahnkosten</th><th>Teilnehmer</th></tr></thead>
+                    <tbody>
+                        {% for row in lowest_event_rows %}
+                            <tr><td>{{ row.date.strftime('%d.%m.%Y') }}</td><td>{{ row.penalty_sum_euro }} €</td><td>{{ row.lane_cost_euro }} €</td><td>{{ row.present_count }}</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            {% else %}<p class="muted">Keine Daten.</p>{% endif %}
+        </div>
+    </div>
+</div>
+
+{% endblock %}

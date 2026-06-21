@@ -1,0 +1,134 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="modern-header">
+    <div class="modern-icon">📅</div>
+    <div>
+        <h1>Monatsbeiträge</h1>
+        <p>Daueraufträge je Mitglied prüfen, Wertstellung erfassen und den Monat automatisch verbuchen.</p>
+    </div>
+</div>
+
+<div class="modern-card">
+    <form method="get" class="form-grid" style="align-items:end;">
+        <label>Monat
+            <input type="month" id="month" name="month" value="{{ month_value }}">
+        </label>
+        <div><button type="submit">Monat anzeigen</button></div>
+    </form>
+</div>
+
+<div class="metric-grid">
+    <div class="metric-card"><span>Bestätigt</span><strong>{{ paid_count }} / {{ member_count }}</strong></div>
+    <div class="metric-card"><span>Soll gesamt</span><strong>{{ total_expected }} €</strong></div>
+    <div class="metric-card"><span>Eingegangen</span><strong>{{ total_paid }} €</strong></div>
+    <div class="metric-card"><span>Noch offen</span><strong>{{ total_open }} €</strong></div>
+    <div class="metric-card"><span>Durchschnitt</span><strong>{{ average_paid }} €</strong></div>
+</div>
+
+<div class="modern-card">
+    <div class="modern-header">
+        <div class="modern-icon">✅</div>
+        <div>
+            <h2>Prüfung {{ month_label }}</h2>
+            <p>Der Dauerauftragstag bleibt als Basistag gespeichert. Wochenende wird nur für den konkreten Monat auf Montag verschoben.</p>
+        </div>
+    </div>
+
+    {% if batch and batch.status == "finalized" %}
+        <div class="info-box"><span>✅</span><div>Dieser Monat ist bereits verbucht.{% if batch.finalized_by_user %} Verbucht von {{ batch.finalized_by_user.username }}.{% endif %}</div></div>
+    {% endif %}
+
+    <form method="post" id="monthlyContributionForm">
+        <input type="hidden" name="month" value="{{ month_value }}">
+        <label>Geldeingang auf
+            <select id="account" name="account" {% if batch and batch.status == "finalized" %}disabled{% endif %}>
+                <option value="bank" {% if account == "bank" %}selected{% endif %}>Bank</option>
+                <option value="cash" {% if account == "cash" %}selected{% endif %}>Barkasse</option>
+            </select>
+        </label>
+
+        <div class="mobile-table-wrap">
+            <table>
+                <thead>
+                    <tr><th>Mitglied</th><th>Soll</th><th>Eingegangen</th><th>Wertstellung</th><th>Status</th><th>Differenz</th><th>Notiz</th><th>Aktion</th></tr>
+                </thead>
+                <tbody>
+                    {% for row in rows %}
+                        {% set status_class = 'status-paid' if row.status == 'bezahlt' else 'status-partial' if row.status == 'teilweise bezahlt' else 'status-overpaid' if row.status == 'überzahlt' else 'status-open' %}
+                        <tr>
+                            <td><strong>{{ row.member.display_name() }}</strong></td>
+                            <td><input class="money-input money-format" type="text" inputmode="decimal" name="expected_{{ row.member.id }}" value="{{ row.expected_euro }}" {% if batch and batch.status == "finalized" %}readonly{% endif %}></td>
+                            <td><input class="money-input money-format paid-input" type="text" inputmode="decimal" name="paid_{{ row.member.id }}" value="{{ row.paid_euro }}" {% if batch and batch.status == "finalized" %}readonly{% endif %}></td>
+                            <td><input class="date-input" type="date" name="paid_date_{{ row.member.id }}" value="{{ row.paid_date }}" {% if batch and batch.status == "finalized" %}readonly{% endif %}><br><small class="muted">Basistag: {{ row.monthly_value_day or 'noch offen' }}</small></td>
+                            <td class="{{ status_class }}">{{ row.status }}</td>
+                            <td>{{ row.difference_euro }} €</td>
+                            <td><input class="note-input" type="text" name="note_{{ row.member.id }}" value="{{ row.note or '' }}" placeholder="optional" {% if batch and batch.status == "finalized" %}readonly{% endif %}></td>
+                            <td>
+                                {% if not batch or batch.status != "finalized" %}
+                                    <div class="inline-actions">
+                                        <button class="small-button" type="submit" name="action" value="confirm_{{ row.member.id }}">✓ Bestätigen</button>
+                                        {% if current_user.role == "admin" and row.paid_cents > 0 %}<button class="button danger small-button" type="submit" name="action" value="reset_{{ row.member.id }}" onclick="return confirm('Zahlung für dieses Mitglied zurücksetzen?');">Zurücksetzen</button>{% endif %}
+                                    </div>
+                                {% else %}—{% endif %}
+                            </td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        {% if not batch or batch.status != "finalized" %}
+            <div class="inline-actions" style="margin-top:14px;"><button type="submit" name="action" value="save">Prüfung speichern</button></div>
+        {% endif %}
+    </form>
+</div>
+
+{% if previous_batches %}
+<div class="modern-card">
+    <div class="modern-header"><div class="modern-icon">🕘</div><div><h2>Letzte Monate</h2><p>Schneller Wechsel zu bereits angelegten Monatsprüfungen.</p></div></div>
+    <div class="mobile-table-wrap">
+        <table>
+            <thead><tr><th>Monat</th><th>Status</th><th>Konto</th></tr></thead>
+            <tbody>
+                {% for old in previous_batches %}
+                    <tr><td><a href="{{ url_for('monthly_contributions', month='%04d-%02d'|format(old.year, old.month)) }}">{{ old.period_label() }}</a></td><td>{{ old.status_label() }}</td><td>{{ 'Bank' if old.account == 'bank' else 'Barkasse' }}</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endif %}
+
+<style>
+.status-paid { color:#006b2e; font-weight:800; }
+.status-partial { color:#8a5a00; font-weight:800; }
+.status-open { color:#b91c1c; font-weight:800; }
+.status-overpaid { color:#005e8a; font-weight:800; }
+.money-input { width:96px; text-align:right; }
+.date-input { width:140px; }
+.note-input { min-width:160px; max-width:none; }
+.small-button { padding:7px 10px; font-size:0.9rem; white-space:nowrap; }
+</style>
+<script>
+(function () {
+    function cleanupMoney(value) { return (value || '').replace(/[^0-9,.]/g, ''); }
+    function formatMoney(value) {
+        let raw = cleanupMoney(value).trim();
+        if (!raw) return '0,00';
+        if (raw.startsWith(',') || raw.startsWith('.')) raw = '0' + raw;
+        let normalized = raw.includes(',') ? raw.replace(/\./g, '').replace(',', '.') : raw;
+        const number = Number(normalized);
+        if (!Number.isFinite(number)) return '0,00';
+        return number.toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+    const form = document.getElementById('monthlyContributionForm');
+    if (form) form.addEventListener('keydown', function (event) { if (event.key === 'Enter' && ['input','select'].includes((event.target.tagName || '').toLowerCase())) event.preventDefault(); });
+    document.querySelectorAll('.money-format').forEach(function (input) {
+        input.addEventListener('input', function () { const cleaned = cleanupMoney(input.value); if (input.value !== cleaned) input.value = cleaned; });
+        input.addEventListener('focus', function () { if (input.value === '0,00') input.value = ''; });
+        input.addEventListener('blur', function () { input.value = formatMoney(input.value); });
+    });
+})();
+</script>
+{% endblock %}

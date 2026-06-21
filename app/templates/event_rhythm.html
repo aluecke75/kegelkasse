@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="page-header">
+    <div class="page-icon">📅</div>
+    <div>
+        <h1>Kegelabend-Rhythmus</h1>
+        <p>Legt fest, welches Datum im Dashboard und beim Anlegen vorgeschlagen wird.</p>
+    </div>
+</div>
+
+<div class="modern-card">
+    <form method="post" action="{{ url_for('event_rhythm_settings') }}" class="rhythm-form">
+        <div class="form-grid">
+            <label>Rhythmus
+                <select name="event_rhythm_type" id="event_rhythm_type">
+                    <option value="weeks" {% if event_rhythm_type == 'weeks' %}selected{% endif %}>alle X Wochen an einem Wochentag</option>
+                    <option value="monthly_nth_weekday" {% if event_rhythm_type in ['monthly_nth_weekday', 'monthly_first_weekday'] %}selected{% endif %}>monatlich am X. Wochentag</option>
+                    <option value="monthly_last_weekday" {% if event_rhythm_type == 'monthly_last_weekday' %}selected{% endif %}>monatlich am letzten Wochentag</option>
+                    <option value="monthly_day" {% if event_rhythm_type == 'monthly_day' %}selected{% endif %}>monatlich am festen Datum</option>
+                </select>
+            </label>
+
+            <label id="rhythm-weeks-row">Abstand in Wochen
+                <input type="number" name="event_rhythm_weeks" min="1" max="52" value="{{ event_rhythm_weeks }}">
+            </label>
+
+            <label id="rhythm-nth-row">Welche Woche?
+                <select name="event_rhythm_nth">
+                    <option value="1" {% if event_rhythm_nth == '1' %}selected{% endif %}>erster</option>
+                    <option value="2" {% if event_rhythm_nth == '2' %}selected{% endif %}>zweiter</option>
+                    <option value="3" {% if event_rhythm_nth == '3' %}selected{% endif %}>dritter</option>
+                    <option value="4" {% if event_rhythm_nth == '4' %}selected{% endif %}>vierter</option>
+                </select>
+            </label>
+
+            <label id="rhythm-weekday-row">Wochentag
+                <select name="event_rhythm_weekday">
+                    <option value="0" {% if event_rhythm_weekday == '0' %}selected{% endif %}>Montag</option>
+                    <option value="1" {% if event_rhythm_weekday == '1' %}selected{% endif %}>Dienstag</option>
+                    <option value="2" {% if event_rhythm_weekday == '2' %}selected{% endif %}>Mittwoch</option>
+                    <option value="3" {% if event_rhythm_weekday == '3' %}selected{% endif %}>Donnerstag</option>
+                    <option value="4" {% if event_rhythm_weekday == '4' %}selected{% endif %}>Freitag</option>
+                    <option value="5" {% if event_rhythm_weekday == '5' %}selected{% endif %}>Samstag</option>
+                    <option value="6" {% if event_rhythm_weekday == '6' %}selected{% endif %}>Sonntag</option>
+                </select>
+            </label>
+
+            <label id="rhythm-month-day-row">Tag im Monat
+                <input type="number" name="event_rhythm_month_day" min="1" max="31" value="{{ event_rhythm_month_day }}">
+                <small>Wenn der Monat weniger Tage hat, wird der letzte Tag des Monats verwendet.</small>
+            </label>
+        </div>
+
+        <div class="inline-actions" style="margin-top:1rem;">
+            <button type="submit">Rhythmus speichern</button>
+        </div>
+    </form>
+</div>
+
+<script>
+(function () {
+    const type = document.getElementById('event_rhythm_type');
+    const weeks = document.getElementById('rhythm-weeks-row');
+    const weekday = document.getElementById('rhythm-weekday-row');
+    const nth = document.getElementById('rhythm-nth-row');
+    const monthDay = document.getElementById('rhythm-month-day-row');
+    function updateRhythmFields() {
+        if (!type || !weeks || !weekday || !nth || !monthDay) return;
+        const isWeeks = type.value === 'weeks';
+        const isNth = type.value === 'monthly_nth_weekday' || type.value === 'monthly_first_weekday';
+        const isLast = type.value === 'monthly_last_weekday';
+        const isDay = type.value === 'monthly_day';
+        weeks.style.display = isWeeks ? 'block' : 'none';
+        weekday.style.display = (isWeeks || isNth || isLast) ? 'block' : 'none';
+        nth.style.display = isNth ? 'block' : 'none';
+        monthDay.style.display = isDay ? 'block' : 'none';
+    }
+    if (type) {
+        type.addEventListener('change', updateRhythmFields);
+        updateRhythmFields();
+    }
+})();
+</script>
+{% endblock %}

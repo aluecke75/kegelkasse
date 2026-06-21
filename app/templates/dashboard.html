@@ -2,40 +2,139 @@
 
 {% block content %}
 
-<div class="card">
-    <h1>Dashboard</h1>
-
-    <p>Angemeldet als: <strong>{{ current_user.username }}</strong></p>
-    <p>Rolle: <strong>{{ current_user.role_label() }}</strong></p>
+<div class="page-header">
+    <div class="page-icon">🏠</div>
+    <div>
+        <h1>Dashboard</h1>
+        <p>Der schnelle Überblick über Kegelabend, Kasse, offene Beträge und Finanzen.</p>
+    </div>
 </div>
 
-<div class="card">
-    <h2>Kassenstand</h2>
+<div class="two-column-grid">
+    <div class="modern-card next-event-card">
+        <h2>Nächster Kegelabend</h2>
+        <p class="next-event-date">{{ next_event_date.strftime('%d.%m.%Y') }}</p>
+        <p class="next-event-label">{% if next_event_label == 'heute' %}<strong>heute 🎳</strong>{% else %}{{ next_event_label }}{% endif %}</p>
+        {% if active_event %}
+            <div class="subtle-box">
+                <strong>Aktiver Kegelabend</strong><br>
+                {{ active_event.event_date.strftime('%d.%m.%Y') }}
+            </div>
+            <p><a class="button" href="{{ url_for('event_detail', event_id=active_event.id) }}">Aktiven Abend öffnen</a></p>
+        {% else %}
+            <p><a class="button" href="{{ url_for('event_new') }}">Kegelabend starten</a></p>
+        {% endif %}
+    </div>
 
-    <p>Barkasse: <strong>{{ cash_balance }} €</strong></p>
-    <p>Bankkonto: <strong>{{ bank_balance }} €</strong></p>
-
-    {% if current_user.role in ["admin", "cashier"] %}
-        <p>
-            <a class="button" href="{{ url_for('opening_balances') }}">Startbestand erfassen</a>
-        </p>
-    {% endif %}
 </div>
 
-<div class="card">
-    <h2>Mitglieder</h2>
-    <p>Aktive Mitglieder: <strong>{{ active_member_count }}</strong></p>
-    <p>Mitglieder gesamt: <strong>{{ member_count }}</strong></p>
+<div class="section-grid">
+    <div class="modern-card">
+        <h2>💰 Kassenstand</h2>
+        <div class="metric-grid">
+            <div class="metric-card"><span>Barkasse</span><strong>{{ cash_balance }} €</strong></div>
+            <div class="metric-card"><span>Bank</span><strong>{{ bank_balance }} €</strong></div>
+            <div class="metric-card"><span>Gesamt Kasse</span><strong>{{ total_balance }} €</strong></div>
+            <div class="metric-card"><span>Offene Strafen</span><strong>{{ open_penalties }} €</strong></div>
+            <div class="metric-card"><span>Guthaben</span><strong>{{ member_credits }} €</strong></div>
+            <div class="metric-card"><span>inkl. offener Strafen</span><strong>{{ total_with_open }} €</strong></div>
+        </div>
+        <p><a href="{{ url_for('cashbook') }}">Kassenbuch öffnen</a></p>
+    </div>
+
+    <div class="modern-card">
+        <h2>👥 Mitglieder</h2>
+        <div class="metric-grid">
+            <div class="metric-card"><span>Aktive Mitglieder</span><strong>{{ active_member_count }}</strong></div>
+            <div class="metric-card"><span>Mitglieder gesamt</span><strong>{{ member_count }}</strong></div>
+        </div>
+        {% if open_member_rows %}
+            <h3>Höchste offene Strafen</h3>
+            <ul class="compact-list">
+                {% for row in open_member_rows %}
+                    <li>{{ row.name }}: <strong>{{ row.amount_euro }} €</strong></li>
+                {% endfor %}
+            </ul>
+        {% else %}
+            <p class="muted">Keine offenen Strafen bei aktiven Mitgliedern.</p>
+        {% endif %}
+    </div>
+
+    <div class="modern-card">
+        <h2>📅 Dieses Jahr {{ current_year }}</h2>
+        <div class="metric-grid">
+            <div class="metric-card"><span>Abgeschlossen</span><strong>{{ year_closed_events }}</strong></div>
+            <div class="metric-card"><span>Ausgefallen</span><strong>{{ year_cancelled_events }}</strong></div>
+            <div class="metric-card"><span>Einnahmen</span><strong>{{ year_income }} €</strong></div>
+            <div class="metric-card"><span>Ausgaben</span><strong>{{ year_expense }} €</strong></div>
+        </div>
+        <p><a href="{{ url_for('reports', year=current_year) }}">Jahresstatistik öffnen</a></p>
+    </div>
+
+    <div class="modern-card">
+        <h2>🏆 Top-Wertungen {{ current_year }}</h2>
+        <ul class="compact-list no-bullets">
+            <li>Pumpenkönig: <strong>{% if top_pump %}{{ top_pump.name }} · {{ top_pump.total }}{% else %}-{% endif %}</strong></li>
+            <li>Kranzkönig: <strong>{% if top_wreath %}{{ top_wreath.name }} · {{ top_wreath.total }}{% else %}-{% endif %}</strong></li>
+            <li>Meiste Fehlzeiten: <strong>{% if top_absence %}{{ top_absence.name }} · {{ top_absence.total }}{% else %}-{% endif %}</strong></li>
+        </ul>
+        <p><a href="{{ url_for('reports', year=current_year) }}">Alle Auswertungen ansehen</a></p>
+    </div>
+
+    <div class="modern-card">
+        <h2>✅ Kassenprüfung</h2>
+        {% if last_cash_audit %}
+            <div class="metric-grid">
+                <div class="metric-card"><span>Letzte Prüfung</span><strong>{{ last_cash_audit.audit_date.strftime('%d.%m.%Y') }}</strong></div>
+                <div class="metric-card"><span>Barkasse Differenz</span><strong>{{ last_cash_audit.difference_cash_euro() }} €</strong></div>
+                <div class="metric-card"><span>Bank Differenz</span><strong>{{ last_cash_audit.difference_bank_euro() }} €</strong></div>
+            </div>
+        {% else %}
+            <p class="muted">Noch keine Kassenprüfung erfasst.</p>
+        {% endif %}
+        <p><a href="{{ url_for('cash_audits') }}">Kassenprüfung öffnen</a></p>
+    </div>
+
+    <div class="modern-card">
+        <h2>📘 Jahresabschluss</h2>
+        {% if last_closing %}
+            <div class="metric-grid">
+                <div class="metric-card"><span>Letzter Abschluss</span><strong>{{ last_closing.year }}</strong></div>
+                <div class="metric-card"><span>Gesamtbestand</span><strong>{{ last_closing.total_balance_euro() }} €</strong></div>
+                <div class="metric-card"><span>Offene Strafen</span><strong>{{ last_closing.open_penalties_euro() }} €</strong></div>
+            </div>
+        {% else %}
+            <p class="muted">Noch kein Jahresabschluss gespeichert.</p>
+        {% endif %}
+        <p><a href="{{ url_for('annual_closings') }}">Jahresabschluss öffnen</a></p>
+    </div>
+
+    <div class="modern-card">
+        <h2>📌 Offene Monatsbeiträge</h2>
+        {% if open_monthly_batches %}
+            <ul class="compact-list">
+                {% for batch in open_monthly_batches[:5] %}
+                    <li>{{ batch.period_label() }} · {{ batch.status_label() }}</li>
+                {% endfor %}
+            </ul>
+        {% else %}
+            <p class="muted">Keine offenen Monatsbeiträge.</p>
+        {% endif %}
+        <p><a href="{{ url_for('monthly_contributions') }}">Monatsbeiträge öffnen</a></p>
+    </div>
 </div>
 
-<div class="card">
-    <h2>Nächste Module</h2>
-    <ul>
-        <li>Kegelabend anlegen</li>
-        <li>Strafen erfassen</li>
-        <li>Offene Forderungen</li>
-        <li>Auswertungen: Pumpenwertung, Kranzwertung, Fehltage, Einzahlungen</li>
-    </ul>
-</div>
+<style>
+.next-event-card { background: linear-gradient(135deg, #ffffff, #edf8ef); }
+.next-event-date { font-size: 2rem; font-weight: 900; margin: 0.35rem 0; }
+.next-event-label { color: #176a2f; font-size: 1.1rem; }
+.compact-list { margin: 0.7rem 0 0; padding-left: 1.1rem; }
+.compact-list li { margin: 0.35rem 0; }
+.no-bullets { list-style:none; padding-left:0; }
+.activity-list { list-style:none; padding-left:0; }
+.activity-list li { border-bottom:1px solid #eef2f7; padding:8px 0; }
+.activity-list span { display:block; color:#667085; font-size:0.84rem; }
+@media (max-width: 760px) { .next-event-date { font-size:1.55rem; } }
+</style>
 
 {% endblock %}

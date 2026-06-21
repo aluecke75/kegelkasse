@@ -2,26 +2,267 @@
 
 {% block content %}
 
-<div class="card">
-    <h1>Adminbereich</h1>
+<style>
+    .admin-accordion { display:grid; gap:14px; }
+    .admin-section { background:var(--card); border:1px solid var(--line); border-radius:16px; box-shadow:var(--shadow); overflow:hidden; }
+    .admin-section summary { cursor:pointer; list-style:none; padding:16px 18px; font-weight:800; display:flex; justify-content:space-between; align-items:center; gap:12px; }
+    .admin-section summary::-webkit-details-marker { display:none; }
+    .admin-section summary::after { content:"▾"; color:var(--muted); transition:transform 0.2s ease; }
+    .admin-section[open] summary::after { transform:rotate(180deg); }
+    .admin-section-intro { color:var(--muted); margin:0 18px 14px; }
+    .admin-section-body { padding:0 18px 18px; }
+    .admin-section-body > .modern-card,
+    .admin-section-body > .two-column-grid > .modern-card { box-shadow:none; }
+</style>
 
-    <p>Benutzerübersicht</p>
+<div class="page-header">
+    <div class="page-icon">⚙️</div>
+    <div>
+        <h1>Adminbereich</h1>
+        <p>Benutzer, Systembenutzer, Passwortvorgaben, E-Mail-Versand und Passwort-Zurücksetzungen verwalten.</p>
+    </div>
+</div>
 
-    <table border="1" cellpadding="8">
-        <tr>
-            <th>Benutzer</th>
-            <th>Rolle</th>
-            <th>Aktiv</th>
-        </tr>
+<div class="admin-accordion">
+    <details class="admin-section" open>
+        <summary>👥 Benutzer & Systembenutzer</summary>
+        <p class="admin-section-intro">Normale Benutzer verwalten und reine Systemzugänge ohne Kegelmitgliedschaft anlegen.</p>
+        <div class="admin-section-body">
+<div class="modern-card">
+    <h2>🛠️ Systembenutzer ohne Kegelmitgliedschaft</h2>
+    <p class="muted">Für reine Verwaltungszugänge wie <strong>admin</strong>. Diese Benutzer erscheinen nicht in Kegelabenden, Monatsbeiträgen, Strafkonten, Statistiken oder „Mein Kegelabend“.</p>
 
-        {% for user in users %}
-        <tr>
-            <td>{{ user.username }}</td>
-            <td>{{ user.role }}</td>
-            <td>{{ "Ja" if user.active else "Nein" }}</td>
-        </tr>
-        {% endfor %}
-    </table>
+    <form method="post" class="settings-form">
+        <input type="hidden" name="form_action" value="create_system_user">
+        <div class="form-grid">
+            <label>
+                Benutzername
+                <input type="text" name="new_username" placeholder="admin" autocomplete="off" required>
+            </label>
+            <label>
+                Rolle
+                <select name="new_role">
+                    <option value="admin">Admin</option>
+                    <option value="cashier">Kassierer/-in</option>
+                    <option value="auditor">Kassenprüfer/-in</option>
+                </select>
+            </label>
+            <label>
+                E-Mail-Adresse optional
+                <input type="email" name="new_email" placeholder="admin@example.de" autocomplete="off">
+            </label>
+            <label>
+                Startpasswort
+                <input type="password" name="new_password" autocomplete="new-password" required>
+            </label>
+        </div>
+        <p class="muted"><small>{{ password_policy_text }}</small></p>
+        <button type="submit">Systembenutzer anlegen</button>
+    </form>
+</div>
+<div class="modern-card">
+    <h2>👥 Benutzer</h2>
+    <p class="muted">Benutzernamen, E-Mail-Adressen und Passwörter verwalten.</p>
+
+    <div class="mobile-table-wrap">
+        <table>
+            <tr>
+                <th>Benutzername</th>
+                <th>Rolle</th>
+                <th>E-Mail</th>
+                <th>Art</th>
+                <th>Aktiv</th>
+                <th>Neues Passwort</th>
+                <th>Aktion</th>
+            </tr>
+
+            {% for user in users %}
+            <tr>
+                <form method="post">
+                    <input type="hidden" name="form_action" value="user">
+                    <input type="hidden" name="user_id" value="{{ user.id }}">
+                    <td><input type="text" name="username" value="{{ user.username }}" required></td>
+                    <td>{{ user.role_label() }}</td>
+                    <td><input type="email" name="email" value="{{ user.email or '' }}" placeholder="E-Mail-Adresse"></td>
+                    <td>{% if user.is_system_user %}Systembenutzer{% elif user.member_profile %}Kegelmitglied{% else %}Benutzer ohne Mitglied{% endif %}</td>
+                    <td>{{ "Ja" if user.active else "Nein" }}</td>
+                    <td>
+                        <input type="password" name="password" placeholder="Leer = unverändert">
+                        <small class="muted">{{ password_policy_text }}</small>
+                    </td>
+                    <td><button type="submit">Speichern</button></td>
+                </form>
+            </tr>
+            {% endfor %}
+        </table>
+    </div>
+</div>
+
+        </div>
+    </details>
+
+    <details class="admin-section">
+        <summary>🔐 Sicherheit & Passwortregeln</summary>
+        <p class="admin-section-intro">Passwortvorgaben und offene Passwort-Zurücksetzungen verwalten.</p>
+        <div class="admin-section-body">
+<div class="two-column-grid">
+    <div class="modern-card">
+        <h2>🔐 Passwortvorgaben</h2>
+        <p class="muted">Diese Regeln gelten für neue oder geänderte Passwörter. Bestehende Passwörter werden nicht automatisch ungültig.</p>
+
+        <form method="post" class="settings-form">
+            <input type="hidden" name="form_action" value="password_policy">
+
+            <label>
+                Mindestlänge
+                <input type="number" name="password_min_length" value="{{ password_policy.min_length }}" min="1" step="1">
+            </label>
+
+            <div class="subtle-box">
+                <label class="checkbox-row">
+                    <input type="checkbox" name="password_require_upper" value="1" {% if password_policy.require_upper %}checked{% endif %}>
+                    Großbuchstabe erforderlich
+                </label>
+
+                <label class="checkbox-row">
+                    <input type="checkbox" name="password_require_lower" value="1" {% if password_policy.require_lower %}checked{% endif %}>
+                    Kleinbuchstabe erforderlich
+                </label>
+
+                <label class="checkbox-row">
+                    <input type="checkbox" name="password_require_digit" value="1" {% if password_policy.require_digit %}checked{% endif %}>
+                    Zahl erforderlich
+                </label>
+
+                <label class="checkbox-row">
+                    <input type="checkbox" name="password_require_special" value="1" {% if password_policy.require_special %}checked{% endif %}>
+                    Sonderzeichen erforderlich
+                </label>
+            </div>
+
+            <p class="muted"><small>Aktuelle Vorgabe: {{ password_policy_text }}</small></p>
+            <button type="submit">Passwortvorgaben speichern</button>
+        </form>
+    </div>
+
+</div>
+
+<div class="modern-card">
+    <h2>🔁 Offene Passwort-Zurücksetzungen</h2>
+    <p class="muted">Wenn Mailversand aktiv ist und beim Benutzer eine E-Mail-Adresse hinterlegt ist, wird der Link automatisch verschickt. Der Link bleibt hier zusätzlich sichtbar.</p>
+
+    {% if reset_tokens %}
+        <div class="mobile-table-wrap">
+            <table>
+                <tr>
+                    <th>Benutzer</th>
+                    <th>Gültig bis</th>
+                    <th>Einmal-Link</th>
+                    <th>Aktion</th>
+                </tr>
+                {% for reset in reset_tokens %}
+                <tr>
+                    <td>{{ reset.user.username if reset.user else 'Unbekannt' }}</td>
+                    <td>{{ reset.expires_at.strftime('%d.%m.%Y %H:%M') }}</td>
+                    <td>
+                        <input type="text" readonly value="{{ url_for('password_reset', token=reset.token, _external=True) }}" onclick="this.select();">
+                        <small class="muted">Einmal nutzbar, 24 Stunden gültig.</small>
+                    </td>
+                    <td>
+                        <form method="post">
+                            <input type="hidden" name="form_action" value="cancel_password_reset">
+                            <input type="hidden" name="reset_id" value="{{ reset.id }}">
+                            <button type="submit">Ungültig machen</button>
+                        </form>
+                    </td>
+                </tr>
+                {% endfor %}
+            </table>
+        </div>
+    {% else %}
+        <p class="muted">Keine offenen Passwort-Zurücksetzungen.</p>
+    {% endif %}
+</div>
+        </div>
+    </details>
+
+    <details class="admin-section">
+        <summary>📧 E-Mail-Versand</summary>
+        <p class="admin-section-intro">SMTP-Einstellungen und Testmail. Passwörter werden nicht exportiert.</p>
+        <div class="admin-section-body">
+            <div class="two-column-grid">
+    <div class="modern-card">
+        <h2>📧 E-Mail-Versand</h2>
+        <p class="muted">Grundlage für Passwort-Reset per E-Mail und spätere öffentliche Version. Das SMTP-Passwort wird nicht im Revisionsprotokoll angezeigt.</p>
+
+        <form method="post" class="settings-form">
+            <input type="hidden" name="form_action" value="mail_settings">
+
+            <label class="checkbox-row">
+                <input type="checkbox" name="mail_enabled" value="1" {% if mail_settings.enabled %}checked{% endif %}>
+                Mailversand aktivieren
+            </label>
+
+            <div class="form-grid">
+                <label>
+                    SMTP-Server
+                    <input type="text" name="mail_host" value="{{ mail_settings.host }}" placeholder="smtp.example.de">
+                </label>
+
+                <label>
+                    SMTP-Port
+                    <input type="number" name="mail_port" value="{{ mail_settings.port }}" min="1" step="1">
+                </label>
+            </div>
+
+            <label class="checkbox-row">
+                <input type="checkbox" name="mail_use_tls" value="1" {% if mail_settings.use_tls %}checked{% endif %}>
+                TLS / STARTTLS verwenden
+            </label>
+
+            <div class="form-grid">
+                <label>
+                    SMTP-Benutzername
+                    <input type="text" name="mail_username" value="{{ mail_settings.username }}" autocomplete="off">
+                </label>
+
+                <label>
+                    SMTP-Passwort
+                    <input type="password" name="mail_password" placeholder="Leer lassen = unverändert" autocomplete="new-password">
+                </label>
+            </div>
+
+            <div class="form-grid">
+                <label>
+                    Absender-E-Mail
+                    <input type="email" name="mail_from_email" value="{{ mail_settings.from_email }}" placeholder="kegelkasse@example.de">
+                </label>
+
+                <label>
+                    Absendername
+                    <input type="text" name="mail_from_name" value="{{ mail_settings.from_name }}" placeholder="Kegelkasse">
+                </label>
+            </div>
+
+            <p class="muted"><small>Aktuell: {{ mail_settings_summary }}</small></p>
+            <button type="submit">E-Mail-Einstellungen speichern</button>
+        </form>
+
+        <hr>
+
+        <form method="post" class="settings-form">
+            <input type="hidden" name="form_action" value="test_mail">
+            <label>
+                Testmail an
+                <input type="email" name="test_to" value="{{ current_user.email or '' }}" placeholder="test@example.de">
+            </label>
+            <button type="submit">Testmail senden</button>
+        </form>
+    </div>
+
+            </div>
+        </div>
+    </details>
 </div>
 
 {% endblock %}

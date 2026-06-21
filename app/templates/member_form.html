@@ -1,72 +1,122 @@
 {% extends "base.html" %}
 
 {% block content %}
+{% set fd = form_data or {} %}
 
-<div class="card">
-    {% if member %}
-        <h1>Mitglied bearbeiten</h1>
-    {% else %}
-        <h1>Mitglied anlegen</h1>
-    {% endif %}
-
-    <form method="post">
-        <h2>Stammdaten</h2>
-
-        <label>Vorname *</label><br>
-        <input type="text" name="first_name" required value="{{ member.first_name if member else '' }}"><br>
-
-        <label>Nachname *</label><br>
-        <input type="text" name="last_name" required value="{{ member.last_name if member else '' }}"><br>
-
-        <label>Spitzname</label><br>
-        <input type="text" name="nickname" value="{{ member.nickname if member and member.nickname else '' }}"><br>
-
-        <label>E-Mail-Adresse</label><br>
-        <input type="email" name="email" value="{{ member.email if member and member.email else '' }}"><br>
-
-        <label>Eintrittsdatum</label><br>
-        <input type="date" name="joined_at" value="{{ member.joined_at if member and member.joined_at else today }}"><br>
-
-        {% if member %}
-            <label>Austrittsdatum</label><br>
-            <input type="date" name="left_at" value="{{ member.left_at if member and member.left_at else '' }}"><br>
-
-            <label>
-                <input type="checkbox" name="active" {% if member.active %}checked{% endif %} style="width:auto;">
-                Aktiv
-            </label><br>
-        {% endif %}
-
-        <label>Bemerkung</label><br>
-        <textarea name="note" rows="4">{{ member.note if member and member.note else '' }}</textarea><br>
-
-        <h2>Login-Konto</h2>
-
-        <p class="muted">
-            Optional. Nicht jedes Mitglied braucht ein eigenes Login.
-        </p>
-
-        <label>
-            <input type="checkbox" name="create_login" {% if member and member.user %}checked{% endif %} style="width:auto;">
-            Login für dieses Mitglied aktivieren
-        </label><br>
-
-        <label>Benutzername</label><br>
-        <input type="text" name="username" value="{{ member.user.username if member and member.user else '' }}"><br>
-
-        <label>Rolle</label><br>
-        <select name="role">
-            <option value="viewer" {% if member and member.user and member.user.role == 'viewer' %}selected{% endif %}>Mitglied – nur lesen</option>
-            <option value="cashier" {% if member and member.user and member.user.role == 'cashier' %}selected{% endif %}>Kassierer/-in</option>
-            <option value="admin" {% if member and member.user and member.user.role == 'admin' %}selected{% endif %}>Admin</option>
-        </select><br>
-
-        <label>Passwort setzen / zurücksetzen</label><br>
-        <input type="password" name="password" placeholder="{% if member and member.user %}Leer lassen = unverändert{% else %}Nur nötig, wenn Login aktiviert ist{% endif %}"><br>
-
-        <button type="submit">Speichern</button>
-        <a class="button" href="{{ url_for('members') }}">Abbrechen</a>
-    </form>
+<div class="modern-header">
+    <div class="modern-icon">{{ "✏️" if member else "➕" }}</div>
+    <div>
+        <h1>{{ "Mitglied bearbeiten" if member else "Mitglied anlegen" }}</h1>
+        <p>Stammdaten und optionales Login-Konto an einer Stelle pflegen.</p>
+    </div>
 </div>
 
+{% if form_errors %}
+    <div class="form-error-box">
+        <strong>Bitte korrigieren:</strong>
+        <ul>
+            {% for error in form_errors %}<li>{{ error }}</li>{% endfor %}
+        </ul>
+    </div>
+{% endif %}
+
+<form method="post" novalidate>
+    <div class="two-column-grid">
+        <div class="modern-card">
+            <h2>Stammdaten</h2>
+            <p class="muted">Nachname ist bewusst optional, damit die Kegelkasse später auch für andere Vereine flexibel bleibt.</p>
+
+            <div class="form-grid">
+                <label>Vorname *
+                    <input type="text" name="first_name" required value="{{ fd.first_name if fd else (member.first_name if member else '') }}" placeholder="z. B. Max">
+                </label>
+
+                <label>Nachname
+                    <input type="text" name="last_name" value="{{ fd.last_name if fd else (member.last_name if member and member.last_name else '') }}" placeholder="z. B. Mustermann">
+                </label>
+
+                <label>Spitzname
+                    <input type="text" name="nickname" value="{{ fd.nickname if fd else (member.nickname if member and member.nickname else '') }}" placeholder="z. B. Max">
+                </label>
+
+                <label>E-Mail-Adresse
+                    <input type="email" name="email" value="{{ fd.email if fd else (member.email if member and member.email else '') }}" placeholder="max.mustermann@example.de">
+                </label>
+
+                <label>Eintrittsdatum
+                    <input type="date" name="joined_at" value="{{ fd.joined_at if fd else (member.joined_at if member and member.joined_at else today) }}">
+                </label>
+
+                {% if member %}
+                    <label>Austrittsdatum
+                        <input type="date" name="left_at" value="{{ fd.left_at if fd else (member.left_at if member and member.left_at else '') }}">
+                    </label>
+                {% endif %}
+            </div>
+
+            {% if member %}
+                <label class="checkbox-row">
+                    <input type="checkbox" name="active" {% if fd %}{% if fd.active %}checked{% endif %}{% elif member.active %}checked{% endif %}>
+                    <span>Mitglied ist aktiv</span>
+                </label>
+            {% endif %}
+
+            <label>Bemerkung
+                <textarea name="note" rows="4" placeholder="Interne Notiz, optional">{{ fd.note if fd else (member.note if member and member.note else '') }}</textarea>
+            </label>
+        </div>
+
+        <div class="modern-card">
+            <h2>Login-Konto</h2>
+            <p class="muted">Optional. Nicht jedes Mitglied braucht ein eigenes Login.</p>
+
+            <label class="checkbox-row">
+                <input type="checkbox" name="create_login" {% if fd %}{% if fd.create_login %}checked{% endif %}{% elif member and member.user %}checked{% endif %}>
+                <span>Login für dieses Mitglied aktivieren</span>
+            </label>
+
+            <label>Benutzername
+                <input type="text" name="username" value="{{ fd.username if fd else (member.user.username if member and member.user else '') }}" placeholder="z. B. max">
+            </label>
+
+            <label>Rolle
+                <select name="role">
+                    <option value="member" {% if (fd and fd.role == 'member') or (not fd and member and member.user and member.user.role == 'member') %}selected{% endif %}>Mitglied</option>
+                    <option value="cashier" {% if (fd and fd.role == 'cashier') or (not fd and member and member.user and member.user.role == 'cashier') %}selected{% endif %}>Kassierer/-in</option>
+                    <option value="admin" {% if (fd and fd.role == 'admin') or (not fd and member and member.user and member.user.role == 'admin') %}selected{% endif %}>Admin</option>
+                </select>
+            </label>
+
+            <label>Passwort setzen / zurücksetzen
+                <input type="password" name="password" placeholder="{% if member and member.user %}Leer lassen = unverändert{% else %}Nur nötig, wenn Login aktiviert ist{% endif %}">
+                <small>Die aktuell eingestellten Passwortregeln werden beim Speichern geprüft.</small>
+            </label>
+
+            <div class="tip-box">
+                <div>💡</div>
+                <div>Für normale Mitglieder reicht die Rolle <strong>Mitglied</strong>. Änderungen an abgeschlossenen Abenden bleiben Kassierer/-in und Admin vorbehalten.</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="modern-card">
+        <div class="inline-actions">
+            <button type="submit">Speichern</button>
+            <a class="button secondary" href="{{ url_for('members') }}">Abbrechen</a>
+        </div>
+    </div>
+</form>
+
+<style>
+.form-error-box {
+    background: #fee2e2;
+    border: 1px solid #ef4444;
+    color: #7f1d1d;
+    border-radius: 14px;
+    padding: 14px 16px;
+    margin-bottom: 16px;
+    font-weight: 700;
+}
+.form-error-box ul { margin: 8px 0 0 18px; font-weight: 600; }
+</style>
 {% endblock %}

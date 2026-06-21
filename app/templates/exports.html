@@ -1,0 +1,198 @@
+{% extends "base.html" %}
+{% block content %}
+
+<div class="modern-header">
+    <div class="modern-icon">⬇️</div>
+    <div>
+        <h1>Export</h1>
+        <p>Daten aus der Kegelkasse herunterladen – für Kassenwart, Prüfung, Jahresabschluss oder Archiv.</p>
+    </div>
+</div>
+
+<div class="info-box">
+    <div>ℹ️</div>
+    <div>
+        <strong>Hinweis</strong><br>
+        Excel wird bewusst ohne zusätzliche Server-Abhängigkeit als Excel-kompatible <code>.xls</code>-Datei erzeugt. CSV nutzt Semikolon und UTF-8, PDF ist als einfache lesbare Übersicht gedacht.
+    </div>
+</div>
+
+<div class="section-grid">
+    <section class="modern-card">
+        <div class="modern-header">
+            <div class="modern-icon">📒</div>
+            <div>
+                <h2>Kassenbuch</h2>
+                <p>Einnahmen, Ausgaben und Umbuchungen exportieren.</p>
+            </div>
+        </div>
+        <form method="get" action="{{ url_for('exports_download') }}">
+            <input type="hidden" name="type" value="cashbook">
+            <div class="form-grid">
+                <label>Format
+                    <select name="format">
+                        <option value="excel">Excel</option>
+                        <option value="csv">CSV</option>
+                        <option value="pdf">PDF</option>
+                    </select>
+                </label>
+                <label>Jahr
+                    <select name="year">
+                        <option value="all">Alle Jahre</option>
+                        {% for year in years %}
+                            <option value="{{ year }}">{{ year }}</option>
+                        {% endfor %}
+                    </select>
+                </label>
+                <label>Konto
+                    <select name="account">
+                        <option value="all">Alle Konten</option>
+                        <option value="cash">Barkasse</option>
+                        <option value="bank">Bank</option>
+                    </select>
+                </label>
+            </div>
+            <div class="inline-actions" style="margin-top:12px;">
+                <button type="submit">Kassenbuch exportieren</button>
+            </div>
+        </form>
+    </section>
+
+    <section class="modern-card">
+        <div class="modern-header">
+            <div class="modern-icon">👥</div>
+            <div>
+                <h2>Mitglieder</h2>
+                <p>Mitgliederliste mit Rollen, Kontaktdaten und Salden.</p>
+            </div>
+        </div>
+        <form method="get" action="{{ url_for('exports_download') }}">
+            <input type="hidden" name="type" value="members">
+            <div class="form-grid">
+                <label>Format
+                    <select name="format">
+                        <option value="excel">Excel</option>
+                        <option value="csv">CSV</option>
+                        <option value="pdf">PDF</option>
+                    </select>
+                </label>
+                <label>Auswahl
+                    <select name="member_scope">
+                        <option value="active">Aktive Mitglieder</option>
+                        <option value="all">Alle Mitglieder</option>
+                        <option value="open">Nur mit offenen Strafen</option>
+                        <option value="credit">Nur mit Guthaben</option>
+                    </select>
+                </label>
+            </div>
+            <div class="inline-actions" style="margin-top:12px;">
+                <button type="submit">Mitglieder exportieren</button>
+            </div>
+        </form>
+    </section>
+
+    <section class="modern-card">
+        <div class="modern-header">
+            <div class="modern-icon">⚖️</div>
+            <div>
+                <h2>Strafkonten</h2>
+                <p>Offene Strafen, Guthaben und Saldo je Mitglied.</p>
+            </div>
+        </div>
+        <form method="get" action="{{ url_for('exports_download') }}">
+            <input type="hidden" name="type" value="penalty_balances">
+            <div class="form-grid">
+                <label>Format
+                    <select name="format">
+                        <option value="excel">Excel</option>
+                        <option value="pdf">PDF</option>
+                        <option value="csv">CSV</option>
+                    </select>
+                </label>
+            </div>
+            <div class="inline-actions" style="margin-top:12px;">
+                <button type="submit">Strafkonten exportieren</button>
+            </div>
+        </form>
+    </section>
+
+    <section class="modern-card">
+        <div class="modern-header">
+            <div class="modern-icon">📅</div>
+            <div>
+                <h2>Jahresabschluss</h2>
+                <p>Gespeicherte Jahresabschlüsse als PDF, Excel oder CSV.</p>
+            </div>
+        </div>
+        <form method="get" action="{{ url_for('exports_download') }}">
+            <input type="hidden" name="type" value="annual_closing">
+            <div class="form-grid">
+                <label>Format
+                    <select name="format">
+                        <option value="pdf">PDF</option>
+                        <option value="excel">Excel</option>
+                        <option value="csv">CSV</option>
+                    </select>
+                </label>
+                <label>Jahr
+                    <select name="year">
+                        <option value="all">Alle Abschlüsse</option>
+                        {% for year in years %}
+                            <option value="{{ year }}">{{ year }}</option>
+                        {% endfor %}
+                    </select>
+                </label>
+            </div>
+            <div class="inline-actions" style="margin-top:12px;">
+                <button type="submit">Jahresabschluss exportieren</button>
+            </div>
+        </form>
+    </section>
+
+    <section class="modern-card">
+        <div class="modern-header">
+            <div class="modern-icon">📊</div>
+            <div>
+                <h2>Statistiken</h2>
+                <p>Spieler-, Straf- und Finanzwerte als Export.</p>
+            </div>
+        </div>
+        <form method="get" action="{{ url_for('exports_download') }}">
+            <input type="hidden" name="type" value="statistics">
+            <div class="form-grid">
+                <label>Format
+                    <select name="format">
+                        <option value="excel">Excel</option>
+                        <option value="pdf">PDF</option>
+                        <option value="csv">CSV</option>
+                    </select>
+                </label>
+                <label>Jahr
+                    <select name="year">
+                        <option value="all">Alle Jahre</option>
+                        {% for year in years %}
+                            <option value="{{ year }}">{{ year }}</option>
+                        {% endfor %}
+                    </select>
+                </label>
+            </div>
+            <div class="inline-actions" style="margin-top:12px;">
+                <button type="submit">Statistiken exportieren</button>
+            </div>
+        </form>
+    </section>
+
+    <section class="modern-card">
+        <div class="modern-header">
+            <div class="modern-icon">✅</div>
+            <div>
+                <h2>Export-Historie</h2>
+                <p>Jeder Export wird im Revisionsprotokoll vermerkt.</p>
+            </div>
+        </div>
+        <p class="muted">So bleibt nachvollziehbar, wer wann welchen Bereich exportiert hat. Inhalte der Dateien werden nicht im Protokoll gespeichert.</p>
+        <p><a class="button secondary" href="{{ url_for('audit_log_page') }}">Revisionsprotokoll öffnen</a></p>
+    </section>
+</div>
+
+{% endblock %}

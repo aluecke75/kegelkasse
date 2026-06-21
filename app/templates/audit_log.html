@@ -1,0 +1,108 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="modern-header">
+    <div class="modern-icon">🧾</div>
+    <div>
+        <h1>Revisionsprotokoll</h1>
+        <p>Nachvollziehbare Änderungen mit aufklappbaren Details und kompakten Filtern.</p>
+    </div>
+</div>
+
+<div class="modern-card">
+    <form id="auditFilterForm" method="get" class="audit-modern-filter">
+        <label for="category">Bereich
+            <select id="category" name="category" class="auto-submit-filter">
+                {% for value, label in categories %}
+                    <option value="{{ value }}" {% if selected_category == value %}selected{% endif %}>{{ label }}</option>
+                {% endfor %}
+            </select>
+        </label>
+
+        <label for="user">Benutzer
+            <select id="user" name="user" class="auto-submit-filter">
+                <option value="">Alle Benutzer</option>
+                {% for username in users %}
+                    <option value="{{ username }}" {% if selected_user == username %}selected{% endif %}>{{ username }}</option>
+                {% endfor %}
+            </select>
+        </label>
+
+        <label for="q">Suche
+            <input id="q" type="text" name="q" value="{{ q }}" placeholder="z. B. Monatsbeitrag, Kegelabend, Strafart">
+        </label>
+
+        <div class="inline-actions audit-filter-buttons">
+            <button type="submit">Filtern</button>
+            <a class="button secondary" href="{{ url_for('audit_log_page') }}">Zurücksetzen</a>
+        </div>
+    </form>
+</div>
+
+<div class="modern-card">
+    <div class="inline-actions" style="justify-content:space-between; margin-bottom:12px;">
+        <div>
+            <h2 style="margin:0;">Letzte Aktivitäten</h2>
+            <p class="muted" style="margin:4px 0 0;">Es werden die letzten 300 Einträge angezeigt. Reine Seitenaufrufe und einzelne Plus/Minus-Klicks werden bewusst nicht protokolliert.</p>
+        </div>
+    </div>
+
+    <div class="audit-list">
+        {% for entry in entries %}
+            <article class="audit-item">
+                <div class="audit-time">{{ entry.created_at.strftime('%d.%m.%Y %H:%M:%S') if entry.created_at else '' }}</div>
+                <div class="audit-main">
+                    <div class="audit-title-row">
+                        <strong>{{ entry.title }}</strong>
+                        <span class="audit-badge">{{ entry.category_label() }}</span>
+                    </div>
+                    <div class="audit-meta">Benutzer: {{ entry.username or '-' }}</div>
+                    {% if entry.details or entry.old_value or entry.new_value %}
+                        <details class="audit-details">
+                            <summary>Änderung anzeigen</summary>
+                            {% if entry.details %}
+                                <div class="audit-detail-block"><strong>Details</strong><pre>{{ entry.details }}</pre></div>
+                            {% endif %}
+                            {% if entry.old_value %}
+                                <div class="audit-detail-block"><strong>Vorher</strong><pre>{{ entry.old_value }}</pre></div>
+                            {% endif %}
+                            {% if entry.new_value %}
+                                <div class="audit-detail-block"><strong>Nachher</strong><pre>{{ entry.new_value }}</pre></div>
+                            {% endif %}
+                        </details>
+                    {% else %}
+                        <p class="muted" style="margin:8px 0 0;">Keine weiteren Details vorhanden.</p>
+                    {% endif %}
+                </div>
+            </article>
+        {% else %}
+            <div class="subtle-box">Noch keine Einträge vorhanden.</div>
+        {% endfor %}
+    </div>
+</div>
+
+<script>
+(function () {
+    document.querySelectorAll('.auto-submit-filter').forEach(function (field) {
+        field.addEventListener('change', function () {
+            document.getElementById('auditFilterForm').submit();
+        });
+    });
+})();
+</script>
+
+<style>
+.audit-modern-filter { display:grid; grid-template-columns: repeat(3, minmax(180px, 1fr)) auto; gap:14px; align-items:end; }
+.audit-filter-buttons { padding-bottom:4px; }
+.audit-list { display:grid; gap:12px; }
+.audit-item { display:grid; grid-template-columns:170px 1fr; gap:14px; padding:14px; border:1px solid var(--line); border-radius:16px; background:#fbfcfd; }
+.audit-time { color:var(--muted); font-weight:700; font-size:0.9rem; }
+.audit-title-row { display:flex; gap:10px; flex-wrap:wrap; align-items:center; justify-content:space-between; }
+.audit-badge { border-radius:999px; background:var(--green-soft); color:var(--green); padding:4px 9px; font-size:0.82rem; font-weight:800; }
+.audit-meta { color:var(--muted); margin-top:4px; font-size:0.9rem; }
+.audit-details { margin-top:10px; }
+.audit-details summary { cursor:pointer; font-weight:800; color:var(--green); }
+.audit-detail-block { margin-top:10px; padding:12px; border-radius:12px; border:1px solid var(--line); background:white; }
+.audit-detail-block pre { white-space:pre-wrap; margin:6px 0 0; font-family:inherit; line-height:1.45; }
+@media (max-width:860px) { .audit-modern-filter { grid-template-columns:1fr; } .audit-item { grid-template-columns:1fr; } }
+</style>
+{% endblock %}
