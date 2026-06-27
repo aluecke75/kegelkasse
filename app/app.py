@@ -122,6 +122,7 @@ def inject_database_test_mode():
         "active_database_display": database_profile_display(active_profile),
         "database_profile_displays": database_profile_display_list(),
         "database_profiles": TEST_DATABASE_PROFILES,
+        "developer_mode": app.config.get("DEVELOPER_MODE", False),
         "app_version": APP_VERSION,
     }
 
@@ -2411,6 +2412,8 @@ def reset_or_delete_test_database(profile, mode="delete"):
 
 @app.route("/test-database", methods=["GET"])
 def test_database_page():
+    if not app.config.get("DEVELOPER_MODE", False):
+        abort(404)
     """Versteckte Testdatenbank-Auswahl für die Testphase.
 
     Die Loginseite bleibt für den normalen Vereinsbetrieb aufgeräumt. Wer testen
@@ -2421,6 +2424,8 @@ def test_database_page():
 
 @app.route("/test-database/switch", methods=["POST"])
 def switch_database_profile():
+    if not app.config.get("DEVELOPER_MODE", False):
+        abort(404)
     """Temporärer Testmodus: aktive Datenbank vor dem Login umschalten.
 
     Der Wechsel betrifft nur die verwendete SQLite-Datei und den Dokumentenordner.
@@ -2473,6 +2478,8 @@ def switch_database_profile():
 
 @app.route("/test-database/control", methods=["POST"])
 def test_database_control():
+    if not app.config.get("DEVELOPER_MODE", False):
+        abort(404)
     """Schnellaktionen im Testmodus-Banner.
 
     Speichern ist bei SQLite automatisch: Beim Zurückwechseln zur echten Datenbank
