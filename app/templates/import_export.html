@@ -1,0 +1,187 @@
+{% extends "base.html" %}
+{% block content %}
+
+<div class="modern-header">
+    <div class="modern-icon">↕️</div>
+    <div>
+        <h1>Import & Export</h1>
+        <p>Daten ausgeben, Vereinsdaten exportieren oder einen Vereins-Export importieren. Datensicherungen bleiben im eigenen Bereich „Datensicherung“.</p>
+    </div>
+</div>
+
+<div class="info-box">
+    <div>ℹ️</div>
+    <div>
+        <strong>Klare Trennung</strong><br>
+        Dieser Bereich ist für Datenübernahme, Umzug und Auswertungsdateien gedacht. Regelmäßige Backups, Wiederherstellung und Backup-Ziele findest du unter <strong>Administration → Datensicherung</strong>.
+    </div>
+</div>
+
+<div class="modern-card">
+    <div class="modern-header">
+        <div class="modern-icon">📦</div>
+        <div>
+            <h2>Verein exportieren</h2>
+            <p>Erstellt einen vollständigen Vereins-Export als ZIP für Umzug, Archivierung oder spätere Neuinstallation.</p>
+        </div>
+    </div>
+    <form method="get" action="{{ url_for('download_club_export') }}">
+        <label class="checkbox-row">
+            <input type="checkbox" name="include_documents" value="1" checked>
+            Dokumentenablage mit exportieren
+        </label>
+        <div class="info-box">
+            <strong>🔒</strong>
+            <div>SMTP-, WebDAV- und Cloud-Passwörter/Tokens werden nicht exportiert. Diese Zugangsdaten müssen nach einem Import aus Sicherheitsgründen neu eingetragen werden.</div>
+        </div>
+        <p class="inline-actions">
+            <button class="button" type="submit">📦 Vereins-Export herunterladen</button>
+        </p>
+    </form>
+</div>
+
+<div class="modern-card">
+    <div class="modern-header">
+        <div class="modern-icon">📥</div>
+        <div>
+            <h2>Verein importieren</h2>
+            <p>Importiert einen zuvor erstellten Vereins-Export. Für Version 1 ersetzt der Import den aktuellen Vereinsstand vollständig.</p>
+        </div>
+    </div>
+
+    <form method="post" enctype="multipart/form-data" action="{{ url_for('backups_page') }}" class="form-grid">
+        <input type="hidden" name="form_action" value="upload_club_import">
+        <input type="hidden" name="redirect_to" value="import_export">
+        <label style="grid-column:1 / -1;">
+            Vereins-Export-ZIP auswählen
+            <input type="file" name="club_import_upload" accept=".zip,application/zip">
+        </label>
+        <p class="inline-actions" style="grid-column:1 / -1;">
+            <button class="button secondary" type="submit">📥 Export prüfen</button>
+        </p>
+    </form>
+
+    {% if club_import_preview %}
+        <hr>
+        <h3>Import-Vorschau</h3>
+        <div class="metric-grid">
+            <div class="metric-card"><span>Datei</span><strong>{{ club_import_preview.filename }}</strong></div>
+            <div class="metric-card"><span>Verein</span><strong>{{ club_import_preview.metadata.club_name_from_db or club_import_preview.metadata.club_name or '-' }}</strong></div>
+            <div class="metric-card"><span>Export-Version</span><strong>{{ club_import_preview.metadata.format_version or '-' }}</strong></div>
+            <div class="metric-card"><span>Erstellt am</span><strong>{{ club_import_preview.metadata.created_at or '-' }}</strong></div>
+            <div class="metric-card"><span>Mitglieder</span><strong>{{ club_import_preview.counts.member or 0 }}</strong></div>
+            <div class="metric-card"><span>Kegelabende</span><strong>{{ club_import_preview.counts.bowling_event or 0 }}</strong></div>
+            <div class="metric-card"><span>Kassenbuch</span><strong>{{ club_import_preview.counts.cashbook_entry or 0 }}</strong></div>
+            <div class="metric-card"><span>Dokumente</span><strong>{{ club_import_preview.counts.document or 0 }}</strong></div>
+        </div>
+
+        {% if club_import_preview.warnings %}
+            <div class="tip-box">
+                <strong>⚠️</strong>
+                <div>
+                    <strong>Hinweise:</strong>
+                    <ul>
+                        {% for warning in club_import_preview.warnings %}<li>{{ warning }}</li>{% endfor %}
+                    </ul>
+                </div>
+            </div>
+        {% endif %}
+
+        <div class="tip-box">
+            <strong>⚠️</strong>
+            <div>Beim Import wird die aktuelle Datenbank ersetzt. Vorher wird automatisch ein lokales Sicherheitsbackup erstellt.</div>
+        </div>
+        <form method="post" action="{{ url_for('backups_page') }}">
+            <input type="hidden" name="form_action" value="execute_club_import">
+            <input type="hidden" name="redirect_to" value="import_export">
+            <label>
+                Zur Bestätigung <strong>IMPORTIEREN</strong> eingeben
+                <input type="text" name="confirm_club_import" autocomplete="off">
+            </label>
+            <p class="inline-actions">
+                <button class="button danger" type="submit">Vereins-Export importieren</button>
+            </p>
+        </form>
+        <form method="post" action="{{ url_for('backups_page') }}">
+            <input type="hidden" name="form_action" value="cancel_club_import">
+            <input type="hidden" name="redirect_to" value="import_export">
+            <button class="button secondary" type="submit">Import verwerfen</button>
+        </form>
+    {% endif %}
+</div>
+
+<div class="modern-header" style="margin-top:24px;">
+    <div class="modern-icon">⬇️</div>
+    <div>
+        <h2>Auswertungen exportieren</h2>
+        <p>PDF-, Excel- und CSV-Dateien für Prüfung, Archiv oder Weiterverarbeitung.</p>
+    </div>
+</div>
+
+<div class="section-grid">
+    <section class="modern-card">
+        <div class="modern-header"><div class="modern-icon">📒</div><div><h2>Kassenbuch</h2><p>Einnahmen, Ausgaben und Umbuchungen exportieren.</p></div></div>
+        <form method="get" action="{{ url_for('exports_download') }}">
+            <input type="hidden" name="type" value="cashbook">
+            <div class="form-grid">
+                <label>Format<select name="format"><option value="excel">Excel</option><option value="csv">CSV</option><option value="pdf">PDF</option></select></label>
+                <label>Jahr<select name="year"><option value="all">Alle Jahre</option>{% for year in years %}<option value="{{ year }}">{{ year }}</option>{% endfor %}</select></label>
+                <label>Konto<select name="account"><option value="all">Alle Konten</option><option value="cash">Barkasse</option><option value="bank">Bank</option></select></label>
+            </div>
+            <div class="inline-actions" style="margin-top:12px;"><button type="submit">Kassenbuch exportieren</button></div>
+        </form>
+    </section>
+
+    <section class="modern-card">
+        <div class="modern-header"><div class="modern-icon">👥</div><div><h2>Mitglieder</h2><p>Mitgliederliste mit Rollen, Kontaktdaten und Salden.</p></div></div>
+        <form method="get" action="{{ url_for('exports_download') }}">
+            <input type="hidden" name="type" value="members">
+            <div class="form-grid">
+                <label>Format<select name="format"><option value="excel">Excel</option><option value="csv">CSV</option><option value="pdf">PDF</option></select></label>
+                <label>Auswahl<select name="member_scope"><option value="active">Aktive Mitglieder</option><option value="all">Alle Mitglieder</option><option value="open">Nur mit offenen Strafen</option><option value="credit">Nur mit Guthaben</option></select></label>
+            </div>
+            <div class="inline-actions" style="margin-top:12px;"><button type="submit">Mitglieder exportieren</button></div>
+        </form>
+    </section>
+
+    <section class="modern-card">
+        <div class="modern-header"><div class="modern-icon">⚖️</div><div><h2>Strafkonten</h2><p>Offene Strafen, Guthaben und Saldo je Mitglied.</p></div></div>
+        <form method="get" action="{{ url_for('exports_download') }}">
+            <input type="hidden" name="type" value="penalty_balances">
+            <div class="form-grid"><label>Format<select name="format"><option value="excel">Excel</option><option value="pdf">PDF</option><option value="csv">CSV</option></select></label></div>
+            <div class="inline-actions" style="margin-top:12px;"><button type="submit">Strafkonten exportieren</button></div>
+        </form>
+    </section>
+
+    <section class="modern-card">
+        <div class="modern-header"><div class="modern-icon">📅</div><div><h2>Jahresabschluss</h2><p>Gespeicherte Jahresabschlüsse als PDF, Excel oder CSV.</p></div></div>
+        <form method="get" action="{{ url_for('exports_download') }}">
+            <input type="hidden" name="type" value="annual_closing">
+            <div class="form-grid">
+                <label>Format<select name="format"><option value="pdf">PDF</option><option value="excel">Excel</option><option value="csv">CSV</option></select></label>
+                <label>Jahr<select name="year"><option value="all">Alle Abschlüsse</option>{% for year in years %}<option value="{{ year }}">{{ year }}</option>{% endfor %}</select></label>
+            </div>
+            <div class="inline-actions" style="margin-top:12px;"><button type="submit">Jahresabschluss exportieren</button></div>
+        </form>
+    </section>
+
+    <section class="modern-card">
+        <div class="modern-header"><div class="modern-icon">📊</div><div><h2>Statistiken</h2><p>Spieler-, Straf- und Finanzwerte als Export.</p></div></div>
+        <form method="get" action="{{ url_for('exports_download') }}">
+            <input type="hidden" name="type" value="statistics">
+            <div class="form-grid">
+                <label>Format<select name="format"><option value="excel">Excel</option><option value="pdf">PDF</option><option value="csv">CSV</option></select></label>
+                <label>Jahr<select name="year"><option value="all">Alle Jahre</option>{% for year in years %}<option value="{{ year }}">{{ year }}</option>{% endfor %}</select></label>
+            </div>
+            <div class="inline-actions" style="margin-top:12px;"><button type="submit">Statistiken exportieren</button></div>
+        </form>
+    </section>
+
+    <section class="modern-card">
+        <div class="modern-header"><div class="modern-icon">✅</div><div><h2>Export-Historie</h2><p>Jeder Export wird im Revisionsprotokoll vermerkt.</p></div></div>
+        <p class="muted">So bleibt nachvollziehbar, wer wann welchen Bereich exportiert hat. Inhalte der Dateien werden nicht im Protokoll gespeichert.</p>
+        <p><a class="button secondary" href="{{ url_for('audit_log_page') }}">Revisionsprotokoll öffnen</a></p>
+    </section>
+</div>
+
+{% endblock %}

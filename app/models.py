@@ -228,8 +228,13 @@ class CashAudit(db.Model):
 
     note = db.Column(db.Text, nullable=True)
     created_by_user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
-    created_by_user = db.relationship("User")
+    created_by_user = db.relationship("User", foreign_keys=[created_by_user_id])
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    confirmed_by_user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
+    confirmed_by_user = db.relationship("User", foreign_keys=[confirmed_by_user_id])
+    confirmed_at = db.Column(db.DateTime, nullable=True)
+    auditor_note = db.Column(db.Text, nullable=True)
 
 
     def euro(self, cents):
@@ -263,6 +268,9 @@ class CashAudit(db.Model):
             return "stimmt"
         return "Differenz"
 
+    def confirmation_status_label(self):
+        return "bestätigt" if self.confirmed_at else "offen"
+
 
 class AnnualClosing(db.Model):
     __tablename__ = "annual_closings"
@@ -290,8 +298,13 @@ class AnnualClosing(db.Model):
 
     note = db.Column(db.Text, nullable=True)
     created_by_user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
-    created_by_user = db.relationship("User")
+    created_by_user = db.relationship("User", foreign_keys=[created_by_user_id])
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    confirmed_by_user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
+    confirmed_by_user = db.relationship("User", foreign_keys=[confirmed_by_user_id])
+    confirmed_at = db.Column(db.DateTime, nullable=True)
+    auditor_note = db.Column(db.Text, nullable=True)
 
     def euro(self, cents):
         return f"{(cents or 0) / 100:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
@@ -330,8 +343,13 @@ class InterestSetting(db.Model):
     active = db.Column(db.Boolean, default=True)
     note = db.Column(db.Text, nullable=True)
     created_by_user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
-    created_by_user = db.relationship("User")
+    created_by_user = db.relationship("User", foreign_keys=[created_by_user_id])
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    confirmed_by_user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
+    confirmed_by_user = db.relationship("User", foreign_keys=[confirmed_by_user_id])
+    confirmed_at = db.Column(db.DateTime, nullable=True)
+    auditor_note = db.Column(db.Text, nullable=True)
 
     def rate_percent(self):
         return f"{(self.annual_rate_basis_points or 0) / 100:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
@@ -366,8 +384,13 @@ class InterestBooking(db.Model):
 
     note = db.Column(db.Text, nullable=True)
     created_by_user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
-    created_by_user = db.relationship("User")
+    created_by_user = db.relationship("User", foreign_keys=[created_by_user_id])
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    confirmed_by_user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
+    confirmed_by_user = db.relationship("User", foreign_keys=[confirmed_by_user_id])
+    confirmed_at = db.Column(db.DateTime, nullable=True)
+    auditor_note = db.Column(db.Text, nullable=True)
 
     def euro(self, cents):
         return f"{(cents or 0) / 100:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
@@ -660,14 +683,26 @@ class Document(db.Model):
 
     def category_icon(self):
         icons = {
+            "Bahnrechnungen": "🧾",
+            "Kassenprüfung": "🔍",
+            "Jahresabschluss": "📊",
+            "Kegeltour": "🚌",
+            "Historische Importdaten": "🗂️",
+            "Vereinsunterlagen": "📄",
+            "Sonstiges": "📎",
+            # ältere Kategorien bleiben aus Kompatibilitätsgründen lesbar
             "Kegelbahn-Rechnung": "🧾",
             "Kontoauszug": "🏦",
-            "Kegeltour": "🚌",
             "Vereinsdokument": "📄",
             "Vertrag": "📝",
-            "Sonstiges": "📎",
         }
         return icons.get(self.category, "📎")
+
+    def is_protected_category(self):
+        return self.category in {"Kassenprüfung", "Jahresabschluss", "Historische Importdaten"}
+
+    def is_archived(self):
+        return self.deleted_at is not None
 
 
 class PasswordResetToken(db.Model):

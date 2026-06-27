@@ -15,6 +15,7 @@
 .form-grid-wide { grid-column:1 / -1; }
 .document-list { display:grid; grid-template-columns:repeat(2, minmax(260px, 1fr)); gap:14px; }
 .document-item { border:1px solid #e5e7eb; border-radius:14px; padding:14px; background:#fafafa; }
+.document-item.archived { background:#f3f4f6; border-style:dashed; opacity:.88; }
 .document-item-head { display:flex; gap:10px; align-items:flex-start; justify-content:space-between; }
 .document-item-title { display:flex; gap:10px; align-items:flex-start; }
 .document-item-icon { width:38px; height:38px; border-radius:12px; display:flex; align-items:center; justify-content:center; background:#fff; border:1px solid #e5e7eb; font-size:20px; flex:0 0 auto; }
@@ -31,6 +32,8 @@
 .info-box { display:flex; gap:12px; align-items:flex-start; padding:14px; border-radius:12px; background:#eff6ff; border:1px solid #bfdbfe; color:#1e3a8a; margin-bottom:16px; }
 .filter-bar { display:grid; grid-template-columns: 1fr 220px auto; gap:10px; align-items:end; }
 .badge { display:inline-block; padding:3px 9px; border-radius:999px; font-size:.82rem; background:#dcfce7; color:#166534; border:1px solid #86efac; }
+.badge-archived { background:#fee2e2; color:#991b1b; border-color:#fecaca; }
+.badge-protected { background:#eef2ff; color:#3730a3; border-color:#c7d2fe; }
 .empty-state { border:1px dashed #d1d5db; border-radius:14px; padding:24px; text-align:center; color:#667085; background:#fafafa; }
 @media (max-width:900px) {
   .document-grid, .document-list, .form-grid, .filter-bar { grid-template-columns:1fr; }
@@ -49,9 +52,10 @@
     </div>
 
     <div class="document-grid">
+        {% if current_user.role in ['admin', 'cashier'] %}
         <section class="document-card">
             <h2>Dokument hochladen</h2>
-            <p class="document-sub">PDF, Bilder, Text- und Office-Dateien hochladen und optional einem Kegelabend oder einer Kassenbuchbuchung zuordnen. Am Handy kann über die Dateiauswahl auch direkt die Kamera genutzt werden.</p>
+            <p class="document-sub">PDF, Bilder, Text- und Office-Dateien hochladen, kategorisieren, durchsuchen und optional einem Kegelabend oder einer Kassenbuchbuchung zuordnen. Am Handy kann über die Dateiauswahl direkt die Kamera genutzt werden.</p>
             <form method="post" enctype="multipart/form-data">
                 <input type="hidden" name="form_action" value="upload">
                 <div class="form-grid">
@@ -59,17 +63,22 @@
                         <input type="text" name="title" required placeholder="z. B. Rechnung Kegelbahn Juli">
                     </label>
                     <label>Kategorie
-                        <select name="category">
+                        <select name="category" id="document-category" onchange="toggleNewDocumentCategory()">
                             {% for category in categories %}
                                 <option value="{{ category }}">{{ category }}</option>
                             {% endfor %}
+                            <option value="__new__">+ Neue Kategorie anlegen</option>
                         </select>
+                    </label>
+                    <label id="new-document-category-row" style="display:none;">Neue Kategorie
+                        <input type="text" name="new_category" placeholder="z. B. Sponsoren, Verträge, Ausflug">
                     </label>
                     <label>Dokumentdatum
                         <input type="date" name="document_date">
                     </label>
-                    <label>Datei
+                    <label>Datei / Foto
                         <input type="file" name="document_file" required accept=".pdf,.jpg,.jpeg,.png,.gif,.webp,.doc,.docx,.xls,.xlsx,.txt,.csv,.json,.html,.htm,.rtf,image/*">
+                        <small style="display:block; margin-top:4px; color:#667085;">Am Handy kann hier auch direkt ein Foto aufgenommen werden.</small>
                     </label>
                     <label>Kegelabend zuordnen
                         <select name="event_id">
@@ -94,19 +103,25 @@
                 <p><button class="btn-primary" type="submit">📤 Dokument hochladen</button></p>
             </form>
         </section>
+        {% else %}
+        <section class="document-card">
+            <h2>Dokumente einsehen</h2>
+            <p class="document-sub">Kassenprüfer/-innen können Dokumente ansehen, herunterladen und prüfen. Änderungen an der Ablage bleiben Admin und Kassierer/-in vorbehalten.</p>
+        </section>
+        {% endif %}
 
         <aside class="document-card">
             <h2>Hinweise</h2>
             <div class="info-box">
                 <strong>ℹ️</strong>
-                <div>Gelöschte Dokumente werden zuerst nur aus der Liste entfernt. Die Datei bleibt zur Sicherheit auf dem Server erhalten, damit nicht aus Versehen Belege verloren gehen.</div>
+                <div>Dokumente werden archiviert statt endgültig gelöscht. Revisionsrelevante Kategorien wie Kassenprüfung, Jahresabschluss und Historische Importdaten bleiben als Nachweis erhalten und können über „Archivierte anzeigen“ eingeblendet werden.</div>
             </div>
             <p><strong>Typische Ablage</strong></p>
             <ul>
-                <li>Kegelbahn-Rechnungen direkt dem Kegelabend zuordnen.</li>
+                <li>Bahnrechnungen direkt dem Kegelabend zuordnen.</li>
                 <li>PDFs, Bilder und Textdateien können direkt als Vorschau geöffnet werden.</li>
                 <li>Kontoauszüge als Banknachweis ablegen.</li>
-                <li>Tour-Rechnungen als Kegeltour kategorisieren.</li>
+                <li>Eigene Kategorien können bei Bedarf direkt beim Hochladen ergänzt werden.</li>
             </ul>
         </aside>
     </div>
@@ -115,7 +130,7 @@
         <h2>Dokumentenliste</h2>
         <form class="filter-bar" method="get">
             <label>Suche
-                <input type="text" name="q" value="{{ search }}" placeholder="Titel, Beschreibung oder Dateiname">
+                <input type="text" name="q" value="{{ search }}" placeholder="Titel, Beschreibung, Kategorie oder Dateiname">
             </label>
             <label>Kategorie
                 <select name="category" onchange="this.form.submit()">
@@ -125,6 +140,10 @@
                     {% endfor %}
                 </select>
             </label>
+            <label style="display:flex; align-items:center; gap:8px; padding-bottom:8px;">
+                <input type="checkbox" name="show_archived" value="1" {% if show_archived %}checked{% endif %} onchange="this.form.submit()">
+                Archivierte anzeigen
+            </label>
             <button class="btn-secondary" type="submit">Suchen</button>
         </form>
     </section>
@@ -132,13 +151,15 @@
     {% if documents %}
         <div class="document-list">
             {% for doc in documents %}
-                <article class="document-item">
+                <article class="document-item {% if doc.is_archived() %}archived{% endif %}">
                     <div class="document-item-head">
                         <div class="document-item-title">
                             <div class="document-item-icon">{{ doc.category_icon() }}</div>
                             <div>
                                 <h3 style="margin:0;">{{ doc.title }}</h3>
                                 <span class="badge">{{ doc.category }}</span>
+                                {% if doc.is_protected_category() %}<span class="badge badge-protected">Nachweis</span>{% endif %}
+                                {% if doc.is_archived() %}<span class="badge badge-archived">Archiviert</span>{% endif %}
                             </div>
                         </div>
                     </div>
@@ -147,6 +168,7 @@
                         Größe: {{ doc.size_label() }}<br>
                         Datei: {{ doc.original_filename }}<br>
                         Hochgeladen: {{ doc.uploaded_at.strftime('%d.%m.%Y, %H:%M Uhr') }}{% if doc.uploaded_by_user %} von {{ doc.uploaded_by_user.username }}{% endif %}
+                        {% if doc.is_archived() %}<br>Archiviert: {{ doc.deleted_at.strftime('%d.%m.%Y, %H:%M Uhr') }}{% if doc.deleted_by_user %} von {{ doc.deleted_by_user.username }}{% endif %}{% endif %}
                         {% if doc.event %}<br>Kegelabend: {{ doc.event.event_date.strftime('%d.%m.%Y') }}{% endif %}
                         {% if doc.cashbook_entry %}<br>Kassenbuch: {{ doc.cashbook_entry.booking_date.strftime('%d.%m.%Y') }} · {{ doc.cashbook_entry.reason }}{% endif %}
                     </div>
@@ -168,11 +190,21 @@
                     <div class="document-actions">
                         {% if not previewable %}<span class="document-meta">Für diesen Dateityp ist aktuell nur Download möglich.</span>{% endif %}
                         <a class="btn-secondary" href="{{ url_for('document_download', document_id=doc.id) }}">⬇ Herunterladen</a>
-                        <form method="post" onsubmit="return confirm('Dokument wirklich aus der Liste entfernen?');">
-                            <input type="hidden" name="form_action" value="delete">
-                            <input type="hidden" name="document_id" value="{{ doc.id }}">
-                            <button class="btn-danger" type="submit">Löschen</button>
-                        </form>
+                        {% if current_user.role in ['admin', 'cashier'] %}
+                            {% if doc.is_archived() %}
+                                <form method="post">
+                                    <input type="hidden" name="form_action" value="restore">
+                                    <input type="hidden" name="document_id" value="{{ doc.id }}">
+                                    <button class="btn-secondary" type="submit">↩ Wieder einblenden</button>
+                                </form>
+                            {% else %}
+                                <form method="post" onsubmit="return confirm('Dokument archivieren? Die Datei bleibt als Nachweis erhalten.');">
+                                    <input type="hidden" name="form_action" value="archive">
+                                    <input type="hidden" name="document_id" value="{{ doc.id }}">
+                                    <button class="btn-danger" type="submit">Archivieren</button>
+                                </form>
+                            {% endif %}
+                        {% endif %}
                     </div>
                 </article>
             {% endfor %}
@@ -183,3 +215,13 @@
 </div>
 
 {% endblock %}
+
+<script>
+function toggleNewDocumentCategory() {
+  const select = document.getElementById('document-category');
+  const row = document.getElementById('new-document-category-row');
+  if (!select || !row) return;
+  row.style.display = select.value === '__new__' ? 'block' : 'none';
+}
+document.addEventListener('DOMContentLoaded', toggleNewDocumentCategory);
+</script>

@@ -1,0 +1,2 @@
+Demo-Notiz
+Dieses TXT-Dokument prueft nicht standardmaessig erlaubte Dateiendungen.

@@ -2,33 +2,148 @@
 
 {% block content %}
 <div class="modern-header">
-    <div class="modern-icon">🚀</div>
+    <div class="modern-icon">🎳</div>
     <div>
-        <h1>Ersteinrichtung</h1>
-        <p>Richte die Kegelkasse mit möglichst wenigen Pflichtangaben ein. Alles Optionale kann später ergänzt werden.</p>
+        <h1>Willkommen bei Kegelkasse</h1>
+        <p>Gemeinsam kegeln. Gemeinsam Kasse.</p>
     </div>
 </div>
 
+{% if setup_errors %}
+<div class="alert alert-danger">
+    <strong>Bitte prüfen:</strong>
+    <ul style="margin:8px 0 0 18px;">
+        {% for error in setup_errors %}
+            <li>{{ error }}</li>
+        {% endfor %}
+    </ul>
+</div>
+{% endif %}
+
+{% if setup_mode in [None, '', 'start'] %}
 <div class="info-box">
     <div>ℹ️</div>
     <div>
-        <strong>Öffentliche Version / neue Installation</strong><br>
-        Pflicht sind nur Vereinsname, Admin-Benutzername und Passwort. Zahlungsdaten, Logo, Backup-Ziele und Migrationen können später ergänzt werden.
+        <strong>Wie möchtest du starten?</strong><br>
+        Wähle zuerst den passenden Weg. Die Eingabemaske erscheint erst nach der Auswahl.
     </div>
 </div>
 
-<form method="post" class="modern-card">
-    <h2>Pflichtangaben</h2>
+<div class="setup-choice-grid">
+    <form method="post" class="setup-choice-card">
+        <input type="hidden" name="setup_action" value="choose_create">
+        <div class="choice-icon">🆕</div>
+        <h2>Neuen Verein erstellen</h2>
+        <p>Erstellt eine neue leere Vereinsdatenbank und startet anschließend den Einrichtungsassistenten.</p>
+        <button type="submit">Neuen Verein erstellen</button>
+    </form>
+
+    <form method="post" class="setup-choice-card">
+        <input type="hidden" name="setup_action" value="choose_restore">
+        <div class="choice-icon">♻️</div>
+        <h2>Datensicherung wiederherstellen</h2>
+        <p>Spielt eine vorhandene Kegelkasse-Sicherung als ZIP-Datei wieder ein.</p>
+        <button type="submit">Backup auswählen</button>
+    </form>
+
+    <form method="post" class="setup-choice-card muted-choice">
+        <input type="hidden" name="setup_action" value="choose_import">
+        <div class="choice-icon">📥</div>
+        <h2>Daten importieren</h2>
+        <p>Vorhandene Daten aus Excel oder CSV übernehmen. Der Assistent ist vorbereitet und folgt in einem späteren Schritt.</p>
+        <button type="submit">Import-Assistent öffnen</button>
+    </form>
+
+    <form method="post" class="setup-choice-card">
+        <input type="hidden" name="setup_action" value="choose_demo">
+        <div class="choice-icon">🧪</div>
+        <h2>Demo ausprobieren</h2>
+        <p>Öffnet eine vorbereitete Demo-Datenbank mit Beispielverein, Rollen, Kegelabenden und Dokumenten.</p>
+        <button type="submit">Demo-Infos anzeigen</button>
+    </form>
+</div>
+
+<div class="tip-box">
+    <div>🔒</div>
+    <div>
+        Demo-, Setup- und Import-Testdatenbanken beeinflussen die Vereinsdatenbank nicht. Zwischen den Datenbanken kann später über den Datenbank-Schalter gewechselt werden.
+    </div>
+</div>
+{% endif %}
+
+{% if setup_mode == 'restore' %}
+<form method="post" enctype="multipart/form-data" class="modern-card setup-form">
+    <input type="hidden" name="setup_action" value="restore_backup">
+    <h2>Datensicherung wiederherstellen</h2>
+    <p class="muted">Wähle eine Kegelkasse-Backup-ZIP aus. Vor der Wiederherstellung wird automatisch eine Sicherung des aktuellen leeren Stands erstellt.</p>
+    <div class="info-box">
+        <div>⚠️</div>
+        <div>
+            <strong>Die aktuell aktive Datenbank wird ersetzt.</strong><br>
+            Bei Tests sollte oben im Datenbank-Badge eine Demo- oder Testdatenbank aktiv sein. Die Produktivdatenbank nicht als Restore-Testziel verwenden.
+        </div>
+    </div>
+    <label>Backup-ZIP auswählen
+        <input type="file" name="backup_file" accept=".zip" required>
+    </label>
+    <div class="inline-actions" style="margin-top:18px;">
+        <a class="button secondary" href="{{ url_for('first_start_setup') }}">Zurück</a>
+        <button type="submit">Datensicherung wiederherstellen</button>
+    </div>
+</form>
+{% endif %}
+
+{% if setup_mode == 'import' %}
+<div class="modern-card">
+    <h2>Daten importieren</h2>
+    <p>Der Analyse-/Migrationsassistent für Excel und CSV ist geplant, aber für die Vereinsversion noch bewusst zurückgestellt.</p>
+    <div class="tip-box">
+        <div>📌</div>
+        <div>Für die Version 1.0 hat Backup/Restore Vorrang. Der Import-Assistent folgt später mit Vorschau und Abgleichsbericht, damit keine Altdaten blind übernommen werden.</div>
+    </div>
+    <div class="inline-actions" style="margin-top:18px;">
+        <a class="button secondary" href="{{ url_for('first_start_setup') }}">Zurück</a>
+    </div>
+</div>
+{% endif %}
+
+{% if setup_mode == 'demo' %}
+<form method="post" class="modern-card setup-form">
+    <input type="hidden" name="setup_action" value="start_demo">
+    <h2>Demo ausprobieren</h2>
+    <p class="muted">Die Demo-Datenbank kann jederzeit über den Testbereich wieder auf den Ursprungszustand zurückgesetzt werden.</p>
+    <div class="demo-login-grid">
+        <div class="metric-card"><span>Administrator</span><strong>admin</strong><small>Passwort: admin1234</small></div>
+        <div class="metric-card"><span>Kassierer</span><strong>kasse</strong><small>Passwort: kasse1234</small></div>
+        <div class="metric-card"><span>Kassenprüfer</span><strong>pruefer</strong><small>Passwort: pruefer1234</small></div>
+        <div class="metric-card"><span>Mitglied</span><strong>max</strong><small>Passwort: max1234</small></div>
+    </div>
+    <div class="tip-box">
+        <div>✅</div>
+        <div>
+            In der Demo sind unter anderem Kegelabende, Monatsbeiträge, offene Strafen, Guthaben, Dokumente, Kassenprüfung, Jahresabschluss, Backup, Wiederherstellung und Rollenrechte vorbereitet.
+        </div>
+    </div>
+    <div class="inline-actions" style="margin-top:18px;">
+        <a class="button secondary" href="{{ url_for('first_start_setup') }}">Zurück</a>
+        <button type="submit">Demo starten</button>
+    </div>
+</form>
+{% endif %}
+
+{% if setup_mode == 'create' %}
+<form method="post" class="modern-card setup-form" id="setupForm">
+    <input type="hidden" name="setup_action" value="create_club">
+    <h2>Neuen Verein erstellen</h2>
     <div class="form-grid">
         <label>Vereins-/Clubname *
-            <input type="text" name="club_name" required value="{{ request.form.get('club_name', '') }}" placeholder="z. B. Kegelclub Musterstadt">
+            <input type="text" name="club_name" id="clubNameInput" required value="{{ request.form.get('club_name', '') }}" placeholder="z. B. Kegelclub Musterstadt">
         </label>
         <label>Admin-Benutzername *
             <input type="text" name="username" required value="{{ request.form.get('username', 'admin') }}" autocomplete="username">
-            <small>Der Admin ist ein Systembenutzer und kegelt nicht automatisch mit.</small>
         </label>
-        <label>E-Mail-Adresse Admin
-            <input type="email" name="email" value="{{ request.form.get('email', '') }}" autocomplete="email">
+        <label>E-Mail-Adresse Admin *
+            <input type="email" name="email" required value="{{ request.form.get('email', '') }}" autocomplete="email" placeholder="admin@example.de">
         </label>
         <label>Passwort *
             <input type="password" name="password" required autocomplete="new-password">
@@ -38,24 +153,57 @@
         </label>
     </div>
 
+    <div class="info-box compact-info" style="margin-top:16px;">
+        <div>👤</div>
+        <div>
+            Der erste Administrator wird als <strong>Systembenutzer</strong> angelegt. Er nimmt nicht automatisch an Kegelabenden teil und bekommt keine Strafen, Beiträge oder Statistiken. Die E-Mail-Adresse wird für Passwort-Zurücksetzungen und wichtige Systemhinweise verwendet.
+        </div>
+    </div>
+
+    <details class="subtle-box" style="margin-top:16px;" open>
+        <summary><strong>Optional: E-Mail & Passwort-Zurücksetzung</strong></summary>
+        <p class="muted">Diese Angaben sind wichtig, wenn Benutzer ihre Passwörter selbst zurücksetzen sollen. Ohne funktionierenden E-Mail-Versand muss ein Admin Passwörter manuell ändern.</p>
+        <div class="form-grid">
+            <label>SMTP-Server
+                <input type="text" name="mail_host" value="{{ request.form.get('mail_host', '') }}" placeholder="smtp.example.de">
+            </label>
+            <label>SMTP-Port
+                <input type="number" name="mail_port" value="{{ request.form.get('mail_port', '587') }}" min="1" max="65535" inputmode="numeric">
+            </label>
+            <label>SMTP-Benutzer
+                <input type="text" name="mail_username" value="{{ request.form.get('mail_username', '') }}" autocomplete="username">
+            </label>
+            <label>SMTP-Passwort / App-Passwort
+                <input type="password" name="mail_password" autocomplete="new-password">
+            </label>
+            <label>Absenderadresse
+                <input type="email" name="mail_from_email" value="{{ request.form.get('mail_from_email', '') }}" placeholder="kegelkasse@example.de">
+            </label>
+            <label>Absendername
+                <input type="text" name="mail_from_name" value="{{ request.form.get('mail_from_name', 'Kegelkasse') }}">
+            </label>
+            <label class="checkbox-line">
+                <input type="checkbox" name="mail_use_tls" value="1" {% if request.form.get('mail_use_tls', '1') %}checked{% endif %}>
+                TLS/STARTTLS verwenden
+            </label>
+        </div>
+    </details>
+
     <details class="subtle-box" style="margin-top:16px;">
-        <summary><strong>Optionale Zahlungsdaten direkt hinterlegen</strong></summary>
-        <p class="muted">Diese Angaben helfen später bei offenen Strafzahlungen, QR-Codes und Zahlungshinweisen. Sie sind nicht erforderlich.</p>
+        <summary><strong>Optionale Bankdaten direkt hinterlegen</strong></summary>
+        <p class="muted">Diese Angaben werden ausschließlich gespeichert, damit Mitglieder Zahlungsinformationen griffbereit sehen können. Die Kegelkasse löst keine Zahlungen aus, führt keine Abbuchungen durch und übermittelt keine Zahlungsdaten an Banken oder Zahlungsdienstleister.</p>
         <div class="form-grid">
             <label>Kontoinhaber
-                <input type="text" name="account_holder" value="{{ request.form.get('account_holder', '') }}">
+                <input type="text" name="account_holder" id="accountHolderInput" value="{{ request.form.get('account_holder', '') }}" data-validate="holder" placeholder="z. B. Kegelclub Musterstadt">
+                <small class="field-hint"></small>
             </label>
             <label>IBAN
-                <input type="text" name="iban" value="{{ request.form.get('iban', '') }}">
+                <input type="text" name="iban" value="{{ request.form.get('iban', '') }}" data-validate="iban" placeholder="DE00 0000 0000 0000 0000 00">
+                <small class="field-hint"></small>
             </label>
             <label>BIC
-                <input type="text" name="bic" value="{{ request.form.get('bic', '') }}">
-            </label>
-            <label>PayPal-Adresse
-                <input type="email" name="paypal_email" value="{{ request.form.get('paypal_email', '') }}">
-            </label>
-            <label>PayPal-Link
-                <input type="url" name="paypal_link" value="{{ request.form.get('paypal_link', '') }}">
+                <input type="text" name="bic" value="{{ request.form.get('bic', '') }}" data-validate="bic" placeholder="GENODEF1XXX">
+                <small class="field-hint"></small>
             </label>
         </div>
     </details>
@@ -64,24 +212,104 @@
         <summary><strong>Optionale Darstellung</strong></summary>
         <div class="form-grid">
             <label>Primärfarbe
-                <input type="text" name="primary_color" value="{{ request.form.get('primary_color', '') }}" placeholder="#176a2f">
+                <div class="color-row">
+                    <input type="color" id="primaryColorPicker" value="{{ request.form.get('primary_color', '#176a2f') or '#176a2f' }}">
+                    <input type="text" name="primary_color" id="primaryColorText" value="{{ request.form.get('primary_color', '#176a2f') or '#176a2f' }}" placeholder="#176a2f">
+                </div>
             </label>
             <label>Sekundärfarbe
-                <input type="text" name="secondary_color" value="{{ request.form.get('secondary_color', '') }}" placeholder="#d4af37">
+                <div class="color-row">
+                    <input type="color" id="secondaryColorPicker" value="{{ request.form.get('secondary_color', '#d4af37') or '#d4af37' }}">
+                    <input type="text" name="secondary_color" id="secondaryColorText" value="{{ request.form.get('secondary_color', '#d4af37') or '#d4af37' }}" placeholder="#d4af37">
+                </div>
             </label>
         </div>
     </details>
 
-    <details class="subtle-box" style="margin-top:16px;">
-        <summary><strong>Daten übernehmen / Migration</strong></summary>
-        <p class="muted">
-            Der Migrationsassistent ist vorbereitet: Excel, CSV, Vereins-Export und Demo-Daten werden später direkt beim ersten Start angeboten.
-            Für diese Basis-Version kannst du nach der Einrichtung über „Verein importieren“ einen vorhandenen Vereins-Export einspielen.
-        </p>
-    </details>
-
     <div class="inline-actions" style="margin-top:18px;">
+        <a class="button secondary" href="{{ url_for('first_start_setup') }}">Zurück</a>
         <button type="submit">Kegelkasse einrichten</button>
     </div>
 </form>
+{% endif %}
+
+<style>
+.setup-choice-grid { display:grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap:16px; }
+.setup-choice-card { background:var(--card); border:1px solid var(--line); box-shadow:var(--shadow); border-radius:16px; padding:18px; display:flex; flex-direction:column; gap:10px; min-height:250px; }
+.setup-choice-card h2 { margin:0; font-size:1.2rem; }
+.setup-choice-card p { color:var(--muted); margin:0; flex:1; line-height:1.4; }
+.setup-choice-card button { align-self:flex-start; }
+.choice-icon { width:44px; height:44px; display:flex; align-items:center; justify-content:center; border-radius:14px; background:var(--green-soft); color:var(--green); font-size:24px; }
+.muted-choice { opacity:.9; }
+.setup-form .field-hint { display:block; margin-top:4px; min-height:1.2em; }
+.setup-form .field-hint.ok { color:#166534; }
+.setup-form .field-hint.warn { color:#b45309; }
+.setup-form .field-hint.bad { color:#b91c1c; }
+.color-row { display:flex; align-items:center; gap:10px; }
+.color-row input[type="color"] { width:48px; min-width:48px; height:42px; padding:2px; border-radius:10px; }
+.checkbox-line { display:flex; align-items:center; gap:8px; margin-top:26px; }
+.compact-info { align-items:flex-start; }
+.demo-login-grid { display:grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap:12px; margin:14px 0; }
+.demo-login-grid small { display:block; color:var(--muted); margin-top:4px; }
+</style>
+
+<script>
+(function () {
+    function mod97Iban(iban) {
+        iban = (iban || '').replace(/\s+/g, '').toUpperCase();
+        if (!iban) return null;
+        if (!/^[A-Z]{2}\d{2}[A-Z0-9]{10,30}$/.test(iban)) return false;
+        var rearranged = iban.slice(4) + iban.slice(0, 4);
+        var numeric = '';
+        for (var i = 0; i < rearranged.length; i++) {
+            var ch = rearranged[i];
+            if (/\d/.test(ch)) numeric += ch;
+            else if (/[A-Z]/.test(ch)) numeric += String(ch.charCodeAt(0) - 55);
+            else return false;
+        }
+        var remainder = 0;
+        for (var j = 0; j < numeric.length; j++) remainder = (remainder * 10 + Number(numeric[j])) % 97;
+        return remainder === 1;
+    }
+    function setHint(input, state, text) {
+        var hint = input.parentElement.querySelector('.field-hint');
+        if (!hint) return;
+        hint.className = 'field-hint ' + (state || '');
+        hint.textContent = text || '';
+    }
+    function validateInput(input) {
+        var type = input.dataset.validate;
+        var value = (input.value || '').trim();
+        if (!type || !value) { setHint(input, '', ''); return; }
+        if (type === 'holder') setHint(input, value.length >= 3 ? 'ok' : 'warn', value.length >= 3 ? '✓ plausibel' : 'mindestens 3 Zeichen empfohlen');
+        else if (type === 'iban') setHint(input, mod97Iban(value) ? 'ok' : 'bad', mod97Iban(value) ? '✓ IBAN-Prüfziffer gültig' : 'IBAN-Format oder Prüfziffer ungültig');
+        else if (type === 'bic') {
+            var bic = value.replace(/\s+/g, '').toUpperCase();
+            var bicOk = /^[A-Z]{4}[A-Z]{2}[A-Z0-9]{2}([A-Z0-9]{3})?$/.test(bic);
+            setHint(input, bicOk ? 'ok' : 'bad', bicOk ? '✓ BIC-Format gültig' : 'BIC muss 8 oder 11 Zeichen haben');
+        }
+    }
+    document.querySelectorAll('[data-validate]').forEach(function (input) {
+        input.addEventListener('blur', function () { validateInput(input); });
+        input.addEventListener('change', function () { validateInput(input); });
+        validateInput(input);
+    });
+    function bindColor(pickerId, textId) {
+        var picker = document.getElementById(pickerId);
+        var text = document.getElementById(textId);
+        if (!picker || !text) return;
+        picker.addEventListener('input', function () { text.value = picker.value; });
+        text.addEventListener('change', function () { if (/^#[0-9a-fA-F]{6}$/.test(text.value)) picker.value = text.value; });
+    }
+    bindColor('primaryColorPicker', 'primaryColorText');
+    bindColor('secondaryColorPicker', 'secondaryColorText');
+    var clubName = document.getElementById('clubNameInput');
+    var holder = document.getElementById('accountHolderInput');
+    if (clubName && holder) {
+        clubName.addEventListener('input', function () {
+            if (!holder.value.trim()) holder.placeholder = clubName.value || 'z. B. Kegelclub Musterstadt';
+        });
+    }
+})();
+</script>
 {% endblock %}

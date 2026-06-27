@@ -8,6 +8,11 @@
     </div>
 </div>
 
+{% if current_user.role == "auditor" %}
+    <div class="auditor-readonly-note">
+        Kassenprüfer/-innen haben Leserechte. Sie können Prüfungen ansehen, eine Prüfnotiz erfassen und eine bestehende Kassenprüfung mit erneuter Passworteingabe bestätigen.
+    </div>
+{% else %}
 <div class="modern-card">
     <div class="modern-header"><div class="modern-icon">🧾</div><div><h2>Neue Prüfung erfassen</h2><p>Es wird keine Buchung erzeugt, sondern ein Prüfprotokoll gespeichert.</p></div></div>
     <form method="post">
@@ -22,12 +27,13 @@
         <button type="submit">Kassenprüfung speichern</button>
     </form>
 </div>
+{% endif %}
 
 <div class="modern-card">
-    <div class="modern-header"><div class="modern-icon">📋</div><div><h2>Bisherige Prüfungen</h2><p>Gespeicherte Prüfprotokolle mit Differenzen und Notizen.</p></div></div>
+    <div class="modern-header"><div class="modern-icon">📋</div><div><h2>Bisherige Prüfungen</h2><p>Gespeicherte Prüfprotokolle mit Differenzen, Notizen und Prüferbestätigung.</p></div></div>
     <div class="mobile-table-wrap">
         <table>
-            <thead><tr><th>Datum</th><th>Barkasse System</th><th>Barkasse gezählt</th><th>Differenz Bar</th><th>Bank System</th><th>Bank Auszug</th><th>Differenz Bank</th><th>Erfasst von</th><th>Details</th></tr></thead>
+            <thead><tr><th>Datum</th><th>Barkasse System</th><th>Barkasse gezählt</th><th>Differenz Bar</th><th>Bank System</th><th>Bank Auszug</th><th>Differenz Bank</th><th>Erfasst von</th><th>Status</th><th>Details / Bestätigung</th></tr></thead>
             <tbody>
                 {% for audit in audits %}
                     <tr>
@@ -39,16 +45,49 @@
                         <td>{{ audit.statement_bank_euro() }} €</td>
                         <td class="{% if audit.difference_bank_cents != 0 %}danger{% else %}success{% endif %}">{{ audit.difference_bank_euro() }} €</td>
                         <td>{{ audit.created_by_user.username if audit.created_by_user else '-' }}</td>
-                        <td>{% if audit.note %}<details><summary>Notiz anzeigen</summary><p>{{ audit.note }}</p></details>{% else %}<span class="muted">-</span>{% endif %}</td>
+                        <td>
+                            {% if audit.confirmed_at %}
+                                <span class="success"><strong>Bestätigt</strong></span><br>
+                                <small>{{ audit.confirmed_at.strftime('%d.%m.%Y %H:%M') if audit.confirmed_at else '' }}<br>{{ audit.confirmed_by_user.username if audit.confirmed_by_user else '-' }}</small>
+                            {% else %}
+                                <span class="muted">Offen</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if audit.note or audit.auditor_note %}
+                                <details>
+                                    <summary>Notizen anzeigen</summary>
+                                    {% if audit.note %}<p><strong>Erfasst:</strong><br>{{ audit.note }}</p>{% endif %}
+                                    {% if audit.auditor_note %}<p><strong>Prüfer/-in:</strong><br>{{ audit.auditor_note }}</p>{% endif %}
+                                </details>
+                            {% else %}
+                                <span class="muted">Keine Notiz</span>
+                            {% endif %}
+
+                            {% if current_user.role == "auditor" and not audit.confirmed_at %}
+                                <details class="confirm-audit-box">
+                                    <summary>Prüfung bestätigen</summary>
+                                    <form class="auditor-allowed-form" method="post" action="{{ url_for('confirm_cash_audit', audit_id=audit.id) }}" onsubmit="return confirm('Kassenprüfung verbindlich bestätigen?');">
+                                        <label>Prüfnotiz<textarea name="auditor_note" rows="3" placeholder="z. B. Keine Beanstandungen."></textarea></label>
+                                        <label>Passwort erneut eingeben<input type="password" name="confirm_password" autocomplete="current-password" required></label>
+                                        <button type="submit">✓ Kassenprüfung bestätigen</button>
+                                    </form>
+                                </details>
+                            {% endif %}
+                        </td>
                     </tr>
                 {% else %}
-                    <tr><td colspan="9">Noch keine Kassenprüfung vorhanden.</td></tr>
+                    <tr><td colspan="10">Noch keine Kassenprüfung vorhanden.</td></tr>
                 {% endfor %}
             </tbody>
         </table>
     </div>
 </div>
-<style>.field-stack span { display:block; margin-bottom:0.3rem; font-weight:800; color:var(--text); }</style>
+<style>
+.field-stack span { display:block; margin-bottom:0.3rem; font-weight:800; color:var(--text); }
+.confirm-audit-box { margin-top:8px; }
+.confirm-audit-box form { margin-top:10px; display:grid; gap:8px; min-width:260px; }
+</style>
 <script>
 (function () {
     function normalizeEuro(value) { let raw = String(value || '').trim().replace('€', '').replace(/\s/g, ''); if (!raw) return '0,00'; if (raw.startsWith(',') || raw.startsWith('.')) raw = '0' + raw; if (raw.includes(',')) raw = raw.replace(/\./g, '').replace(',', '.'); let number = Number(raw); if (!Number.isFinite(number)) return value; return number.toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }

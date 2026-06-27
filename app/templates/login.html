@@ -10,6 +10,15 @@
             </div>
         </div>
 
+        <div class="subtle-box" style="margin-bottom:16px;">
+            <strong>Aktive Datenbank:</strong><br>
+            {{ active_database_info.label }}
+            {% if active_database_info.is_test %}
+                <span class="badge-warning">TESTMODUS</span>
+            {% endif %}
+            <p class="muted" style="margin:6px 0 0;">{{ active_database_info.description }}</p>
+        </div>
+
         <form method="post" class="auth-form">
             <label>Benutzername
                 <input type="text" name="username" required autocomplete="username">
@@ -24,11 +33,16 @@
 
         <p class="muted" style="margin-top:16px;"><a href="{{ url_for('password_forgot') }}">Passwort vergessen?</a></p>
     </div>
-</div>
+
+
 <style>
-.auth-wrap { min-height:55vh; display:flex; align-items:center; justify-content:center; }
-.auth-card { width:100%; max-width:460px; }
+.auth-wrap { min-height:55vh; display:grid; grid-template-columns: minmax(280px, 460px); gap:16px; align-items:start; justify-content:center; }
+.auth-card { width:100%; }
 .auth-form { display:grid; gap:10px; }
 .auth-form button { width:100%; max-width:none; }
+.badge-warning { display:inline-block; margin-left:8px; padding:3px 8px; border-radius:999px; background:#fff7ed; border:1px solid #fed7aa; color:#9a3412; font-size:.78rem; font-weight:800; }
+@media (max-width: 900px) {
+    .auth-wrap { grid-template-columns:1fr; }
+}
 </style>
 {% endblock %}

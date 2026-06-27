@@ -29,7 +29,7 @@ services:
       - ./data/database:/app/database
 
       # Backups
-      - ./data/backups:/app/backups
+      - //volume1/Backups/Docker/kegelkasse/data/backups:/app/backups
 
       # Dokumente / Uploads
       - ./data/uploads:/app/uploads

@@ -11,6 +11,7 @@ import re
 import secrets
 import smtplib
 import csv
+import threading
 import urllib.parse
 import urllib.request
 import urllib.error
@@ -30,7 +31,15 @@ from werkzeug.security import check_password_hash, generate_password_hash
 from werkzeug.utils import secure_filename
 
 from auth import create_initial_admin, role_required
-from config import Config
+from config import (
+    Config,
+    TEST_DATABASE_PROFILES,
+    get_active_database_profile,
+    get_database_path,
+    get_document_dir,
+    normalize_database_profile,
+    set_active_database_profile,
+)
 from models import (
     db,
     User,
@@ -66,6 +75,55 @@ login_manager = LoginManager()
 login_manager.login_view = "login"
 login_manager.login_message = "Bitte zuerst anmelden."
 login_manager.init_app(app)
+
+APP_VERSION = "0.98.36"
+
+
+def active_database_info():
+    profile = get_active_database_profile()
+    info = TEST_DATABASE_PROFILES.get(profile, TEST_DATABASE_PROFILES["production"]).copy()
+    info["key"] = profile
+    info["database_path"] = str(get_database_path(profile))
+    info["documents_path"] = str(get_document_dir(profile))
+    return info
+
+
+def database_profile_display(profile=None):
+    """Kurzlabel für die Kopfzeile. Produktiv nutzt den Vereinsnamen, Tests bleiben technisch klar."""
+    profile = normalize_database_profile(profile or get_active_database_profile())
+    info = TEST_DATABASE_PROFILES.get(profile, TEST_DATABASE_PROFILES["production"]).copy()
+    if profile == "production":
+        try:
+            label = setting_value("club_name", "Alle 8te") or "Alle 8te"
+        except Exception:
+            label = "Alle 8te"
+        description = "Produktivdatenbank"
+    else:
+        label = info.get("label", profile)
+        description = "Testdatenbank"
+    return {
+        "key": profile,
+        "label": label,
+        "description": description,
+        "is_test": bool(info.get("is_test")),
+    }
+
+
+def database_profile_display_list():
+    return [database_profile_display(key) for key in TEST_DATABASE_PROFILES.keys()]
+
+
+@app.context_processor
+def inject_database_test_mode():
+    active_profile = get_active_database_profile()
+    return {
+        "active_database_profile": active_profile,
+        "active_database_info": active_database_info(),
+        "active_database_display": database_profile_display(active_profile),
+        "database_profile_displays": database_profile_display_list(),
+        "database_profiles": TEST_DATABASE_PROFILES,
+        "app_version": APP_VERSION,
+    }
 
 
 RATE_TYPES = {
@@ -106,7 +164,7 @@ def installation_needs_setup():
 
 @app.before_request
 def redirect_to_first_start_setup():
-    if request.endpoint in ("static", "first_start_setup"):
+    if request.endpoint in ("static", "first_start_setup", "login", "switch_database_profile", "test_database_control"):
         return
     if installation_needs_setup():
         return redirect(url_for("first_start_setup"))
@@ -648,6 +706,9 @@ def cash_audit_snapshot(audit):
         "Bank laut Auszug": f"{cents_to_euro(audit.statement_bank_cents)} €",
         "Bank Differenz": f"{cents_to_euro(audit.difference_bank_cents)} €",
         "Notiz": audit.note or "",
+        "Bestätigt von": audit.confirmed_by_user.username if getattr(audit, "confirmed_by_user", None) else "",
+        "Bestätigt am": audit.confirmed_at.isoformat() if getattr(audit, "confirmed_at", None) else "",
+        "Prüfernotiz": getattr(audit, "auditor_note", None) or "",
     }
 
 
@@ -667,6 +728,9 @@ def annual_closing_snapshot(closing):
         "Kegelabende offen": closing.open_event_count,
         "Letzte Kassenprüfung": closing.last_cash_audit.audit_date.isoformat() if closing.last_cash_audit and closing.last_cash_audit.audit_date else "-",
         "Notiz": closing.note or "",
+        "Bestätigt von": closing.confirmed_by_user.username if getattr(closing, "confirmed_by_user", None) else "",
+        "Bestätigt am": closing.confirmed_at.isoformat() if getattr(closing, "confirmed_at", None) else "",
+        "Prüfernotiz": getattr(closing, "auditor_note", None) or "",
     }
 
 def account_balance(account):
@@ -691,10 +755,40 @@ def set_setting_value(key, value):
 
 
 BACKUP_DIR = Path(os.getenv("BACKUP_DIR", "/app/backups"))
-DOCUMENT_DIR = Path(os.getenv("DOCUMENT_DIR", "/app/uploads/documents"))
+ACTIVE_DATABASE_PROFILE = get_active_database_profile()
+DOCUMENT_DIR = get_document_dir(ACTIVE_DATABASE_PROFILE)
 ALLOWED_DOCUMENT_EXTENSIONS = {"pdf", "jpg", "jpeg", "png", "gif", "webp", "doc", "docx", "xls", "xlsx", "txt", "csv", "json", "html", "htm", "rtf"}
-DOCUMENT_CATEGORIES = ["Kegelbahn-Rechnung", "Kontoauszug", "Kegeltour", "Vereinsdokument", "Vertrag", "Sonstiges"]
-DATABASE_PATH = Path(os.getenv("DATABASE_PATH", "/app/database/kegelkasse.db"))
+DEFAULT_DOCUMENT_CATEGORIES = ["Bahnrechnungen", "Kassenprüfung", "Jahresabschluss", "Kegeltour", "Historische Importdaten", "Vereinsunterlagen", "Sonstiges"]
+DATABASE_PATH = get_database_path(ACTIVE_DATABASE_PROFILE)
+
+
+def document_categories():
+    raw = setting_value("document_custom_categories", "[]")
+    try:
+        custom = json.loads(raw or "[]")
+    except Exception:
+        custom = []
+    categories = []
+    for category in DEFAULT_DOCUMENT_CATEGORIES + custom:
+        category = (category or "").strip()
+        if category and category not in categories:
+            categories.append(category)
+    return categories or ["Sonstiges"]
+
+
+def save_custom_document_category(name):
+    name = (name or "").strip()
+    if not name:
+        return None
+    if len(name) > 80:
+        name = name[:80].strip()
+    categories = document_categories()
+    if name in categories:
+        return name
+    custom = [c for c in categories if c not in DEFAULT_DOCUMENT_CATEGORIES]
+    custom.append(name)
+    set_setting_value("document_custom_categories", json.dumps(custom, ensure_ascii=False))
+    return name
 
 
 def backup_dir():
@@ -1235,18 +1329,65 @@ def cleanup_old_backups():
 def restore_database_from_backup(path):
     if not path.exists() or path.parent != backup_dir():
         raise ValueError("Sicherungsdatei wurde nicht gefunden.")
-    restore_before = create_database_backup(kind="manual")
-    temp_restore = backup_dir() / ".restore_kegelkasse.db.tmp"
-    with zipfile.ZipFile(path, "r") as zf:
-        if "kegelkasse.db" not in zf.namelist():
-            raise ValueError("Die Sicherung enthält keine kegelkasse.db.")
-        zf.extract("kegelkasse.db", backup_dir())
-    extracted = backup_dir() / "kegelkasse.db"
-    extracted.replace(temp_restore)
-    DATABASE_PATH.parent.mkdir(parents=True, exist_ok=True)
-    temp_restore.replace(DATABASE_PATH)
-    return restore_before
 
+    restore_before = create_database_backup(kind="manual")
+
+    DATABASE_PATH.parent.mkdir(parents=True, exist_ok=True)
+    work_dir = backup_dir() / f".restore_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+    temp_restore = DATABASE_PATH.parent / f".restore_{DATABASE_PATH.name}.tmp"
+
+    try:
+        if temp_restore.exists():
+            temp_restore.unlink()
+        work_dir.mkdir(parents=True, exist_ok=True)
+
+        with zipfile.ZipFile(path, "r") as zf:
+            names = zf.namelist()
+            if "kegelkasse.db" not in names:
+                raise ValueError("Die Sicherung enthält keine kegelkasse.db.")
+            zf.extract("kegelkasse.db", work_dir)
+            for name in names:
+                if name.startswith("documents/") and not name.endswith("/"):
+                    zf.extract(name, work_dir)
+
+        extracted_db = work_dir / "kegelkasse.db"
+        if not extracted_db.exists():
+            raise ValueError("Die Datenbank konnte aus der Sicherung nicht entpackt werden.")
+
+        # Bestehende SQLAlchemy-Verbindungen lösen, bevor die SQLite-Datei ersetzt wird.
+        db.session.remove()
+        db.engine.dispose()
+
+        # Nicht per rename/move aus dem Backup-Ordner ersetzen:
+        # Backup- und Datenbankverzeichnis können in Docker verschiedene Mounts sein.
+        # copy2 funktioniert zuverlässig über Dateisystemgrenzen hinweg; das finale replace
+        # passiert anschließend im Datenbankverzeichnis selbst.
+        shutil.copy2(extracted_db, temp_restore)
+        os.replace(temp_restore, DATABASE_PATH)
+
+        extracted_documents = work_dir / "documents"
+        if extracted_documents.exists():
+            if DOCUMENT_DIR.exists():
+                shutil.rmtree(DOCUMENT_DIR)
+            DOCUMENT_DIR.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copytree(extracted_documents, DOCUMENT_DIR)
+
+        db.engine.dispose()
+        db.create_all()
+        migrate_schema_extensions()
+
+    finally:
+        for leftover in (temp_restore,):
+            try:
+                leftover.unlink()
+            except FileNotFoundError:
+                pass
+        try:
+            shutil.rmtree(work_dir)
+        except Exception:
+            pass
+
+    return restore_before
 
 
 def verify_backup_file(path):
@@ -1622,27 +1763,101 @@ def migrate_viewer_roles_to_member():
 
 
 def ensure_column(table_name, column_name, column_sql):
-    """Kleine SQLite-Migration für bestehende Installationen."""
+    """Robuste SQLite-Migration für bestehende Installationen.
+
+    Gibt True zurück, wenn eine Spalte neu angelegt wurde. Dadurch können
+    Migrationen beim Containerstart nachvollziehbar in Docker-Logs und im
+    Revisionsprotokoll dokumentiert werden.
+    """
+    allowed_ident = set("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_")
+    if not table_name or not column_name:
+        return False
+    if any(ch not in allowed_ident for ch in table_name + column_name):
+        raise ValueError(f"Ungültiger Tabellen-/Spaltenname: {table_name}.{column_name}")
+
     rows = db.session.execute(db.text(f"PRAGMA table_info({table_name})")).fetchall()
+    if not rows:
+        print(f"[DB-Migration] Tabelle nicht gefunden oder noch leer: {table_name}")
+        return False
+
     existing = {row[1] for row in rows}
-    if column_name not in existing:
-        db.session.execute(db.text(f"ALTER TABLE {table_name} ADD COLUMN {column_sql}"))
+    if column_name in existing:
+        return False
+
+    db.session.execute(db.text(f"ALTER TABLE {table_name} ADD COLUMN {column_sql}"))
+    db.session.commit()
+    print(f"[DB-Migration] Spalte angelegt: {table_name}.{column_name}")
+    return True
+
+
+def record_schema_migration(changes):
+    """Dokumentiert automatische Schema-Migrationen ohne angemeldeten Benutzer."""
+    if not changes:
+        return
+
+    try:
+        details = "\n".join(changes)
+        db.session.add(AuditLog(
+            user_id=None,
+            username="System",
+            category="system",
+            action="schema_migration",
+            object_type="database",
+            title="Automatische Datenbankmigration ausgeführt",
+            details=details,
+            new_value=details,
+        ))
         db.session.commit()
+    except Exception as exc:
+        db.session.rollback()
+        print(f"[DB-Migration] Revisionsprotokoll konnte nicht geschrieben werden: {exc}")
 
 
 def migrate_schema_extensions():
-    ensure_column("users", "email", "email VARCHAR(255)")
-    ensure_column("users", "is_system_user", "is_system_user BOOLEAN NOT NULL DEFAULT 0")
-    ensure_column("app_settings", "created_at", "created_at DATETIME")
-    ensure_column("app_settings", "updated_at", "updated_at DATETIME")
-    ensure_column("penalty_types", "target_mode", "target_mode VARCHAR(20) NOT NULL DEFAULT 'self'")
-    ensure_column("monthly_contribution_payments", "paid_date", "paid_date DATE")
-    ensure_column("members", "monthly_value_day", "monthly_value_day INTEGER")
-    ensure_column("interest_bookings", "tax_rate_basis_points", "tax_rate_basis_points INTEGER DEFAULT 0")
-    ensure_column("interest_bookings", "tax_cents", "tax_cents INTEGER DEFAULT 0")
-    ensure_column("interest_bookings", "net_interest_cents", "net_interest_cents INTEGER DEFAULT 0")
+    """Ergänzt fehlende Spalten in älteren SQLite-Datenbanken.
+
+    Wichtig für ZIP-Updates: neuer Code darf nicht mit Internal Server Error
+    starten, nur weil eine bestehende Vereinsdatenbank einzelne neue Spalten
+    noch nicht besitzt.
+    """
+    changes = []
+
+    def add(table, column, sql):
+        if ensure_column(table, column, sql):
+            changes.append(f"{table}.{column}")
+
+    add("users", "email", "email VARCHAR(255)")
+    add("users", "is_system_user", "is_system_user BOOLEAN NOT NULL DEFAULT 0")
+
+    add("app_settings", "created_at", "created_at DATETIME")
+    add("app_settings", "updated_at", "updated_at DATETIME")
+
+    add("penalty_types", "target_mode", "target_mode VARCHAR(20) NOT NULL DEFAULT 'self'")
+    add("monthly_contribution_payments", "paid_date", "paid_date DATE")
+    add("members", "monthly_value_day", "monthly_value_day INTEGER")
+
+    add("interest_bookings", "tax_rate_basis_points", "tax_rate_basis_points INTEGER DEFAULT 0")
+    add("interest_bookings", "tax_cents", "tax_cents INTEGER DEFAULT 0")
+    add("interest_bookings", "net_interest_cents", "net_interest_cents INTEGER DEFAULT 0")
+
+    # Dokumente 2.0: Archivieren statt physisch löschen.
+    add("documents", "deleted_at", "deleted_at DATETIME")
+    add("documents", "deleted_by_user_id", "deleted_by_user_id INTEGER")
+
+    # Kassenprüfer-/Bestätigungsfelder für bestehende SQLite-Datenbanken.
+    for table_name in ["cash_audits", "annual_closings", "interest_settings", "interest_bookings"]:
+        add(table_name, "confirmed_by_user_id", "confirmed_by_user_id INTEGER")
+        add(table_name, "confirmed_at", "confirmed_at DATETIME")
+        add(table_name, "auditor_note", "auditor_note TEXT")
+
     db.session.execute(db.text("UPDATE interest_bookings SET net_interest_cents = actual_interest_cents WHERE net_interest_cents IS NULL OR net_interest_cents = 0"))
     db.session.commit()
+
+    if changes:
+        print("[DB-Migration] Angelegte Spalten: " + ", ".join(changes))
+        record_schema_migration(changes)
+    else:
+        print("[DB-Migration] Schema aktuell, keine Änderungen nötig.")
 
 
 def event_has_started_entries(event):
@@ -1816,80 +2031,235 @@ def update_member_login(member):
         member.user_id = user.id
 
 
+def validate_email_format(value):
+    value = (value or "").strip()
+    if not value:
+        return True
+    return re.match(r"^[^\s@]+@[^\s@]+\.[^\s@]+$", value) is not None
+
+
+def iban_is_valid(iban):
+    """Prüft IBAN-Format und Prüfziffer. Leer ist erlaubt."""
+    iban = re.sub(r"\s+", "", (iban or "")).upper()
+    if not iban:
+        return True
+    if not re.match(r"^[A-Z]{2}\d{2}[A-Z0-9]{10,30}$", iban):
+        return False
+    rearranged = iban[4:] + iban[:4]
+    numeric = ""
+    for ch in rearranged:
+        if ch.isdigit():
+            numeric += ch
+        elif "A" <= ch <= "Z":
+            numeric += str(ord(ch) - 55)
+        else:
+            return False
+    remainder = 0
+    for ch in numeric:
+        remainder = (remainder * 10 + int(ch)) % 97
+    return remainder == 1
+
+
+def bic_is_valid(bic):
+    bic = re.sub(r"\s+", "", (bic or "")).upper()
+    if not bic:
+        return True
+    return re.match(r"^[A-Z]{4}[A-Z]{2}[A-Z0-9]{2}([A-Z0-9]{3})?$", bic) is not None
+
+
+def paypal_link_is_valid(value):
+    value = (value or "").strip()
+    if not value:
+        return True
+    try:
+        parsed = urllib.parse.urlparse(value)
+    except Exception:
+        return False
+    host = (parsed.netloc or "").lower()
+    return parsed.scheme in ("http", "https") and (host.endswith("paypal.me") or host.endswith("paypal.com"))
+
+
 @app.route("/setup", methods=["GET", "POST"])
 def first_start_setup():
-    """Ersteinrichtung für neue/öffentliche Installationen.
+    """Startbildschirm für neue/leere Installationen.
 
-    Pflichtfelder bewusst minimal: Vereinsname, Admin-Benutzername und Passwort.
-    Weitere Angaben sind optional und können später geändert werden.
+    Neue Nutzer wählen zuerst den passenden Einstieg: neu anlegen, Backup
+    wiederherstellen, Daten importieren oder Demo starten. Die konkreten
+    Formulare erscheinen erst nach der Auswahl.
     """
     if not installation_needs_setup():
         return redirect(url_for("login"))
 
+    mode = request.args.get("mode", "start")
+
     if request.method == "POST":
-        club_name = (request.form.get("club_name") or "").strip()
-        username = clean_username(request.form.get("username") or "")
-        email = (request.form.get("email") or "").strip() or None
-        password = request.form.get("password") or ""
-        password_repeat = request.form.get("password_repeat") or ""
+        setup_action = (request.form.get("setup_action") or "create_club").strip()
 
-        if not club_name:
-            flash("Bitte einen Vereins-/Clubnamen angeben.", "danger")
-            return render_template("setup_wizard.html")
-        if not username:
-            flash("Bitte einen Admin-Benutzernamen angeben.", "danger")
-            return render_template("setup_wizard.html")
-        if password != password_repeat:
-            flash("Die Passwörter stimmen nicht überein.", "danger")
-            return render_template("setup_wizard.html")
-        password_errors = validate_password_policy(password)
-        if password_errors:
-            flash("Das Passwort erfüllt die Vorgaben nicht: " + ", ".join(password_errors) + ".", "danger")
-            return render_template("setup_wizard.html")
+        if setup_action == "choose_create":
+            return redirect(url_for("first_start_setup", mode="create"))
 
-        admin = User(
-            username=username,
-            email=email,
-            role="admin",
-            active=True,
-            is_system_user=True,
-            password_hash=generate_password_hash(password),
-        )
-        db.session.add(admin)
-        db.session.flush()
+        if setup_action == "choose_restore":
+            return redirect(url_for("first_start_setup", mode="restore"))
 
-        # Pflicht/Optionen aus dem Assistenten speichern. Keine Geheimnisse/Tokens.
-        set_setting_value("club_name", club_name)
-        optional_settings = {
-            "club_account_holder": request.form.get("account_holder", ""),
-            "club_iban": request.form.get("iban", ""),
-            "club_bic": request.form.get("bic", ""),
-            "club_paypal_email": request.form.get("paypal_email", ""),
-            "club_paypal_link": request.form.get("paypal_link", ""),
-            "club_primary_color": request.form.get("primary_color", ""),
-            "club_secondary_color": request.form.get("secondary_color", ""),
-            "setup_completed_at": datetime.now().isoformat(timespec="seconds"),
-        }
-        for key, value in optional_settings.items():
-            value = (value or "").strip()
-            if value:
-                set_setting_value(key, value)
+        if setup_action == "choose_import":
+            return redirect(url_for("first_start_setup", mode="import"))
 
-        audit_log(
-            "system",
-            "first_start_setup_completed",
-            "Ersteinrichtung abgeschlossen",
-            details="Admin-Systembenutzer ohne Kegelmitgliedschaft angelegt. Optionale Vereins-/Zahlungsdaten wurden gespeichert, soweit angegeben.",
-            object_type="User",
-            object_id=admin.id,
-            new_value=f"Verein: {audit_value(club_name)}; Admin: {audit_value(username)}",
-        )
-        db.session.commit()
-        login_user(admin)
-        flash("Ersteinrichtung abgeschlossen. Du bist als Admin angemeldet.", "success")
-        return redirect(url_for("dashboard"))
+        if setup_action == "choose_demo":
+            return redirect(url_for("first_start_setup", mode="demo"))
 
-    return render_template("setup_wizard.html")
+        if setup_action == "start_demo":
+            set_active_database_profile("demo")
+            if not get_database_path("demo").exists():
+                try:
+                    reset_or_delete_test_database("demo", mode="reset")
+                except Exception:
+                    pass
+            restart_kegelkasse_process()
+            return """
+            <!doctype html><html lang=\"de\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"><meta http-equiv=\"refresh\" content=\"5;url=/login\"><title>Demo wird gestartet</title><style>body{font-family:Arial,sans-serif;background:#f5f7fb;color:#18212f;padding:30px}.box{max-width:620px;margin:60px auto;background:white;border:1px solid #e5e7eb;border-radius:16px;padding:24px;box-shadow:0 10px 30px rgba(15,23,42,.07)}</style></head><body><div class=\"box\"><h1>Demo-Datenbank wird geöffnet …</h1><p>Die Kegelkasse startet kurz neu. Danach kannst du dich mit den Demo-Zugangsdaten anmelden.</p><p>Falls nichts passiert: <a href=\"/login\">Loginseite öffnen</a>.</p></div></body></html>
+            """
+
+        if setup_action == "restore_backup":
+            uploaded = request.files.get("backup_file")
+            if not uploaded or not uploaded.filename:
+                flash("Bitte eine Backup-ZIP auswählen.", "danger")
+                return render_template("setup_wizard.html", setup_mode="restore")
+            if not uploaded.filename.lower().endswith(".zip"):
+                flash("Bitte eine Kegelkasse-Backup-ZIP auswählen.", "danger")
+                return render_template("setup_wizard.html", setup_mode="restore")
+
+            backup_dir().mkdir(parents=True, exist_ok=True)
+            safe_name = secure_filename(uploaded.filename) or "restore.zip"
+            upload_path = backup_dir() / f"setup_restore_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{safe_name}"
+            uploaded.save(upload_path)
+            try:
+                verify_result = verify_backup_file(upload_path)
+                # verify_backup_file liefert in älteren Ständen einen zusammenfassenden Text,
+                # in neueren Ständen ggf. ein Dict. Beides ist gültig, solange keine Exception
+                # geworfen wurde. Wichtig: Restore darf nicht auf einem String .get() aufrufen.
+                if isinstance(verify_result, dict) and not verify_result.get("database", False):
+                    raise ValueError("Die Backup-Datenbank ist nicht lesbar.")
+                restore_before = restore_database_from_backup(upload_path)
+                flash(f"Datensicherung wurde wiederhergestellt. Vorher wurde automatisch gesichert: {restore_before.name if restore_before else 'nicht erstellt'}", "success")
+                restart_kegelkasse_process()
+                return """
+                <!doctype html><html lang=\"de\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"><meta http-equiv=\"refresh\" content=\"5;url=/login\"><title>Wiederherstellung läuft</title><style>body{font-family:Arial,sans-serif;background:#f5f7fb;color:#18212f;padding:30px}.box{max-width:620px;margin:60px auto;background:white;border:1px solid #e5e7eb;border-radius:16px;padding:24px;box-shadow:0 10px 30px rgba(15,23,42,.07)}</style></head><body><div class=\"box\"><h1>Wiederherstellung abgeschlossen …</h1><p>Die Kegelkasse startet kurz neu. Danach bitte neu anmelden.</p><p>Falls nichts passiert: <a href=\"/login\">Loginseite öffnen</a>.</p></div></body></html>
+                """
+            except Exception as exc:
+                db.session.rollback()
+                flash(f"Datensicherung konnte nicht wiederhergestellt werden: {exc}", "danger")
+                return render_template("setup_wizard.html", setup_mode="restore")
+
+        if setup_action == "create_club":
+            club_name = (request.form.get("club_name") or "").strip()
+            username = clean_username(request.form.get("username") or "")
+            email = (request.form.get("email") or "").strip() or None
+            password = request.form.get("password") or ""
+            password_repeat = request.form.get("password_repeat") or ""
+
+            account_holder = (request.form.get("account_holder") or "").strip()
+            iban = (request.form.get("iban") or "").strip().upper()
+            bic = (request.form.get("bic") or "").strip().upper()
+            primary_color = (request.form.get("primary_color") or "").strip()
+            secondary_color = (request.form.get("secondary_color") or "").strip()
+
+            mail_host = (request.form.get("mail_host") or "").strip()
+            mail_port = (request.form.get("mail_port") or "587").strip() or "587"
+            mail_username = (request.form.get("mail_username") or "").strip()
+            mail_password = request.form.get("mail_password") or ""
+            mail_from_email = (request.form.get("mail_from_email") or "").strip()
+            mail_from_name = (request.form.get("mail_from_name") or "Kegelkasse").strip()
+            mail_use_tls = "1" if request.form.get("mail_use_tls", "1") else "0"
+
+            errors = []
+            if not club_name:
+                errors.append("Bitte einen Vereins-/Clubnamen angeben.")
+            if not username:
+                errors.append("Bitte einen Admin-Benutzernamen angeben.")
+            if not email:
+                errors.append("Bitte eine E-Mail-Adresse für den Admin angeben.")
+            elif not validate_email_format(email):
+                errors.append("Bitte eine gültige E-Mail-Adresse für den Admin angeben.")
+            if password != password_repeat:
+                errors.append("Die Passwörter stimmen nicht überein.")
+            password_errors = validate_password_policy(password)
+            if password_errors:
+                errors.append("Das Passwort erfüllt die Vorgaben nicht: " + ", ".join(password_errors) + ".")
+            if account_holder and len(account_holder) < 3:
+                errors.append("Der Kontoinhaber sollte mindestens 3 Zeichen haben.")
+            if iban and not iban_is_valid(iban):
+                errors.append("Die IBAN ist formal ungültig oder hat eine falsche Prüfziffer.")
+            if bic and not bic_is_valid(bic):
+                errors.append("Die BIC hat kein gültiges Format.")
+            if mail_port:
+                try:
+                    mail_port_int = int(mail_port)
+                    if mail_port_int <= 0 or mail_port_int > 65535:
+                        raise ValueError()
+                except ValueError:
+                    errors.append("Der SMTP-Port muss eine gültige Portnummer sein.")
+                    mail_port_int = 587
+            else:
+                mail_port_int = 587
+            if mail_from_email and not validate_email_format(mail_from_email):
+                errors.append("Die Absenderadresse für E-Mail muss gültig sein.")
+            if mail_host and not mail_from_email:
+                errors.append("Wenn SMTP eingerichtet wird, sollte auch eine Absenderadresse angegeben werden.")
+
+            if errors:
+                for error in errors:
+                    flash(error, "danger")
+                return render_template("setup_wizard.html", setup_mode="create", setup_errors=errors)
+
+            admin = User(
+                username=username,
+                email=email,
+                role="admin",
+                active=True,
+                is_system_user=True,
+                password_hash=generate_password_hash(password),
+            )
+            db.session.add(admin)
+            db.session.flush()
+
+            set_setting_value("club_name", club_name)
+            optional_settings = {
+                "club_account_holder": account_holder,
+                "club_iban": iban,
+                "club_bic": bic,
+                "club_primary_color": primary_color,
+                "club_secondary_color": secondary_color,
+                "mail_enabled": "1" if mail_host and mail_from_email else "0",
+                "mail_host": mail_host,
+                "mail_port": str(mail_port_int),
+                "mail_username": mail_username,
+                "mail_from_email": mail_from_email,
+                "mail_from_name": mail_from_name,
+                "mail_use_tls": mail_use_tls,
+                "setup_completed_at": datetime.now().isoformat(timespec="seconds"),
+            }
+            for key, value in optional_settings.items():
+                value = (value or "").strip()
+                if value:
+                    set_setting_value(key, value)
+            if mail_password:
+                set_setting_value("mail_password", mail_password)
+
+            audit_log(
+                "system",
+                "first_start_setup_completed",
+                "Ersteinrichtung abgeschlossen",
+                details="Admin-Systembenutzer ohne Kegelmitgliedschaft angelegt. Optionale Vereins-, Bank- und E-Mail-Daten wurden gespeichert, soweit angegeben.",
+                object_type="User",
+                object_id=admin.id,
+                new_value=f"Verein: {audit_value(club_name)}; Admin: {audit_value(username)}",
+            )
+            db.session.commit()
+            login_user(admin)
+            flash("Ersteinrichtung abgeschlossen. Du bist als Admin angemeldet.", "success")
+            return redirect(url_for("dashboard"))
+
+    return render_template("setup_wizard.html", setup_mode=mode)
 
 
 @app.route("/")
@@ -1996,6 +2366,163 @@ def dashboard():
         top_wreath=top_wreath,
         top_absence=top_absence,
     )
+
+
+
+
+def restart_kegelkasse_process():
+    """Containerprozess neu starten, damit SQLAlchemy sicher auf die gewählte DB zeigt."""
+    def restart_process():
+        os._exit(0)
+    threading.Timer(1.0, restart_process).start()
+
+
+def reset_or_delete_test_database(profile, mode="delete"):
+    """Setzt eine Testdatenbank zurück oder löscht sie komplett.
+
+    production wird hier bewusst nie verändert. Für die Demo-Datenbank wird, falls
+    vorhanden, eine mitgelieferte Demo-Basis kopiert. Leere Testdatenbanken werden
+    gelöscht und beim nächsten Start wieder frisch angelegt.
+    """
+    profile = normalize_database_profile(profile)
+    info = TEST_DATABASE_PROFILES.get(profile, {})
+    if not info.get("is_test"):
+        raise ValueError("Die echte Vereinsdatenbank kann hier nicht geändert werden.")
+
+    test_db_path = get_database_path(profile)
+    test_doc_dir = get_document_dir(profile)
+
+    if test_db_path.exists():
+        test_db_path.unlink()
+    if test_doc_dir.exists():
+        shutil.rmtree(test_doc_dir)
+
+    # Demo auf definierten Ausgangsstand zurücksetzen, wenn Demo-Basis im Image liegt.
+    if profile == "demo" and mode == "reset":
+        seed_dir = Path(app.root_path) / "demo_seed"
+        seed_db = seed_dir / "kegelkasse_demo_seed.db"
+        seed_documents = seed_dir / "documents"
+        if seed_db.exists():
+            test_db_path.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(seed_db, test_db_path)
+        if seed_documents.exists():
+            test_doc_dir.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copytree(seed_documents, test_doc_dir)
+
+@app.route("/test-database", methods=["GET"])
+def test_database_page():
+    """Versteckte Testdatenbank-Auswahl für die Testphase.
+
+    Die Loginseite bleibt für den normalen Vereinsbetrieb aufgeräumt. Wer testen
+    möchte, erreicht die Auswahl bewusst über das Logo bzw. direkt über diese URL.
+    """
+    return render_template("test_database.html")
+
+
+@app.route("/test-database/switch", methods=["POST"])
+def switch_database_profile():
+    """Temporärer Testmodus: aktive Datenbank vor dem Login umschalten.
+
+    Der Wechsel betrifft nur die verwendete SQLite-Datei und den Dokumentenordner.
+    Die echte Vereinsdatenbank bleibt unter /app/database/kegelkasse.db unverändert.
+    Damit SQLAlchemy sauber auf die andere Datei verbindet, wird der Containerprozess
+    kurz beendet. Docker startet ihn wegen restart: unless-stopped automatisch neu.
+    """
+    profile = normalize_database_profile(request.form.get("database_profile"))
+    reset_test_database = request.form.get("reset_test_database") == "1"
+
+    if profile == "production" and reset_test_database:
+        flash("Die echte Vereinsdatenbank kann über den Testmodus nicht zurückgesetzt werden.", "danger")
+        return redirect(url_for("login"))
+
+    if reset_test_database and TEST_DATABASE_PROFILES[profile].get("is_test"):
+        test_db_path = get_database_path(profile)
+        test_doc_dir = get_document_dir(profile)
+        try:
+            if test_db_path.exists():
+                test_db_path.unlink()
+            if test_doc_dir.exists():
+                shutil.rmtree(test_doc_dir)
+        except OSError as exc:
+            flash(f"Testdatenbank konnte nicht zurückgesetzt werden: {exc}", "danger")
+            return redirect(url_for("login"))
+
+    set_active_database_profile(profile)
+
+    restart_kegelkasse_process()
+    return """
+    <!doctype html>
+    <html lang=\"de\">
+    <head>
+        <meta charset=\"utf-8\">
+        <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">
+        <meta http-equiv=\"refresh\" content=\"5;url=/login\">
+        <title>Datenbank wird gewechselt</title>
+        <style>
+            body { font-family: Arial, sans-serif; background:#f5f7fb; color:#18212f; padding:30px; }
+            .box { max-width:620px; margin:60px auto; background:white; border:1px solid #e5e7eb; border-radius:16px; padding:24px; box-shadow:0 10px 30px rgba(15,23,42,.07); }
+        </style>
+    </head>
+    <body><div class=\"box\">
+        <h1>Datenbank wird gewechselt …</h1>
+        <p>Die Kegelkasse startet kurz neu. Danach wird die Loginseite automatisch neu geladen.</p>
+        <p>Falls nichts passiert: <a href=\"/login\">Loginseite neu öffnen</a>.</p>
+    </div></body></html>
+    """
+
+
+@app.route("/test-database/control", methods=["POST"])
+def test_database_control():
+    """Schnellaktionen im Testmodus-Banner.
+
+    Speichern ist bei SQLite automatisch: Beim Zurückwechseln zur echten Datenbank
+    wird die aktive Testdatenbank nicht gelöscht. Reset/Löschen sind nur für Testprofile erlaubt.
+    """
+    active_profile = get_active_database_profile()
+    action = (request.form.get("action") or "").strip()
+
+    if action == "switch_production":
+        set_active_database_profile("production")
+        flash("Aktueller Teststand bleibt gespeichert. Es wird zur echten Vereinsdatenbank gewechselt.", "success")
+        restart_kegelkasse_process()
+        return """
+        <!doctype html><html lang=\"de\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"><meta http-equiv=\"refresh\" content=\"5;url=/login\"><title>Datenbank wird gewechselt</title><style>body{font-family:Arial,sans-serif;background:#f5f7fb;color:#18212f;padding:30px}.box{max-width:620px;margin:60px auto;background:white;border:1px solid #e5e7eb;border-radius:16px;padding:24px;box-shadow:0 10px 30px rgba(15,23,42,.07)}</style></head><body><div class=\"box\"><h1>Zur echten Vereinsdatenbank wechseln …</h1><p>Der aktuelle Teststand bleibt in seiner Testdatenbank gespeichert.</p><p>Falls nichts passiert: <a href=\"/login\">Loginseite neu öffnen</a>.</p></div></body></html>
+        """
+
+    if not TEST_DATABASE_PROFILES.get(active_profile, {}).get("is_test"):
+        flash("Diese Aktion ist nur im Demo-/Testmodus möglich. Die echte Vereinsdatenbank bleibt geschützt.", "danger")
+        return redirect(url_for("login"))
+
+    if action == "reset_current_test":
+        try:
+            reset_or_delete_test_database(active_profile, mode="reset")
+            flash("Testdatenbank wurde auf den vorgesehenen Ausgangsstand zurückgesetzt.", "success")
+        except Exception as exc:
+            flash(f"Testdatenbank konnte nicht zurückgesetzt werden: {exc}", "danger")
+            return redirect(url_for("login"))
+        restart_kegelkasse_process()
+        return """
+        <!doctype html><html lang=\"de\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"><meta http-equiv=\"refresh\" content=\"5;url=/login\"><title>Testdatenbank wird zurückgesetzt</title><style>body{font-family:Arial,sans-serif;background:#f5f7fb;color:#18212f;padding:30px}.box{max-width:620px;margin:60px auto;background:white;border:1px solid #e5e7eb;border-radius:16px;padding:24px;box-shadow:0 10px 30px rgba(15,23,42,.07)}</style></head><body><div class=\"box\"><h1>Testdatenbank wird zurückgesetzt …</h1><p>Die echte Vereinsdatenbank bleibt unverändert.</p><p>Falls nichts passiert: <a href=\"/login\">Loginseite neu öffnen</a>.</p></div></body></html>
+        """
+
+    if action == "delete_current_test":
+        confirm = (request.form.get("confirm_delete") or "").strip().upper()
+        if confirm != "LÖSCHEN" and confirm != "LOESCHEN":
+            flash("Zum vollständigen Löschen der Testdatenbank bitte LÖSCHEN eintragen.", "danger")
+            return redirect(url_for("login"))
+        try:
+            reset_or_delete_test_database(active_profile, mode="delete")
+            flash("Testdatenbank wurde vollständig gelöscht. Beim nächsten Start beginnt sie leer.", "success")
+        except Exception as exc:
+            flash(f"Testdatenbank konnte nicht gelöscht werden: {exc}", "danger")
+            return redirect(url_for("login"))
+        restart_kegelkasse_process()
+        return """
+        <!doctype html><html lang=\"de\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"><meta http-equiv=\"refresh\" content=\"5;url=/setup\"><title>Testdatenbank wird gelöscht</title><style>body{font-family:Arial,sans-serif;background:#f5f7fb;color:#18212f;padding:30px}.box{max-width:620px;margin:60px auto;background:white;border:1px solid #e5e7eb;border-radius:16px;padding:24px;box-shadow:0 10px 30px rgba(15,23,42,.07)}</style></head><body><div class=\"box\"><h1>Testdatenbank wird gelöscht …</h1><p>Danach startet diese Testdatenbank leer mit dem Einrichtungsassistenten.</p><p>Falls nichts passiert: <a href=\"/setup\">Setup öffnen</a>.</p></div></body></html>
+        """
+
+    flash("Unbekannte Testdatenbank-Aktion.", "danger")
+    return redirect(url_for("login"))
 
 
 @app.route("/login", methods=["GET", "POST"])
@@ -2438,8 +2965,12 @@ def document_preview_type(doc):
 
 @app.route("/documents", methods=["GET", "POST"])
 @login_required
-@role_required("admin", "cashier")
+@role_required("admin", "cashier", "auditor")
 def documents_page():
+    if current_user.role == "auditor" and request.method == "POST":
+        flash("Kassenprüfer/-innen haben nur Leserechte und können keine Änderungen speichern.", "warning")
+        return redirect(request.referrer or url_for("dashboard"))
+
     DOCUMENT_DIR.mkdir(parents=True, exist_ok=True)
 
     if request.method == "POST":
@@ -2448,6 +2979,9 @@ def documents_page():
         if form_action == "upload":
             title = (request.form.get("title") or "").strip()
             category = request.form.get("category") or "Sonstiges"
+            new_category = (request.form.get("new_category") or "").strip()
+            if category == "__new__":
+                category = save_custom_document_category(new_category) or "Sonstiges"
             description = (request.form.get("description") or "").strip()
             document_date = document_date_from_form(request.form.get("document_date"))
             event_id = request.form.get("event_id") or None
@@ -2473,7 +3007,7 @@ def documents_page():
 
             document = Document(
                 title=title,
-                category=category if category in DOCUMENT_CATEGORIES else "Sonstiges",
+                category=category if category in document_categories() else "Sonstiges",
                 document_date=document_date,
                 description=description or None,
                 original_filename=original_filename,
@@ -2499,33 +3033,60 @@ def documents_page():
             flash("Dokument wurde hochgeladen.", "success")
             return redirect(url_for("documents_page"))
 
-        if form_action == "delete" and current_user.role in ["admin", "cashier"]:
+        if form_action in ["delete", "archive"] and current_user.role in ["admin", "cashier"]:
             doc = Document.query.get_or_404(int(request.form.get("document_id") or 0))
             old_summary = document_summary(doc)
-            doc.deleted_at = datetime.utcnow()
-            doc.deleted_by_user_id = current_user.id
+            if not doc.deleted_at:
+                doc.deleted_at = datetime.utcnow()
+                doc.deleted_by_user_id = current_user.id
+                db.session.commit()
+                audit_log(
+                    "Dokumente",
+                    "document_archived",
+                    f"Dokument archiviert: {doc.title}",
+                    details=old_summary,
+                    object_type="document",
+                    object_id=doc.id,
+                    old_value=old_summary,
+                    new_value=document_summary(doc),
+                )
+                if doc.is_protected_category():
+                    flash("Revisionsrelevantes Dokument wurde archiviert. Es bleibt als Nachweis erhalten und ist über 'Archivierte anzeigen' weiterhin einsehbar.", "success")
+                else:
+                    flash("Dokument wurde archiviert. Es bleibt auf dem Server erhalten und kann bei Bedarf wieder eingeblendet werden.", "success")
+            return redirect(url_for("documents_page"))
+
+        if form_action == "restore" and current_user.role in ["admin", "cashier"]:
+            doc = Document.query.get_or_404(int(request.form.get("document_id") or 0))
+            old_summary = document_summary(doc)
+            doc.deleted_at = None
+            doc.deleted_by_user_id = None
             db.session.commit()
             audit_log(
                 "Dokumente",
-                "document_deleted",
-                f"Dokument gelöscht: {doc.title}",
-                details=old_summary,
+                "document_restored",
+                f"Dokument wiederhergestellt: {doc.title}",
+                details=document_summary(doc),
                 object_type="document",
                 object_id=doc.id,
                 old_value=old_summary,
+                new_value=document_summary(doc),
             )
-            flash("Dokument wurde aus der Liste entfernt. Die Datei bleibt zur Sicherheit auf dem Server erhalten.", "success")
+            flash("Dokument wurde wieder eingeblendet.", "success")
             return redirect(url_for("documents_page"))
 
     category_filter = request.args.get("category", "all")
     search = (request.args.get("q") or "").strip()
-    query = Document.query.filter(Document.deleted_at.is_(None))
+    show_archived = request.args.get("show_archived") == "1"
+    query = Document.query
+    if not show_archived:
+        query = query.filter(Document.deleted_at.is_(None))
     if category_filter != "all":
         query = query.filter(Document.category == category_filter)
     if search:
         like = f"%{search}%"
-        query = query.filter(or_(Document.title.ilike(like), Document.description.ilike(like), Document.original_filename.ilike(like)))
-    documents = query.order_by(Document.document_date.desc().nullslast(), Document.uploaded_at.desc()).all()
+        query = query.filter(or_(Document.title.ilike(like), Document.description.ilike(like), Document.original_filename.ilike(like), Document.category.ilike(like)))
+    documents = query.order_by(Document.deleted_at.isnot(None), Document.document_date.desc().nullslast(), Document.uploaded_at.desc()).all()
 
     events = BowlingEvent.query.order_by(BowlingEvent.event_date.desc()).limit(50).all()
     cashbook_entries = CashbookEntry.query.filter(CashbookEntry.is_void.is_(False)).order_by(CashbookEntry.booking_date.desc(), CashbookEntry.id.desc()).limit(80).all()
@@ -2533,9 +3094,10 @@ def documents_page():
     return render_template(
         "documents.html",
         documents=documents,
-        categories=DOCUMENT_CATEGORIES,
+        categories=document_categories(),
         category_filter=category_filter,
         search=search,
+        show_archived=show_archived,
         events=events,
         cashbook_entries=cashbook_entries,
     )
@@ -2543,11 +3105,9 @@ def documents_page():
 
 @app.route("/documents/download/<int:document_id>")
 @login_required
-@role_required("admin", "cashier")
+@role_required("admin", "cashier", "auditor")
 def document_download(document_id):
     doc = Document.query.get_or_404(document_id)
-    if doc.deleted_at:
-        abort(404)
     path = DOCUMENT_DIR / doc.stored_filename
     if not path.exists():
         flash("Die Datei wurde auf dem Server nicht gefunden.", "error")
@@ -2565,11 +3125,9 @@ def document_download(document_id):
 
 @app.route("/documents/preview/<int:document_id>")
 @login_required
-@role_required("admin", "cashier")
+@role_required("admin", "cashier", "auditor")
 def document_preview(document_id):
     doc = Document.query.get_or_404(document_id)
-    if doc.deleted_at:
-        abort(404)
     path = DOCUMENT_DIR / doc.stored_filename
     if not path.exists():
         flash("Die Datei wurde auf dem Server nicht gefunden.", "error")
@@ -2599,6 +3157,8 @@ def backups_page():
         actions = request.form.getlist("form_action")
         action = actions[-1] if actions else ""
         filename = secure_filename(request.form.get("filename", ""))
+        redirect_target = request.form.get("redirect_to", "backups")
+        redirect_endpoint = "import_export_page" if redirect_target == "import_export" else "backups_page"
         try:
             if action == "create_backup":
                 backup = create_database_backup(kind="manual")
@@ -2815,7 +3375,7 @@ def backups_page():
         except Exception as exc:
             db.session.rollback()
             flash(f"Aktion konnte nicht ausgeführt werden: {exc}", "danger")
-        return redirect(url_for("backups_page"))
+        return redirect(url_for(redirect_endpoint))
 
     files = backup_file_list()
     last_manual = next((item for item in files if item["kind"] == "Manuell"), None)
@@ -2837,6 +3397,29 @@ def backups_page():
         club_import_preview=club_import_preview,
     )
 
+
+
+def club_import_preview_from_settings():
+    preview_raw = setting_value("club_import_preview_json", "")
+    if not preview_raw:
+        return None
+    try:
+        preview = json.loads(preview_raw)
+        return preview if isinstance(preview, dict) else None
+    except Exception:
+        return None
+
+
+@app.route("/import-export")
+@login_required
+@role_required("admin")
+def import_export_page():
+    return render_template(
+        "import_export.html",
+        years=export_year_options(),
+        current_year=datetime.now().year,
+        club_import_preview=club_import_preview_from_settings(),
+    )
 
 
 @app.route("/club/export/download")
@@ -4248,8 +4831,12 @@ def annual_year_summary(year):
 
 @app.route("/annual-closings", methods=["GET", "POST"])
 @login_required
-@role_required("admin", "cashier")
+@role_required("admin", "cashier", "auditor")
 def annual_closings():
+    if current_user.role == "auditor" and request.method == "POST":
+        flash("Kassenprüfer/-innen haben nur Leserechte und können keine Änderungen speichern.", "warning")
+        return redirect(request.referrer or url_for("dashboard"))
+
     current_year = datetime.today().year
 
     if request.method == "POST":
@@ -4329,10 +4916,55 @@ def annual_closings():
         expense=cents_to_euro(summary["expense_cents"]),
     )
 
+
+@app.route("/annual-closings/<int:closing_id>/confirm", methods=["POST"])
+@login_required
+@role_required("auditor")
+def confirm_annual_closing(closing_id):
+    closing = AnnualClosing.query.get_or_404(closing_id)
+    if closing.confirmed_at:
+        flash("Dieser Jahresabschluss wurde bereits bestätigt.", "warning")
+        return redirect(url_for("annual_closings", year=closing.year))
+
+    password = request.form.get("confirm_password", "")
+    auditor_note = (request.form.get("auditor_note") or "").strip()
+    if not check_password_hash(current_user.password_hash, password):
+        flash("Das Passwort ist nicht korrekt. Der Jahresabschluss wurde nicht bestätigt.", "danger")
+        return redirect(url_for("annual_closings", year=closing.year))
+
+    closing.confirmed_by_user_id = current_user.id
+    closing.confirmed_at = datetime.utcnow()
+    closing.auditor_note = auditor_note
+
+    details = "\n".join([
+        f"Jahr: {closing.year}",
+        f"Prüfer/-in: {current_user.username}",
+        f"Barkasse: {closing.cash_balance_euro()} €",
+        f"Bank: {closing.bank_balance_euro()} €",
+        f"Gesamtbestand: {closing.total_balance_euro()} €",
+        f"Prüfernotiz: {auditor_note or '-'}",
+    ])
+    audit_log(
+        "annual_closing",
+        "annual_closing_confirmed",
+        f"Jahresabschluss {closing.year} bestätigt",
+        details=details,
+        object_type="AnnualClosing",
+        object_id=closing.id,
+        new_value="\n".join(f"{key}: {value}" for key, value in annual_closing_snapshot(closing).items()),
+    )
+    db.session.commit()
+    flash("Jahresabschluss wurde bestätigt und im Revisionsprotokoll dokumentiert.", "success")
+    return redirect(url_for("annual_closings", year=closing.year))
+
 @app.route("/cash-audits", methods=["GET", "POST"])
 @login_required
-@role_required("admin", "cashier")
+@role_required("admin", "cashier", "auditor")
 def cash_audits():
+    if current_user.role == "auditor" and request.method == "POST":
+        flash("Kassenprüfer/-innen haben nur Leserechte und können keine Änderungen speichern.", "warning")
+        return redirect(request.referrer or url_for("dashboard"))
+
     expected_cash_cents = account_balance("cash")
     expected_bank_cents = account_balance("bank")
 
@@ -4395,10 +5027,54 @@ def cash_audits():
     )
 
 
+@app.route("/cash-audits/<int:audit_id>/confirm", methods=["POST"])
+@login_required
+@role_required("auditor")
+def confirm_cash_audit(audit_id):
+    audit = CashAudit.query.get_or_404(audit_id)
+    if audit.confirmed_at:
+        flash("Diese Kassenprüfung wurde bereits bestätigt.", "warning")
+        return redirect(url_for("cash_audits"))
+
+    password = request.form.get("confirm_password", "")
+    auditor_note = (request.form.get("auditor_note") or "").strip()
+    if not check_password_hash(current_user.password_hash, password):
+        flash("Das Passwort ist nicht korrekt. Die Prüfung wurde nicht bestätigt.", "danger")
+        return redirect(url_for("cash_audits"))
+
+    audit.confirmed_by_user_id = current_user.id
+    audit.confirmed_at = datetime.utcnow()
+    audit.auditor_note = auditor_note
+
+    details = "\n".join([
+        f"Prüfer/-in: {current_user.username}",
+        f"Prüfdatum: {audit.audit_date.strftime('%d.%m.%Y') if audit.audit_date else '-'}",
+        f"Barkasse Differenz: {cents_to_euro(audit.difference_cash_cents)} €",
+        f"Bank Differenz: {cents_to_euro(audit.difference_bank_cents)} €",
+        f"Prüfernotiz: {auditor_note or '-'}",
+    ])
+    audit_log(
+        "finance",
+        "cash_audit_confirmed",
+        f"Kassenprüfung vom {audit.audit_date.strftime('%d.%m.%Y') if audit.audit_date else audit.id} bestätigt",
+        details=details,
+        object_type="CashAudit",
+        object_id=audit.id,
+        new_value="\n".join(f"{key}: {value}" for key, value in cash_audit_snapshot(audit).items()),
+    )
+    db.session.commit()
+    flash("Kassenprüfung wurde bestätigt und im Revisionsprotokoll dokumentiert.", "success")
+    return redirect(url_for("cash_audits"))
+
+
 @app.route("/interest", methods=["GET", "POST"])
 @login_required
-@role_required("admin", "cashier")
+@role_required("admin", "cashier", "auditor")
 def interest_module():
+    if current_user.role == "auditor" and request.method == "POST":
+        flash("Kassenprüfer/-innen haben nur Leserechte und können keine Änderungen speichern.", "warning")
+        return redirect(request.referrer or url_for("dashboard"))
+
     active_setting = InterestSetting.query.filter_by(active=True).order_by(InterestSetting.valid_from.desc(), InterestSetting.created_at.desc()).first()
 
     if request.method == "POST":
@@ -4567,8 +5243,12 @@ def interest_module():
 
 @app.route("/cashbook", methods=["GET", "POST"])
 @login_required
-@role_required("admin", "cashier")
+@role_required("admin", "cashier", "auditor")
 def cashbook():
+    if current_user.role == "auditor" and request.method == "POST":
+        flash("Kassenprüfer/-innen haben nur Leserechte und können keine Änderungen speichern.", "warning")
+        return redirect(request.referrer or url_for("dashboard"))
+
     if request.method == "POST":
         booking_date_raw = request.form.get("booking_date") or datetime.today().date().isoformat()
         try:
@@ -4946,8 +5626,12 @@ def monthly_contribution_rows(year, month, batch=None):
 
 @app.route("/finance/monthly-contributions", methods=["GET", "POST"])
 @login_required
-@role_required("admin", "cashier")
+@role_required("admin", "cashier", "auditor")
 def monthly_contributions():
+    if current_user.role == "auditor" and request.method == "POST":
+        flash("Kassenprüfer/-innen haben nur Leserechte und können keine Änderungen speichern.", "warning")
+        return redirect(request.referrer or url_for("dashboard"))
+
     year, month = parse_month_param(request.values.get("month"))
     period_value = f"{year:04d}-{month:02d}"
     target_date = first_day_of_month(year, month)
@@ -5156,7 +5840,7 @@ def monthly_contributions():
 
 @app.route("/audit-log")
 @login_required
-@role_required("admin", "cashier")
+@role_required("admin", "cashier", "auditor")
 def audit_log_page():
     category = request.args.get("category", "").strip()
     user = request.args.get("user", "").strip()
@@ -5186,6 +5870,8 @@ def audit_log_page():
         ("member", "Mitglieder"),
         ("penalty_type", "Strafarten"),
         ("settings", "Einstellungen"),
+        ("documents", "Dokumente"),
+        ("backup", "Backups"),
         ("system", "System"),
     ]
     users = [row[0] for row in db.session.query(AuditLog.username).filter(AuditLog.username.isnot(None)).distinct().order_by(AuditLog.username).all()]
@@ -5262,7 +5948,7 @@ def reports():
 
 @app.route("/exports")
 @login_required
-@role_required("admin", "cashier")
+@role_required("admin", "cashier", "auditor")
 def exports_page():
     return render_template(
         "exports.html",
@@ -5273,7 +5959,7 @@ def exports_page():
 
 @app.route("/exports/download")
 @login_required
-@role_required("admin", "cashier")
+@role_required("admin", "cashier", "auditor")
 def exports_download():
     export_type = request.args.get("type", "cashbook")
     fmt = request.args.get("format", "excel")
@@ -5895,8 +6581,12 @@ def event_delete(event_id):
 
 @app.route("/penalty-balances", methods=["GET", "POST"])
 @login_required
-@role_required("admin", "cashier")
+@role_required("admin", "cashier", "auditor")
 def penalty_balances():
+    if current_user.role == "auditor" and request.method == "POST":
+        flash("Kassenprüfer/-innen haben nur Leserechte und können keine Änderungen speichern.", "warning")
+        return redirect(request.referrer or url_for("dashboard"))
+
     if request.method == "POST":
         member_id = int(request.form.get("member_id", 0) or 0)
         amount_raw = request.form.get("amount", "0").strip()

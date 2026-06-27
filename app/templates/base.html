@@ -25,7 +25,25 @@
         header { background: #122017; color: white; padding: 12px 18px; box-shadow: 0 8px 24px rgba(0,0,0,0.16); position: sticky; top: 0; z-index: 50; }
         .topbar { display:flex; align-items:center; justify-content:space-between; gap:1rem; flex-wrap:wrap; }
         .brand { display:flex; align-items:center; gap:0.55rem; font-weight:800; letter-spacing:0.01em; }
-        .brand-badge { width:32px; height:32px; border-radius:10px; display:flex; align-items:center; justify-content:center; background:#1f7a3a; }
+        .brand-badge { width:32px; height:32px; border-radius:10px; display:flex; align-items:center; justify-content:center; background:#1f7a3a; color:white; text-decoration:none; }
+        .brand-badge:hover { filter:brightness(1.08); transform:translateY(-1px); }
+        .brand-version { font-size:0.72rem; font-weight:700; color:#b8d7c1; background:rgba(255,255,255,0.10); border:1px solid rgba(255,255,255,0.12); border-radius:999px; padding:3px 7px; white-space:nowrap; }
+        .database-selector { position:relative; display:inline-flex; align-items:center; }
+        .database-badge { display:inline-flex; align-items:center; gap:6px; border-radius:999px; padding:5px 10px; border:1px solid rgba(255,255,255,.16); font-size:.78rem; font-weight:800; white-space:nowrap; cursor:pointer; }
+        .database-badge.production { background:#eaf7ee; color:#176a2f; border-color:#b7e4c7; }
+        .database-badge.test { background:#fff1f1; color:#b91c1c; border-color:#fecaca; }
+        .database-badge .chevron { font-size:.7rem; opacity:.8; }
+        .database-menu { display:none; position:absolute; top:calc(100% + 8px); left:0; min-width:270px; background:white; border:1px solid var(--line); border-radius:14px; box-shadow:var(--shadow); padding:6px; z-index:80; }
+        .database-selector.open .database-menu { display:block; }
+        .database-option { width:100%; display:flex; gap:10px; align-items:flex-start; text-align:left; border:0; background:transparent; color:var(--text); padding:10px 12px; border-radius:10px; cursor:pointer; }
+        .database-option:hover { background:#f8fafc; filter:none; }
+        .database-option strong { display:block; }
+        .database-option small { display:block; color:var(--muted); font-weight:400; margin-top:2px; }
+        .database-option.production strong, .database-option.production .db-icon { color:#176a2f; }
+        .database-option.test strong, .database-option.test .db-icon { color:#dc2626; }
+        .database-option.active { background:#f8fafc; }
+
+        .auditor-readonly-note { background:#f8fafc; border:1px solid var(--line); border-radius:12px; padding:10px 12px; color:var(--muted); margin-bottom:14px; }
         .user-meta { font-size:0.78rem; color:#d7e6dc; text-align:right; white-space:nowrap; }
         nav { display:flex; gap:0.45rem; align-items:center; flex-wrap:wrap; margin-top:10px; }
         nav a, .nav-dropbtn { color: white; text-decoration: none; border-radius:999px; padding:7px 10px; display:inline-block; }
@@ -103,7 +121,29 @@
 
 <header>
     <div class="topbar">
-        <div class="brand"><span class="brand-badge">🎳</span><span>Kegelkasse</span></div>
+        <div class="brand">
+            <a class="brand-badge" href="{{ url_for('test_database_page') }}" title="Test-Datenbank-Auswahl">🎳</a>
+            <span>Kegelkasse</span>
+            <span class="brand-version">v{{ app_version }}</span>
+            <div class="database-selector" id="databaseSelector">
+                <button type="button" class="database-badge {% if active_database_display.is_test %}test{% else %}production{% endif %}" id="databaseToggle" aria-haspopup="true" aria-expanded="false">
+                    <span>▰</span>
+                    <span>{{ active_database_display.label }}</span>
+                    <span class="chevron">▾</span>
+                </button>
+                <div class="database-menu" id="databaseMenu">
+                    {% for profile in database_profile_displays %}
+                        <form method="post" action="{{ url_for('switch_database_profile') }}">
+                            <input type="hidden" name="database_profile" value="{{ profile.key }}">
+                            <button type="submit" class="database-option {% if profile.is_test %}test{% else %}production{% endif %} {% if profile.key == active_database_profile %}active{% endif %}">
+                                <span class="db-icon">▰</span>
+                                <span><strong>{{ profile.label }}</strong><small>{{ profile.description }}</small></span>
+                            </button>
+                        </form>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
         {% if current_user.is_authenticated %}
             <div class="user-meta">Angemeldet als: <a href="{{ url_for('account') }}" style="color:#fff;">{{ current_user.username }}</a> · Rolle: {{ current_user.role_label() }}</div>
         {% endif %}
@@ -128,9 +168,9 @@
                 </span>
             </span>
 
-            {% if current_user.role in ["admin", "cashier"] %}
+            {% if current_user.role in ["admin", "cashier", "auditor"] %}
                 <span class="nav-dropdown">
-                    <span class="nav-dropbtn">Finanzen ▾</span>
+                    <span class="nav-dropbtn">Finanzen{% if current_user.role == "auditor" %} (lesen){% endif %} ▾</span>
                     <span class="nav-dropdown-content">
                         <a href="{{ url_for('cashbook') }}">Kassenbuch</a>
                         <a href="{{ url_for('monthly_contributions') }}">Monatsbeiträge</a>
@@ -160,6 +200,19 @@
                 <a href="{{ url_for('rate_settings') }}">Aktuelle Werte</a>
             {% endif %}
 
+            {% if current_user.role == "auditor" %}
+                <span class="nav-dropdown">
+                    <span class="nav-dropbtn">Prüfung ▾</span>
+                    <span class="nav-dropdown-content">
+                        <a href="{{ url_for('cashbook') }}">Kassenbuch</a>
+                        <a href="{{ url_for('cash_audits') }}">Kassenprüfung</a>
+                        <a href="{{ url_for('annual_closings') }}">Jahresabschluss</a>
+                        <a href="{{ url_for('documents_page') }}">Dokumente</a>
+                        <a href="{{ url_for('audit_log_page') }}">Revisionsprotokoll</a>
+                    </span>
+                </span>
+            {% endif %}
+
             {% if current_user.role == "admin" %}
                 <span class="nav-dropdown">
                     <span class="nav-dropbtn">Administration ▾</span>
@@ -172,9 +225,8 @@
                         <a href="{{ url_for('audit_log_page') }}">Revisionsprotokoll</a>
                         <a href="{{ url_for('backups_page') }}">Datensicherung</a>
                         <span class="nav-divider"></span>
-                        <span class="nav-section-title">Umzug & öffentliche Version</span>
-                        <a href="{{ url_for('backups_page') }}#club-export">Verein exportieren</a>
-                        <a href="{{ url_for('backups_page') }}#club-import">Verein importieren</a>
+                        <span class="nav-section-title">Daten übernehmen & ausgeben</span>
+                        <a href="{{ url_for('import_export_page') }}">Import & Export</a>
                     </span>
                 </span>
             {% endif %}
@@ -199,6 +251,32 @@
 
 <script>
 (function () {
+    const selector = document.getElementById('databaseSelector');
+    const toggle = document.getElementById('databaseToggle');
+    if (!selector || !toggle) return;
+    toggle.addEventListener('click', function (event) {
+        event.preventDefault();
+        event.stopPropagation();
+        selector.classList.toggle('open');
+        toggle.setAttribute('aria-expanded', selector.classList.contains('open') ? 'true' : 'false');
+    });
+    document.addEventListener('click', function (event) {
+        if (!selector.contains(event.target)) {
+            selector.classList.remove('open');
+            toggle.setAttribute('aria-expanded', 'false');
+        }
+    });
+    document.addEventListener('keydown', function (event) {
+        if (event.key === 'Escape') {
+            selector.classList.remove('open');
+            toggle.setAttribute('aria-expanded', 'false');
+        }
+    });
+})();
+</script>
+
+<script>
+(function () {
     window.setTimeout(function () {
         document.querySelectorAll('.flash-auto-hide.success').forEach(function (message) {
             message.style.transition = 'opacity 0.4s ease';
@@ -209,5 +287,34 @@
 })();
 </script>
 
+
+{% if current_user.is_authenticated and current_user.role == "auditor" %}
+<script id="auditor-readonly-guard">
+(function () {
+    function isSafeReadOnlyForm(form) {
+        var method = (form.getAttribute('method') || 'get').toLowerCase();
+        return method !== 'post';
+    }
+    document.addEventListener('DOMContentLoaded', function () {
+        var hiddenCount = 0;
+        document.querySelectorAll('form').forEach(function (form) {
+            if (!isSafeReadOnlyForm(form)) {
+                form.style.display = 'none';
+                hiddenCount += 1;
+            }
+        });
+        if (hiddenCount > 0) {
+            var main = document.querySelector('main');
+            if (main && !document.querySelector('.auditor-readonly-note')) {
+                var note = document.createElement('div');
+                note.className = 'auditor-readonly-note';
+                note.innerHTML = '<strong>Lesemodus Kassenprüfer/-in:</strong> Eingabe-, Lösch- und Buchungsformulare sind ausgeblendet. Einsicht, Vorschau, Download und Export bleiben möglich.';
+                main.insertBefore(note, main.firstChild);
+            }
+        }
+    });
+})();
+</script>
+{% endif %}
 </body>
 </html>

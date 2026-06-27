@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="modern-card" style="max-width:780px;margin:0 auto;">
+    <div class="modern-header" style="margin-bottom:12px;">
+        <div class="modern-icon">🧪</div>
+        <div>
+            <h1>Test-Datenbank wählen</h1>
+            <p>Versteckte Testfunktion für Demo, Setup- und Importprüfungen. Die normale Loginseite bleibt für den Vereinsbetrieb aufgeräumt.</p>
+        </div>
+    </div>
+
+    <div class="subtle-box" style="margin-bottom:16px;">
+        <strong>Aktive Datenbank:</strong><br>
+        {{ active_database_info.label }}
+        {% if active_database_info.is_test %}
+            <span class="badge-warning">TESTMODUS</span>
+        {% endif %}
+        <p class="muted" style="margin:6px 0 0;">{{ active_database_info.description }}</p>
+    </div>
+
+    <div class="tip-box" style="margin:0 0 14px;">
+        <div>⚠️</div>
+        <div>
+            Die echte Vereinsdatenbank wird nicht überschrieben. Testdatenbanken verwenden eigene SQLite-Dateien und eigene Dokumentenordner.
+            Änderungen in einer Testdatenbank bleiben gespeichert, bis du diese ausdrücklich zurücksetzt oder löschst.
+        </div>
+    </div>
+
+    <form method="post" action="{{ url_for('switch_database_profile') }}" class="test-db-form">
+        <label>Datenbank
+            <select name="database_profile">
+                {% for key, info in database_profiles.items() %}
+                    <option value="{{ key }}" {% if key == active_database_profile %}selected{% endif %}>{{ info.label }}</option>
+                {% endfor %}
+            </select>
+            <small>Nach dem Wechsel startet der Docker-Container kurz neu.</small>
+        </label>
+
+        <label class="checkbox-row" style="margin-top:2px;">
+            <input type="checkbox" name="reset_test_database" value="1">
+            <span>Gewählte Testdatenbank vorher leeren/zurücksetzen<br><small>Bei der echten Vereinsdatenbank wird diese Option ignoriert.</small></span>
+        </label>
+
+        <div class="inline-actions">
+            <button type="submit">Datenbank wechseln</button>
+            <a class="button secondary" href="{{ url_for('login') }}">Zur Loginseite</a>
+        </div>
+    </form>
+</div>
+<style>
+.test-db-form { display:grid; gap:12px; }
+.badge-warning { display:inline-block; margin-left:8px; padding:3px 8px; border-radius:999px; background:#fff7ed; border:1px solid #fed7aa; color:#9a3412; font-size:.78rem; font-weight:800; }
+</style>
+{% endblock %}
