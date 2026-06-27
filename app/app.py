@@ -1,4 +1,6 @@
 from datetime import datetime, timedelta
+import uuid
+import hashlib
 import os
 import json
 import zipfile
@@ -76,7 +78,7 @@ login_manager.login_view = "login"
 login_manager.login_message = "Bitte zuerst anmelden."
 login_manager.init_app(app)
 
-APP_VERSION = "0.98.36"
+APP_VERSION = "0.98.38"
 
 
 def active_database_info():
@@ -1245,7 +1247,13 @@ def create_club_export(include_documents=True):
         pass
 
     return target
-
+    
+def sha256_file(path):
+    digest = hashlib.sha256()
+    with open(path, "rb") as file_handle:
+        for chunk in iter(lambda: file_handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
 def create_database_backup(kind="manual"):
     folder = backup_dir()
     now = datetime.now()
@@ -1265,13 +1273,32 @@ def create_database_backup(kind="manual"):
 
     sanitize_sqlite_settings_for_export(temp_db)
 
+    include_documents = backup_settings().get("include_documents", True)
+
     metadata = {
+        "format_version": 3,
+        "backup_uuid": str(uuid.uuid4()),
         "created_at": now.isoformat(timespec="seconds"),
+        "created_by": current_user.username if current_user and current_user.is_authenticated else "system",
         "kind": kind,
         "app": "Kegelkasse",
+        "app_version": APP_VERSION,
+        "database_profile": get_active_database_profile(),
+        "club_name": setting_value("club_name", "Alle 8te") or "Alle 8te",
         "database_file": DATABASE_PATH.name,
-        "include_documents": backup_settings().get("include_documents", True),
-        "format_version": 2,
+        "include_documents": include_documents,
+        "includes": {
+            "database": True,
+            "documents": include_documents,
+            "settings": True,
+            "secrets": False,
+        },
+        "statistics": {
+            "members": Member.query.count(),
+            "events": BowlingEvent.query.count(),
+            "cashbook_entries": CashbookEntry.query.count(),
+            "documents": Document.query.filter(Document.deleted_at.is_(None)).count(),
+        },
         "secrets_exported": False,
         "secrets_hint": "SMTP-, WebDAV- und Cloud-Zugangsdaten werden aus Sicherheitsgründen nicht in Backup-ZIPs gespeichert und müssen nach Restore neu eingetragen werden.",
     }
@@ -1279,6 +1306,20 @@ def create_database_backup(kind="manual"):
     with zipfile.ZipFile(target, "w", compression=zipfile.ZIP_DEFLATED) as zf:
         zf.write(temp_db, arcname="kegelkasse.db")
         zf.writestr("backup_info.json", json.dumps(metadata, ensure_ascii=False, indent=2))
+        zf.writestr(
+            "README_BACKUP.txt",
+            "Kegelkasse Backup\n"
+            "=================\n\n"
+            f"Erstellt: {metadata['created_at']}\n"
+            f"Version: {metadata['app_version']}\n"
+            f"Verein: {metadata['club_name']}\n"
+            f"Backup-ID: {metadata['backup_uuid']}\n\n"
+            "Dieses Backup enthält die Kegelkasse-Datenbank"
+            + (" und die Dokumentenablage" if metadata["include_documents"] else "")
+            + ".\n\n"
+            "Vor einer Wiederherstellung erstellt die Kegelkasse automatisch eine Sicherheitskopie der aktuellen Daten.\n\n"
+            "Sicherheitshinweis: SMTP-, WebDAV- und Cloud-Zugangsdaten werden nicht exportiert und müssen nach einer Wiederherstellung neu eingetragen werden.\n",
+        )
         # Einstellungen zusätzlich lesbar ablegen. Die eigentlichen Daten sind weiterhin in der DB.
         zf.writestr(
             "app_settings.json",

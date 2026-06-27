@@ -7,13 +7,13 @@
 .document-icon { width:44px; height:44px; border-radius:14px; display:flex; align-items:center; justify-content:center; background:#ecfdf5; color:#047857; font-size:24px; flex:0 0 auto; }
 .document-title h1 { margin:0; }
 .document-title p { margin:6px 0 0; color:#667085; }
-.document-card { background:#fff; border:1px solid #e5e7eb; border-radius:16px; padding:18px; margin-bottom:16px; box-shadow:0 4px 18px rgba(15, 23, 42, 0.06); }
+.document-card { background:#fff; border:1px solid #e5e7eb; border-radius:16px; padding:18px; margin-bottom:16px; box-shadow:0 4px 18px rgba(15,23,42,.06); }
 .document-card h2 { margin-top:0; }
 .document-sub { color:#667085; margin-top:-4px; }
 .document-grid { display:grid; grid-template-columns:1.15fr .85fr; gap:18px; }
-.form-grid { display:grid; grid-template-columns:repeat(2, minmax(180px, 1fr)); gap:14px; }
+.form-grid { display:grid; grid-template-columns:repeat(2,minmax(180px,1fr)); gap:14px; }
 .form-grid-wide { grid-column:1 / -1; }
-.document-list { display:grid; grid-template-columns:repeat(2, minmax(260px, 1fr)); gap:14px; }
+.document-list { display:grid; grid-template-columns:repeat(2,minmax(260px,1fr)); gap:14px; }
 .document-item { border:1px solid #e5e7eb; border-radius:14px; padding:14px; background:#fafafa; }
 .document-item.archived { background:#f3f4f6; border-style:dashed; opacity:.88; }
 .document-item-head { display:flex; gap:10px; align-items:flex-start; justify-content:space-between; }
@@ -21,24 +21,37 @@
 .document-item-icon { width:38px; height:38px; border-radius:12px; display:flex; align-items:center; justify-content:center; background:#fff; border:1px solid #e5e7eb; font-size:20px; flex:0 0 auto; }
 .document-meta { color:#667085; font-size:.92rem; margin-top:6px; line-height:1.5; }
 .document-desc { margin-top:10px; color:#374151; }
-.document-actions { display:flex; flex-wrap:wrap; gap:8px; margin-top:12px; }
-.preview-box { margin-top:12px; border:1px solid #e5e7eb; border-radius:12px; overflow:hidden; background:#fff; }
-.preview-box summary { cursor:pointer; padding:10px 12px; font-weight:700; background:#f9fafb; }
-.preview-frame { width:100%; min-height:260px; border:0; display:block; background:white; }
-.preview-image { width:100%; max-height:360px; object-fit:contain; display:block; background:#f8fafc; }
-.btn-primary { background:#047857; color:white; border:0; border-radius:9px; padding:10px 14px; width:auto; font-weight:bold; }
-.btn-secondary { background:white; color:#111827; border:1px solid #d1d5db; border-radius:9px; padding:9px 13px; width:auto; text-decoration:none; display:inline-block; }
-.btn-danger { background:#fff; color:#b91c1c; border:1px solid #fecaca; border-radius:9px; padding:9px 13px; width:auto; }
+.document-actions { display:flex; flex-wrap:wrap; gap:8px; margin-top:12px; align-items:center; }
+.btn-primary { background:#047857; color:white; border:0; border-radius:9px; padding:10px 14px; width:auto; font-weight:bold; cursor:pointer; }
+.btn-secondary { background:white; color:#111827; border:1px solid #d1d5db; border-radius:9px; padding:9px 13px; width:auto; text-decoration:none; display:inline-block; cursor:pointer; }
+.btn-danger { background:#fff; color:#b91c1c; border:1px solid #fecaca; border-radius:9px; padding:9px 13px; width:auto; cursor:pointer; }
 .info-box { display:flex; gap:12px; align-items:flex-start; padding:14px; border-radius:12px; background:#eff6ff; border:1px solid #bfdbfe; color:#1e3a8a; margin-bottom:16px; }
-.filter-bar { display:grid; grid-template-columns: 1fr 220px auto; gap:10px; align-items:end; }
+.filter-bar { display:grid; grid-template-columns:1fr 220px auto; gap:10px; align-items:end; }
 .badge { display:inline-block; padding:3px 9px; border-radius:999px; font-size:.82rem; background:#dcfce7; color:#166534; border:1px solid #86efac; }
 .badge-archived { background:#fee2e2; color:#991b1b; border-color:#fecaca; }
 .badge-protected { background:#eef2ff; color:#3730a3; border-color:#c7d2fe; }
 .empty-state { border:1px dashed #d1d5db; border-radius:14px; padding:24px; text-align:center; color:#667085; background:#fafafa; }
+
+.preview-modal-backdrop { display:none; position:fixed; inset:0; background:rgba(15,23,42,.62); z-index:200; padding:24px; }
+.preview-modal-backdrop.open { display:flex; align-items:center; justify-content:center; }
+.preview-modal { width:min(1100px,96vw); height:min(820px,92vh); background:#fff; border-radius:18px; box-shadow:0 20px 70px rgba(0,0,0,.28); display:flex; flex-direction:column; overflow:hidden; }
+.preview-modal-header { display:flex; align-items:flex-start; justify-content:space-between; gap:16px; padding:16px 18px; border-bottom:1px solid #e5e7eb; background:#f8fafc; }
+.preview-modal-title strong { display:block; font-size:1.05rem; }
+.preview-modal-title span { display:block; color:#667085; font-size:.9rem; margin-top:3px; }
+.preview-modal-close { background:#fff; color:#111827; border:1px solid #d1d5db; border-radius:999px; width:38px; height:38px; padding:0; font-size:22px; line-height:1; cursor:pointer; }
+.preview-modal-body { flex:1; background:#f3f4f6; overflow:auto; display:flex; align-items:stretch; justify-content:center; }
+.preview-frame { width:100%; height:100%; border:0; background:white; }
+.preview-image { max-width:100%; max-height:100%; object-fit:contain; margin:auto; display:block; }
+.preview-message { margin:auto; max-width:640px; background:white; border:1px solid #e5e7eb; border-radius:14px; padding:22px; color:#374151; text-align:center; }
+.preview-modal-footer { display:flex; justify-content:space-between; align-items:center; gap:10px; padding:12px 18px; border-top:1px solid #e5e7eb; background:#fff; }
+
 @media (max-width:900px) {
   .document-grid, .document-list, .form-grid, .filter-bar { grid-template-columns:1fr; }
   .document-actions { align-items:stretch; }
   .document-actions a, .document-actions button { width:100%; text-align:center; }
+  .preview-modal-backdrop { padding:8px; }
+  .preview-modal { width:100%; height:94vh; border-radius:14px; }
+  .preview-modal-header, .preview-modal-footer { padding:12px; }
 }
 </style>
 
@@ -55,7 +68,7 @@
         {% if current_user.role in ['admin', 'cashier'] %}
         <section class="document-card">
             <h2>Dokument hochladen</h2>
-            <p class="document-sub">PDF, Bilder, Text- und Office-Dateien hochladen, kategorisieren, durchsuchen und optional einem Kegelabend oder einer Kassenbuchbuchung zuordnen. Am Handy kann über die Dateiauswahl direkt die Kamera genutzt werden.</p>
+            <p class="document-sub">PDF, Bilder, Text- und Office-Dateien hochladen, kategorisieren, durchsuchen und optional einem Kegelabend oder einer Kassenbuchbuchung zuordnen.</p>
             <form method="post" enctype="multipart/form-data">
                 <input type="hidden" name="form_action" value="upload">
                 <div class="form-grid">
@@ -114,14 +127,14 @@
             <h2>Hinweise</h2>
             <div class="info-box">
                 <strong>ℹ️</strong>
-                <div>Dokumente werden archiviert statt endgültig gelöscht. Revisionsrelevante Kategorien wie Kassenprüfung, Jahresabschluss und Historische Importdaten bleiben als Nachweis erhalten und können über „Archivierte anzeigen“ eingeblendet werden.</div>
+                <div>Dokumente werden archiviert statt endgültig gelöscht. Revisionsrelevante Kategorien wie Kassenprüfung, Jahresabschluss und Historische Importdaten bleiben als Nachweis erhalten.</div>
             </div>
             <p><strong>Typische Ablage</strong></p>
             <ul>
                 <li>Bahnrechnungen direkt dem Kegelabend zuordnen.</li>
-                <li>PDFs, Bilder und Textdateien können direkt als Vorschau geöffnet werden.</li>
+                <li>Vorschauen werden erst nach Klick geladen.</li>
                 <li>Kontoauszüge als Banknachweis ablegen.</li>
-                <li>Eigene Kategorien können bei Bedarf direkt beim Hochladen ergänzt werden.</li>
+                <li>Eigene Kategorien können beim Hochladen ergänzt werden.</li>
             </ul>
         </aside>
     </div>
@@ -151,6 +164,11 @@
     {% if documents %}
         <div class="document-list">
             {% for doc in documents %}
+                {% set ext = doc.original_filename.rsplit('.', 1)[1].lower() if '.' in doc.original_filename else '' %}
+                {% set image_preview = ext in ['jpg', 'jpeg', 'png', 'gif', 'webp'] %}
+                {% set frame_preview = ext in ['pdf', 'txt', 'csv', 'json', 'html', 'htm', 'rtf'] %}
+                {% set previewable = image_preview or frame_preview %}
+
                 <article class="document-item {% if doc.is_archived() %}archived{% endif %}">
                     <div class="document-item-head">
                         <div class="document-item-title">
@@ -163,6 +181,7 @@
                             </div>
                         </div>
                     </div>
+
                     <div class="document-meta">
                         {% if doc.document_date %}Datum: {{ doc.document_date.strftime('%d.%m.%Y') }} · {% endif %}
                         Größe: {{ doc.size_label() }}<br>
@@ -172,24 +191,29 @@
                         {% if doc.event %}<br>Kegelabend: {{ doc.event.event_date.strftime('%d.%m.%Y') }}{% endif %}
                         {% if doc.cashbook_entry %}<br>Kassenbuch: {{ doc.cashbook_entry.booking_date.strftime('%d.%m.%Y') }} · {{ doc.cashbook_entry.reason }}{% endif %}
                     </div>
+
                     {% if doc.description %}
                         <div class="document-desc">{{ doc.description }}</div>
                     {% endif %}
-                    {% set ext = doc.original_filename.rsplit('.', 1)[1].lower() if '.' in doc.original_filename else '' %}
-                    {% set previewable = ext in ['pdf', 'jpg', 'jpeg', 'png', 'gif', 'webp', 'txt', 'csv', 'json', 'html', 'htm', 'rtf'] %}
-                    {% if previewable %}
-                        <details class="preview-box">
-                            <summary>👁 Vorschau anzeigen</summary>
-                            {% if ext in ['jpg', 'jpeg', 'png', 'gif', 'webp'] %}
-                                <img class="preview-image" src="{{ url_for('document_preview', document_id=doc.id) }}" alt="Vorschau {{ doc.title }}">
-                            {% else %}
-                                <iframe class="preview-frame" src="{{ url_for('document_preview', document_id=doc.id) }}"></iframe>
-                            {% endif %}
-                        </details>
-                    {% endif %}
+
                     <div class="document-actions">
-                        {% if not previewable %}<span class="document-meta">Für diesen Dateityp ist aktuell nur Download möglich.</span>{% endif %}
+                        {% if previewable %}
+                            <button
+                                class="btn-secondary document-preview-button"
+                                type="button"
+                                data-title="{{ doc.title }}"
+                                data-filename="{{ doc.original_filename }}"
+                                data-ext="{{ ext }}"
+                                data-preview-url="{{ url_for('document_preview', document_id=doc.id) }}"
+                                data-download-url="{{ url_for('document_download', document_id=doc.id) }}">
+                                👁 Vorschau
+                            </button>
+                        {% else %}
+                            <span class="document-meta">Für diesen Dateityp ist aktuell nur Download möglich.</span>
+                        {% endif %}
+
                         <a class="btn-secondary" href="{{ url_for('document_download', document_id=doc.id) }}">⬇ Herunterladen</a>
+
                         {% if current_user.role in ['admin', 'cashier'] %}
                             {% if doc.is_archived() %}
                                 <form method="post">
@@ -214,7 +238,24 @@
     {% endif %}
 </div>
 
-{% endblock %}
+<div class="preview-modal-backdrop" id="documentPreviewModal" aria-hidden="true">
+    <div class="preview-modal" role="dialog" aria-modal="true" aria-labelledby="documentPreviewTitle">
+        <div class="preview-modal-header">
+            <div class="preview-modal-title">
+                <strong id="documentPreviewTitle">Dokumentvorschau</strong>
+                <span id="documentPreviewFilename"></span>
+            </div>
+            <button class="preview-modal-close" type="button" onclick="closeDocumentPreview()" aria-label="Schließen">×</button>
+        </div>
+        <div class="preview-modal-body" id="documentPreviewBody">
+            <div class="preview-message">Noch keine Vorschau geladen.</div>
+        </div>
+        <div class="preview-modal-footer">
+            <span class="document-meta">Die Datei wird erst beim Öffnen der Vorschau geladen.</span>
+            <a class="btn-secondary" id="documentPreviewDownload" href="#">⬇ Herunterladen</a>
+        </div>
+    </div>
+</div>
 
 <script>
 function toggleNewDocumentCategory() {
@@ -223,5 +264,96 @@ function toggleNewDocumentCategory() {
   if (!select || !row) return;
   row.style.display = select.value === '__new__' ? 'block' : 'none';
 }
-document.addEventListener('DOMContentLoaded', toggleNewDocumentCategory);
+
+function openDocumentPreview(button) {
+  const modal = document.getElementById('documentPreviewModal');
+  const body = document.getElementById('documentPreviewBody');
+  const title = document.getElementById('documentPreviewTitle');
+  const filename = document.getElementById('documentPreviewFilename');
+  const download = document.getElementById('documentPreviewDownload');
+
+  const previewUrl = button.dataset.previewUrl;
+  const downloadUrl = button.dataset.downloadUrl;
+  const ext = (button.dataset.ext || '').toLowerCase();
+
+  title.textContent = button.dataset.title || 'Dokumentvorschau';
+  filename.textContent = button.dataset.filename || '';
+  download.href = downloadUrl || '#';
+
+  body.innerHTML = '';
+
+  if (['jpg', 'jpeg', 'png', 'gif', 'webp'].includes(ext)) {
+    const img = document.createElement('img');
+    img.className = 'preview-image';
+    img.src = previewUrl;
+    img.alt = button.dataset.title || 'Dokumentvorschau';
+    body.appendChild(img);
+} else if (['txt', 'csv', 'json', 'html', 'htm', 'rtf'].includes(ext)) {
+    fetch(previewUrl)
+      .then(response => response.text())
+      .then(text => {
+        const pre = document.createElement('pre');
+        pre.style.whiteSpace = 'pre-wrap';
+        pre.style.wordBreak = 'break-word';
+        pre.style.margin = '0';
+        pre.style.padding = '16px';
+        pre.style.background = '#fff';
+        pre.style.width = '100%';
+        pre.textContent = text;
+        body.appendChild(pre);
+      })
+      .catch(() => {
+        const message = document.createElement('div');
+        message.className = 'preview-message';
+        message.textContent = 'Die Vorschau konnte nicht geladen werden. Bitte die Datei herunterladen.';
+        body.appendChild(message);
+      });
+  } else if (['pdf'].includes(ext)) {
+    const frame = document.createElement('iframe');
+    frame.className = 'preview-frame';
+    frame.src = previewUrl;
+    body.appendChild(frame);
+  } else {
+    const message = document.createElement('div');
+    message.className = 'preview-message';
+    message.textContent = 'Für diesen Dateityp gibt es keine direkte Vorschau. Bitte die Datei herunterladen.';
+    body.appendChild(message);
+  }
+
+  modal.classList.add('open');
+  modal.setAttribute('aria-hidden', 'false');
+}
+
+function closeDocumentPreview() {
+  const modal = document.getElementById('documentPreviewModal');
+  const body = document.getElementById('documentPreviewBody');
+  modal.classList.remove('open');
+  modal.setAttribute('aria-hidden', 'true');
+  body.innerHTML = '<div class="preview-message">Noch keine Vorschau geladen.</div>';
+}
+
+document.addEventListener('DOMContentLoaded', function () {
+  toggleNewDocumentCategory();
+
+  document.querySelectorAll('.document-preview-button').forEach(function (button) {
+    button.addEventListener('click', function () {
+      openDocumentPreview(button);
+    });
+  });
+
+  const modal = document.getElementById('documentPreviewModal');
+  modal.addEventListener('click', function (event) {
+    if (event.target === modal) {
+      closeDocumentPreview();
+    }
+  });
+
+  document.addEventListener('keydown', function (event) {
+    if (event.key === 'Escape') {
+      closeDocumentPreview();
+    }
+  });
+});
 </script>
+
+{% endblock %}
