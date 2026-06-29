@@ -2411,6 +2411,45 @@ def dashboard():
 
     open_member_rows = sorted(open_member_rows, key=lambda row: row["amount_cents"], reverse=True)[:5]
 
+    dashboard_tasks = []
+
+    if active_event:
+        if active_event.status == "open":
+            status_text = "Strafen erfassen"
+        elif active_event.status == "settlement":
+            status_text = "Barzahlungen erfassen"
+        elif active_event.status == "lane_cost":
+            status_text = "Bahnkosten erfassen"
+        else:
+            status_text = "In Bearbeitung"
+
+        dashboard_tasks.append({
+            "priority": "high",
+            "icon": "🎳",
+            "title": "Aktiven Kegelabend fortsetzen",
+            "description": f"{active_event.event_date.strftime('%d.%m.%Y')} · {status_text}",
+            "url": url_for("event_detail", event_id=active_event.id),
+        })
+
+    if open_monthly_batches:
+        batch = open_monthly_batches[0]
+        dashboard_tasks.append({
+            "priority": "medium",
+            "icon": "📌",
+            "title": "Monatsbeiträge prüfen",
+            "description": f"{batch.period_label()} · {batch.status_label()}",
+            "url": url_for("monthly_contributions"),
+        })
+
+    if open_penalties_cents > 0:
+        dashboard_tasks.append({
+            "priority": "medium",
+            "icon": "💶",
+            "title": "Offene Strafkonten prüfen",
+            "description": f"{len(open_member_rows)} Mitglieder · {cents_to_euro(open_penalties_cents)} € offen",
+            "url": url_for("penalty_balances"),
+        })
+
     return render_template(
         "dashboard.html",
         member_count=member_count,
@@ -2430,6 +2469,7 @@ def dashboard():
         last_audit_entries=last_audit_entries,
         open_monthly_batches=open_monthly_batches,
         open_member_rows=open_member_rows,
+        dashboard_tasks=dashboard_tasks,
         current_year=current_year,
         year_closed_events=year_closed_events,
         year_cancelled_events=year_cancelled_events,

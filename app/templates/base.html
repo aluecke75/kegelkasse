@@ -114,6 +114,59 @@
             .counter-input { width: 42px; }
             .nav-dropdown-content { position:static; margin-top:4px; }
         }
+        .dashboard-task-list{
+display:flex;
+flex-direction:column;
+gap:10px;
+}
+
+.dashboard-task{
+display:flex;
+align-items:center;
+text-decoration:none;
+padding:14px;
+border-radius:12px;
+border:1px solid #dbe5ef;
+background:#fff;
+transition:.2s;
+}
+
+.dashboard-task:hover{
+background:#f8fbff;
+transform:translateY(-1px);
+}
+
+.task-icon{
+font-size:24px;
+width:42px;
+text-align:center;
+}
+
+.task-content{
+flex:1;
+}
+
+.task-content span{
+color:#6b7280;
+font-size:.9rem;
+}
+
+.task-arrow{
+font-size:20px;
+color:#94a3b8;
+}
+
+.priority-high{
+border-left:6px solid #dc2626;
+}
+
+.priority-medium{
+border-left:6px solid #f59e0b;
+}
+
+.priority-low{
+border-left:6px solid #22c55e;
+}
     </style>
 </head>
 

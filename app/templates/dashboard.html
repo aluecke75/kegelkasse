@@ -36,6 +36,25 @@
     </div>
 </div>
 
+{% if dashboard_tasks %}
+<div class="modern-card">
+    <h2>📋 Heute zu erledigen</h2>
+
+    <div class="dashboard-task-list">
+        {% for task in dashboard_tasks %}
+            <a class="dashboard-task priority-{{ task.priority }}" href="{{ task.url }}">
+                <div class="task-icon">{{ task.icon }}</div>
+                <div class="task-content">
+                    <strong>{{ task.title }}</strong><br>
+                    <span>{{ task.description }}</span>
+                </div>
+                <div class="task-arrow">➜</div>
+            </a>
+        {% endfor %}
+    </div>
+</div>
+{% endif %}
+
 <div class="section-grid">
     <div class="modern-card">
         <h2>💰 Kassenstand</h2>
