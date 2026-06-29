@@ -11,18 +11,40 @@
 
 <div class="section-grid">
     <div class="modern-card">
-        <h2>Neuer Kegelabend</h2>
-        <p class="muted">Starte einen neuen Abend oder trage einen ausgefallenen Abend nach.</p>
-        {% if current_user.role in ["admin", "cashier", "member"] %}
-            <a class="button" href="{{ url_for('event_new') }}">Kegelabend anlegen</a>
+        {% if active_event %}
+            <h2>Aktiver Kegelabend</h2>
+            <p class="muted">Es ist bereits ein Kegelabend offen. Bitte diesen Abend abschließen, bevor ein neuer Abend angelegt wird.</p>
+            <p><strong>{{ active_event.event_date.strftime('%d.%m.%Y') }}</strong></p>
+            <p>
+                {% if active_event.status == "open" %}
+                    Status: Strafen erfassen
+                {% elif active_event.status == "settlement" %}
+                    Status: Barzahlungen erfassen
+                {% elif active_event.status == "lane_cost" %}
+                    Status: Bahnkosten erfassen
+                {% else %}
+                    Status: In Bearbeitung
+                {% endif %}
+            </p>
+            <a class="button" href="{{ url_for('event_detail', event_id=active_event.id) }}">Aktiven Abend öffnen</a>
         {% else %}
-            <span class="muted">Nur Benutzer mit Schreibrechten können neue Abende anlegen.</span>
+            <h2>Neuer Kegelabend</h2>
+            <p class="muted">Starte einen neuen Abend oder trage einen ausgefallenen Abend nach.</p>
+            {% if current_user.role in ["admin", "cashier", "member"] %}
+                <a class="button" href="{{ url_for('event_new') }}">Kegelabend anlegen</a>
+            {% else %}
+                <span class="muted">Nur Benutzer mit Schreibrechten können neue Abende anlegen.</span>
+            {% endif %}
         {% endif %}
     </div>
 
     <div class="modern-card">
         <h2>Hinweis</h2>
-        <p class="muted">Offene Abende sollten zuerst abgeschlossen werden, bevor ein neuer Abend gestartet wird.</p>
+        {% if active_event %}
+            <p class="muted">Solange ein Kegelabend offen ist, wird kein weiterer Abend angelegt. Das verhindert doppelte Erfassungen.</p>
+        {% else %}
+            <p class="muted">Offene Abende sollten zuerst abgeschlossen werden, bevor ein neuer Abend gestartet wird.</p>
+        {% endif %}
     </div>
 </div>
 

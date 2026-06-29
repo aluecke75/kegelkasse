@@ -6064,8 +6064,19 @@ def my_event_data():
 @login_required
 def events():
     event_list = BowlingEvent.query.order_by(BowlingEvent.event_date.desc()).all()
-    return render_template("events.html", events=event_list)
 
+    active_event = (
+        BowlingEvent.query
+        .filter(BowlingEvent.status.in_(("open", "settlement", "lane_cost")))
+        .order_by(BowlingEvent.event_date.desc(), BowlingEvent.id.desc())
+        .first()
+    )
+
+    return render_template(
+        "events.html",
+        events=event_list,
+        active_event=active_event,
+    )
 
 @app.route("/events/new", methods=["GET", "POST"])
 @login_required
@@ -6074,7 +6085,7 @@ def event_new():
     today = next_event_date_from_rhythm()
     open_event = (
         BowlingEvent.query
-        .filter_by(status="open")
+        .filter(BowlingEvent.status.in_(("open", "settlement", "lane_cost")))
         .order_by(BowlingEvent.event_date.desc(), BowlingEvent.id.desc())
         .first()
     )

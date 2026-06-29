@@ -12,20 +12,28 @@
 
 <div class="two-column-grid">
     <div class="modern-card next-event-card">
-        <h2>Nächster Kegelabend</h2>
-        <p class="next-event-date">{{ next_event_date.strftime('%d.%m.%Y') }}</p>
-        <p class="next-event-label">{% if next_event_label == 'heute' %}<strong>heute 🎳</strong>{% else %}{{ next_event_label }}{% endif %}</p>
         {% if active_event %}
-            <div class="subtle-box">
-                <strong>Aktiver Kegelabend</strong><br>
-                {{ active_event.event_date.strftime('%d.%m.%Y') }}
-            </div>
+            <h2>Aktiver Kegelabend</h2>
+            <p class="next-event-date">{{ active_event.event_date.strftime('%d.%m.%Y') }}</p>
+            <p class="next-event-label">
+                {% if active_event.status == "open" %}
+                    Strafen erfassen
+                {% elif active_event.status == "settlement" %}
+                    Barzahlungen erfassen
+                {% elif active_event.status == "lane_cost" %}
+                    Bahnkosten erfassen
+                {% else %}
+                    In Bearbeitung
+                {% endif %}
+            </p>
             <p><a class="button" href="{{ url_for('event_detail', event_id=active_event.id) }}">Aktiven Abend öffnen</a></p>
         {% else %}
+            <h2>Nächster Kegelabend</h2>
+            <p class="next-event-date">{{ next_event_date.strftime('%d.%m.%Y') }}</p>
+            <p class="next-event-label">{% if next_event_label == 'heute' %}<strong>Heute 🎳</strong>{% else %}{{ next_event_label }}{% endif %}</p>
             <p><a class="button" href="{{ url_for('event_new') }}">Kegelabend starten</a></p>
         {% endif %}
     </div>
-
 </div>
 
 <div class="section-grid">

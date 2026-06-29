@@ -122,28 +122,37 @@
 <header>
     <div class="topbar">
         <div class="brand">
-            <a class="brand-badge" href="{{ url_for('test_database_page') }}" title="Test-Datenbank-Auswahl">🎳</a>
+            {% if developer_mode %}
+                <a class="brand-badge" href="{{ url_for('test_database_page') }}" title="Test-Datenbank-Auswahl">🎳</a>
+            {% else %}
+                <span class="brand-badge" title="Kegelkasse">🎳</span>
+            {% endif %}
+
             <span>Kegelkasse</span>
             <span class="brand-version">v{{ app_version }}</span>
-            <div class="database-selector" id="databaseSelector">
-                <button type="button" class="database-badge {% if active_database_display.is_test %}test{% else %}production{% endif %}" id="databaseToggle" aria-haspopup="true" aria-expanded="false">
-                    <span>▰</span>
-                    <span>{{ active_database_display.label }}</span>
-                    <span class="chevron">▾</span>
-                </button>
-                <div class="database-menu" id="databaseMenu">
-                    {% for profile in database_profile_displays %}
-                        <form method="post" action="{{ url_for('switch_database_profile') }}">
-                            <input type="hidden" name="database_profile" value="{{ profile.key }}">
-                            <button type="submit" class="database-option {% if profile.is_test %}test{% else %}production{% endif %} {% if profile.key == active_database_profile %}active{% endif %}">
-                                <span class="db-icon">▰</span>
-                                <span><strong>{{ profile.label }}</strong><small>{{ profile.description }}</small></span>
-                            </button>
-                        </form>
-                    {% endfor %}
+
+            {% if developer_mode %}
+                <div class="database-selector" id="databaseSelector">
+                    <button type="button" class="database-badge {% if active_database_display.is_test %}test{% else %}production{% endif %}" id="databaseToggle" aria-haspopup="true" aria-expanded="false">
+                        <span>▰</span>
+                        <span>{{ active_database_display.label }}</span>
+                        <span class="chevron">▾</span>
+                    </button>
+                    <div class="database-menu" id="databaseMenu">
+                        {% for profile in database_profile_displays %}
+                            <form method="post" action="{{ url_for('switch_database_profile') }}">
+                                <input type="hidden" name="database_profile" value="{{ profile.key }}">
+                                <button type="submit" class="database-option {% if profile.is_test %}test{% else %}production{% endif %} {% if profile.key == active_database_profile %}active{% endif %}">
+                                    <span class="db-icon">▰</span>
+                                    <span><strong>{{ profile.label }}</strong><small>{{ profile.description }}</small></span>
+                                </button>
+                            </form>
+                        {% endfor %}
+                    </div>
                 </div>
-            </div>
+            {% endif %}
         </div>
+
         {% if current_user.is_authenticated %}
             <div class="user-meta">Angemeldet als: <a href="{{ url_for('account') }}" style="color:#fff;">{{ current_user.username }}</a> · Rolle: {{ current_user.role_label() }}</div>
         {% endif %}
