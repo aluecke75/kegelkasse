@@ -2412,8 +2412,9 @@ def dashboard():
     open_member_rows = sorted(open_member_rows, key=lambda row: row["amount_cents"], reverse=True)[:5]
 
     dashboard_tasks = []
+    show_admin_tasks = current_user.role in ("admin", "cashier")
 
-    if active_event:
+    if show_admin_tasks and active_event:
         if active_event.status == "open":
             status_text = "Strafen erfassen"
         elif active_event.status == "settlement":
@@ -2431,7 +2432,7 @@ def dashboard():
             "url": url_for("event_detail", event_id=active_event.id),
         })
 
-    if open_monthly_batches:
+    if show_admin_tasks and open_monthly_batches:
         batch = open_monthly_batches[0]
         dashboard_tasks.append({
             "priority": "medium",
@@ -2441,7 +2442,7 @@ def dashboard():
             "url": url_for("monthly_contributions"),
         })
 
-    if open_penalties_cents > 0:
+    if show_admin_tasks and open_penalties_cents > 0:
         dashboard_tasks.append({
             "priority": "medium",
             "icon": "💶",

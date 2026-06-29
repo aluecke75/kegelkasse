@@ -802,7 +802,7 @@
                     {% elif participant.status in ['excused', 'unexcused'] %}
                         {% set group_label = 'Fehlt' %}
                     {% else %}
-                        {% set group_label = 'Da' %}
+                        {% set group_label = 'Anwesend' %}
                     {% endif %}
                     {% if ns.group != group_label %}
                         {% set ns.group = group_label %}
@@ -817,7 +817,7 @@
                         <td class="status-column" data-label="Status">
                             {% if participant.member_id %}
                                 <select class="form-control status-select status-input" name="participant_{{ participant.id }}_status" {% if entry_locked %}disabled{% endif %}>
-                                    <option value="present" {% if participant.status == "present" %}selected{% endif %}>Da</option>
+                                    <option value="present" {% if participant.status == "present" %}selected{% endif %}>Anwesend</option>
                                     <option value="excused" {% if participant.status == "excused" %}selected{% endif %}>Fehlt entsch.</option>
                                     <option value="unexcused" {% if participant.status == "unexcused" %}selected{% endif %}>Fehlt unentsch.</option>
                                 </select>
