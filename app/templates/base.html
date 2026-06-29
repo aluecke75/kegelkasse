@@ -164,7 +164,12 @@
             {% if not current_user.is_system_user %}
                 <a href="{{ url_for('my_event') }}">Mein Kegelabend</a>
             {% endif %}
-            <a href="{{ url_for('events') }}">Kegelabende</a>
+<a href="{{ url_for('events') }}">
+    Kegelabende
+    {% if active_event_nav %}
+        <span title="Aktiver Kegelabend offen" style="display:inline-block;width:8px;height:8px;background:#22c55e;border-radius:999px;margin-left:5px;vertical-align:middle;"></span>
+    {% endif %}
+</a>
 
             <span class="nav-dropdown">
                 <span class="nav-dropbtn">Auswertungen ▾</span>

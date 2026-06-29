@@ -128,6 +128,37 @@ def inject_database_test_mode():
         "app_version": APP_VERSION,
     }
 
+@app.context_processor
+def inject_active_event_navigation():
+    try:
+        active_event_nav = (
+            BowlingEvent.query
+            .filter(BowlingEvent.status.in_(("open", "settlement", "lane_cost")))
+            .order_by(BowlingEvent.event_date.desc(), BowlingEvent.id.desc())
+            .first()
+        )
+    except Exception:
+        active_event_nav = None
+
+    return {
+        "active_event_nav": active_event_nav,
+    }
+
+@app.context_processor
+def inject_active_event_navigation():
+    try:
+        active_event_nav = (
+            BowlingEvent.query
+            .filter(BowlingEvent.status.in_(("open", "settlement", "lane_cost")))
+            .order_by(BowlingEvent.event_date.desc(), BowlingEvent.id.desc())
+            .first()
+        )
+    except Exception:
+        active_event_nav = None
+
+    return {
+        "active_event_nav": active_event_nav,
+    }
 
 RATE_TYPES = {
     "monthly_fee": "Monatsbeitrag",
