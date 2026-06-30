@@ -183,7 +183,16 @@ border-left:6px solid #22c55e;
 
             <span>Kegelkasse</span>
             <span class="brand-version">v{{ app_version }}</span>
+            {#
+            =====================================================================
+Temporär deaktiviert (30.06.2026)
 
+Der sichtbare Datenbank-Umschalter wurde für die Vereinsversion
+entfernt. Zugriff auf die Demo-Datenbank künftig ausschließlich
+über die versteckte Entwicklerfunktion (🎳-Logo).
+
+Nicht löschen – ggf. für spätere Entwicklungsarbeiten wieder aktivieren.
+=====================================================================
             {% if developer_mode %}
                 <div class="database-selector" id="databaseSelector">
                     <button type="button" class="database-badge {% if active_database_display.is_test %}test{% else %}production{% endif %}" id="databaseToggle" aria-haspopup="true" aria-expanded="false">
@@ -204,6 +213,7 @@ border-left:6px solid #22c55e;
                     </div>
                 </div>
             {% endif %}
+            #}
         </div>
 
         {% if current_user.is_authenticated %}
