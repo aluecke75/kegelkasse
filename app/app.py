@@ -2408,6 +2408,32 @@ def dashboard():
     top_pump = pump_rows[0] if pump_rows else None
     top_wreath = wreath_rows[0] if wreath_rows else None
     top_absence = absence_rows[0] if absence_rows else None
+    member_dashboard = None
+    current_member = Member.query.filter_by(user_id=current_user.id).first()
+
+    if current_member:
+        member_balance_cents = member_penalty_balance(current_member.id)
+
+        member_pumps = next((row["total"] for row in pump_rows if row["member_id"] == current_member.id), 0)
+        member_wreaths = next((row["total"] for row in wreath_rows if row["member_id"] == current_member.id), 0)
+
+        member_absence_row = next((row for row in absence_rows if row.get("member_id") == current_member.id), None)
+        member_absences = member_absence_row["total"] if member_absence_row else 0
+
+        pump_rank = next((index + 1 for index, row in enumerate(pump_rows) if row["member_id"] == current_member.id), None)
+        absence_rank = next((index + 1 for index, row in enumerate(absence_rows) if row.get("member_id") == current_member.id), None)
+
+        member_dashboard = {
+            "name": report_member_name(current_member),
+            "open_penalties": cents_to_euro(member_balance_cents) if member_balance_cents > 0 else None,
+            "credit": cents_to_euro(abs(member_balance_cents)) if member_balance_cents < 0 else None,
+            "pumps": member_pumps,
+            "wreaths": member_wreaths,
+            "absences": member_absences,
+            "pump_rank": pump_rank,
+            "absence_rank": absence_rank,
+            "club_total": cents_to_euro(cash_balance_cents + bank_balance_cents),
+        }
 
     open_member_rows = sorted(open_member_rows, key=lambda row: row["amount_cents"], reverse=True)[:5]
 
@@ -2479,6 +2505,7 @@ def dashboard():
         top_pump=top_pump,
         top_wreath=top_wreath,
         top_absence=top_absence,
+        member_dashboard=member_dashboard,
     )
 
 
@@ -4602,6 +4629,7 @@ def build_absence_stat_rows(selected_year):
         if total <= 0:
             continue
         rows.append({
+            "member_id": row.id,
             "name": row.nickname or row.first_name or f"{row.first_name} {row.last_name}",
             "excused": excused,
             "unexcused": unexcused,
@@ -5273,6 +5301,14 @@ def interest_module():
 
             try:
                 actual_cents = form_euro_to_cents("actual_interest", "Tatsächliche Zinsen")
+                try:
+                    tax_rate_basis_points = parse_interest_rate_basis_points(request.form.get("tax_rate") or "0")
+                except ValueError as exc:
+                    flash(str(exc), "danger")
+                    return redirect(url_for("interest_module"))
+
+                tax_cents = int(Decimal(actual_cents * tax_rate_basis_points / 10000).quantize(Decimal("1"), rounding=ROUND_HALF_UP))
+                net_cents = actual_cents - tax_cents
             except ValueError:
                 return redirect(url_for("interest_module"))
 

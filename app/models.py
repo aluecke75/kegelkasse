@@ -378,6 +378,8 @@ class InterestBooking(db.Model):
     basis_balance_cents = db.Column(db.Integer, nullable=False, default=0)
     expected_interest_cents = db.Column(db.Integer, nullable=False, default=0)
     actual_interest_cents = db.Column(db.Integer, nullable=False, default=0)
+    tax_cents = db.Column(db.Integer, nullable=False, default=0)
+    net_interest_cents = db.Column(db.Integer, nullable=False, default=0)
 
     cashbook_entry_id = db.Column(db.Integer, db.ForeignKey("cashbook_entries.id"), nullable=True)
     cashbook_entry = db.relationship("CashbookEntry")
@@ -403,6 +405,13 @@ class InterestBooking(db.Model):
 
     def actual_interest_euro(self):
         return self.euro(self.actual_interest_cents)
+    def tax_euro(self):
+        return self.euro(self.tax_cents)
+
+def net_interest_euro(self):
+    if self.net_interest_cents:
+        return self.euro(self.net_interest_cents)
+    return self.euro((self.actual_interest_cents or 0) - (self.tax_cents or 0))
 
 
 class BowlingEvent(db.Model):

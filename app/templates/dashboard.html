@@ -11,7 +11,7 @@
 </div>
 
 <div class="two-column-grid">
-    <div class="modern-card next-event-card">
+        <div class="modern-card next-event-card {% if current_user.role == 'member' %}member-next-event-card{% endif %}">
         {% if active_event %}
             <h2>Aktiver Kegelabend</h2>
             <p class="next-event-date">{{ active_event.event_date.strftime('%d.%m.%Y') }}</p>
@@ -55,6 +55,72 @@
 </div>
 {% endif %}
 
+{% if member_dashboard and current_user.role == "member" %}
+<div class="modern-card">
+    <h2>👤 Meine Statistik</h2>
+
+    <div class="metric-grid">
+
+        {% if member_dashboard.open_penalties %}
+        <div class="metric-card">
+            <span>Offenes Strafkonto</span>
+            <strong>{{ member_dashboard.open_penalties }} €</strong>
+        </div>
+        {% endif %}
+
+        {% if member_dashboard.credit %}
+        <div class="metric-card">
+            <span>Guthaben</span>
+            <strong>{{ member_dashboard.credit }} €</strong>
+        </div>
+        {% endif %}
+
+        <div class="metric-card">
+            <span>Pumpen</span>
+            <strong>{{ member_dashboard.pumps }}</strong>
+        </div>
+
+        <div class="metric-card">
+            <span>Kränze</span>
+            <strong>{{ member_dashboard.wreaths }}</strong>
+        </div>
+
+        <div class="metric-card">
+            <span>Fehltage</span>
+            <strong>{{ member_dashboard.absences }}</strong>
+        </div>
+
+        {% if member_dashboard.pump_rank %}
+        <div class="metric-card">
+            <span>Pumpenkönig</span>
+            <strong>Platz {{ member_dashboard.pump_rank }}</strong>
+        </div>
+        {% endif %}
+
+        {% if member_dashboard.absence_rank %}
+        <div class="metric-card">
+            <span>Fehltage-Rang</span>
+            <strong>Platz {{ member_dashboard.absence_rank }}</strong>
+        </div>
+        {% endif %}
+
+        <div class="metric-card">
+            <span>Vereinsvermögen</span>
+            <strong>{{ member_dashboard.club_total }} €</strong>
+        </div>
+
+    </div>
+
+    <p style="margin-top:16px;">
+        <a class="button" href="{{ url_for('my_event') }}">
+            Mein Kegelabend
+        </a>
+    </p>
+
+</div>
+{% endif %}
+
+{% if current_user.role != "member" %}
 <div class="section-grid">
     <div class="modern-card">
         <h2>💰 Kassenstand</h2>
@@ -107,6 +173,8 @@
         </ul>
         <p><a href="{{ url_for('reports', year=current_year) }}">Alle Auswertungen ansehen</a></p>
     </div>
+
+{% endif %}
 
     <div class="modern-card">
         <h2>✅ Kassenprüfung</h2>
@@ -162,6 +230,22 @@
 .activity-list li { border-bottom:1px solid #eef2f7; padding:8px 0; }
 .activity-list span { display:block; color:#667085; font-size:0.84rem; }
 @media (max-width: 760px) { .next-event-date { font-size:1.55rem; } }
+</style>
+
+<style>
+.member-next-event-card {
+    max-width: 520px;
+    padding: 22px;
+}
+
+.member-next-event-card .next-event-date {
+    font-size: 2rem;
+    margin: 8px 0;
+}
+
+.member-next-event-card .next-event-label {
+    margin-bottom: 14px;
+}
 </style>
 
 {% endblock %}
