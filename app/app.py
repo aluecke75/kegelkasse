@@ -1912,6 +1912,9 @@ def migrate_schema_extensions():
     add("interest_bookings", "tax_rate_basis_points", "tax_rate_basis_points INTEGER DEFAULT 0")
     add("interest_bookings", "tax_cents", "tax_cents INTEGER DEFAULT 0")
     add("interest_bookings", "net_interest_cents", "net_interest_cents INTEGER DEFAULT 0")
+    add("interest_bookings", "capital_gains_tax_cents", "capital_gains_tax_cents INTEGER DEFAULT 0")
+    add("interest_bookings", "solidarity_tax_cents", "solidarity_tax_cents INTEGER DEFAULT 0")
+    add("interest_bookings", "church_tax_cents", "church_tax_cents INTEGER DEFAULT 0")
 
     # Dokumente 2.0: Archivieren statt physisch löschen.
     add("documents", "deleted_at", "deleted_at DATETIME")
@@ -1924,6 +1927,7 @@ def migrate_schema_extensions():
         add(table_name, "auditor_note", "auditor_note TEXT")
 
     db.session.execute(db.text("UPDATE interest_bookings SET net_interest_cents = actual_interest_cents WHERE net_interest_cents IS NULL OR net_interest_cents = 0"))
+    db.session.execute(db.text("UPDATE interest_bookings SET capital_gains_tax_cents = tax_cents WHERE (capital_gains_tax_cents IS NULL OR capital_gains_tax_cents = 0) AND tax_cents > 0"))
     db.session.commit()
 
     if changes:
@@ -4928,16 +4932,12 @@ def calculate_expected_interest_cents(balance_cents, annual_rate_basis_points, p
 
 def default_interest_period(setting):
     today = datetime.today().date()
-    months = interest_period_months(setting.payout_frequency if setting else "yearly")
-    end = today
-    month = end.month - months
-    year = end.year
-    while month <= 0:
-        month += 12
-        year -= 1
-    day = min(end.day, last_day_of_month(year, month))
-    start = datetime(year, month, day).date() + timedelta(days=1)
-    return start, end
+
+    first_day_current_month = today.replace(day=1)
+    previous_month_end = first_day_current_month - timedelta(days=1)
+    previous_month_start = previous_month_end.replace(day=1)
+
+    return previous_month_start, previous_month_end
 
 
 def annual_year_summary(year):
@@ -5301,19 +5301,24 @@ def interest_module():
 
             try:
                 actual_cents = form_euro_to_cents("actual_interest", "Tatsächliche Zinsen")
-                try:
-                    tax_rate_basis_points = parse_interest_rate_basis_points(request.form.get("tax_rate") or "0")
-                except ValueError as exc:
-                    flash(str(exc), "danger")
-                    return redirect(url_for("interest_module"))
+                capital_gains_tax_cents = form_euro_to_cents("capital_gains_tax", "Kapitalertragsteuer")
+                solidarity_tax_cents = form_euro_to_cents("solidarity_tax", "Solidaritätszuschlag")
+                church_tax_cents = form_euro_to_cents("church_tax", "Kirchensteuer")
+            except ValueError:
+                return redirect(url_for("interest_module"))
 
                 tax_cents = int(Decimal(actual_cents * tax_rate_basis_points / 10000).quantize(Decimal("1"), rounding=ROUND_HALF_UP))
                 net_cents = actual_cents - tax_cents
             except ValueError:
                 return redirect(url_for("interest_module"))
+            tax_cents = capital_gains_tax_cents + solidarity_tax_cents + church_tax_cents
+            net_cents = actual_cents - tax_cents
 
             if actual_cents <= 0:
                 flash("Der Zinsbetrag muss größer als 0,00 € sein.", "danger")
+                return redirect(url_for("interest_module"))
+            if net_cents < 0:
+                flash("Die Abzüge dürfen nicht höher als die Brutto-Zinsen sein.", "danger")
                 return redirect(url_for("interest_module"))
 
             note = request.form.get("booking_note", "").strip()
@@ -5321,10 +5326,10 @@ def interest_module():
                 booking_date=booking_date,
                 direction="income",
                 account="bank",
-                amount_cents=actual_cents,
+                amount_cents=net_cents,
                 category="Zinsen",
                 person="Bank",
-                reason=f"Zinsgutschrift {period_start.strftime('%d.%m.%Y')} - {period_end.strftime('%d.%m.%Y')}",
+                reason=f"Netto-Zinsgutschrift {period_start.strftime('%d.%m.%Y')} - {period_end.strftime('%d.%m.%Y')}",
                 note=note,
                 created_by_user_id=current_user.id,
             )
@@ -5334,9 +5339,9 @@ def interest_module():
             db.session.add(AccountTransaction(
                 account="bank",
                 category="interest",
-                amount_cents=actual_cents,
+                amount_cents=net_cents,
                 booking_date=booking_date,
-                description=f"Zinsgutschrift {period_start.isoformat()} bis {period_end.isoformat()}",
+                description=f"Netto-Zinsgutschrift {period_start.isoformat()} bis {period_end.isoformat()}",
             ))
 
             booking = InterestBooking(
@@ -5347,6 +5352,11 @@ def interest_module():
                 basis_balance_cents=basis_balance_cents,
                 expected_interest_cents=expected_cents,
                 actual_interest_cents=actual_cents,
+                capital_gains_tax_cents=capital_gains_tax_cents,
+                solidarity_tax_cents=solidarity_tax_cents,
+                church_tax_cents=church_tax_cents,
+                tax_cents=tax_cents,
+                net_interest_cents=net_cents,
                 cashbook_entry_id=cashbook_entry.id,
                 note=note,
                 created_by_user_id=current_user.id,

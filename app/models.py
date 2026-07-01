@@ -378,6 +378,9 @@ class InterestBooking(db.Model):
     basis_balance_cents = db.Column(db.Integer, nullable=False, default=0)
     expected_interest_cents = db.Column(db.Integer, nullable=False, default=0)
     actual_interest_cents = db.Column(db.Integer, nullable=False, default=0)
+    capital_gains_tax_cents = db.Column(db.Integer, nullable=False, default=0)
+    solidarity_tax_cents = db.Column(db.Integer, nullable=False, default=0)
+    church_tax_cents = db.Column(db.Integer, nullable=False, default=0)
     tax_cents = db.Column(db.Integer, nullable=False, default=0)
     net_interest_cents = db.Column(db.Integer, nullable=False, default=0)
 
@@ -405,13 +408,80 @@ class InterestBooking(db.Model):
 
     def actual_interest_euro(self):
         return self.euro(self.actual_interest_cents)
+
+    def capital_gains_tax_euro(self):
+        return self.euro(self.capital_gains_tax_cents)
+
+    def solidarity_tax_euro(self):
+        return self.euro(self.solidarity_tax_cents)
+
+    def church_tax_euro(self):
+        return self.euro(self.church_tax_cents)
+
     def tax_euro(self):
-        return self.euro(self.tax_cents)
+        total_tax = (
+            (self.capital_gains_tax_cents or 0)
+            + (self.solidarity_tax_cents or 0)
+            + (self.church_tax_cents or 0)
+        )
+        if total_tax == 0:
+            total_tax = self.tax_cents or 0
+        return self.euro(total_tax)
+
+    def net_interest_euro(self):
+        if self.net_interest_cents:
+            return self.euro(self.net_interest_cents)
+
+        total_tax = (
+            (self.capital_gains_tax_cents or 0)
+            + (self.solidarity_tax_cents or 0)
+            + (self.church_tax_cents or 0)
+        )
+
+        if total_tax == 0:
+            total_tax = self.tax_cents or 0
+
+        return self.euro((self.actual_interest_cents or 0) - total_tax)
+def net_interest_euro(self):
+    if self.net_interest_cents:
+        return self.euro(self.net_interest_cents)
+    total_tax = (
+        (self.capital_gains_tax_cents or 0)
+        + (self.solidarity_tax_cents or 0)
+        + (self.church_tax_cents or 0)
+    )
+    if total_tax == 0:
+        total_tax = self.tax_cents or 0
+    return self.euro((self.actual_interest_cents or 0) - total_tax)
+def capital_gains_tax_euro(self):
+    return self.euro(self.capital_gains_tax_cents)
+
+def solidarity_tax_euro(self):
+    return self.euro(self.solidarity_tax_cents)
+
+def church_tax_euro(self):
+    return self.euro(self.church_tax_cents)
+
+def tax_euro(self):
+    total_tax = (
+        (self.capital_gains_tax_cents or 0)
+        + (self.solidarity_tax_cents or 0)
+        + (self.church_tax_cents or 0)
+    )
+    if total_tax == 0:
+        total_tax = self.tax_cents or 0
+    return self.euro(total_tax)
 
 def net_interest_euro(self):
     if self.net_interest_cents:
         return self.euro(self.net_interest_cents)
-    return self.euro((self.actual_interest_cents or 0) - (self.tax_cents or 0))
+    total_tax = (
+        (self.capital_gains_tax_cents or 0)
+        + (self.solidarity_tax_cents or 0)
+        + (self.church_tax_cents or 0)
+        + (self.tax_cents or 0)
+    )
+    return self.euro((self.actual_interest_cents or 0) - total_tax)
 
 
 class BowlingEvent(db.Model):
