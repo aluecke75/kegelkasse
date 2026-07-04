@@ -5647,13 +5647,16 @@ def cashbook_void(entry_id):
 def parse_month_param(value):
     if not value:
         today = datetime.today().date()
-        return today.year, today.month
+        previous_month = today.replace(day=1) - timedelta(days=1)
+        return previous_month.year, previous_month.month
+
     try:
         parsed = datetime.strptime(value, "%Y-%m").date()
         return parsed.year, parsed.month
     except ValueError:
         today = datetime.today().date()
-        return today.year, today.month
+        previous_month = today.replace(day=1) - timedelta(days=1)
+        return previous_month.year, previous_month.month
 
 
 def month_label(year, month):

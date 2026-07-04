@@ -806,9 +806,6 @@
                     {% endif %}
                     {% if ns.group != group_label %}
                         {% set ns.group = group_label %}
-                        <tr class="group-row">
-                            <td colspan="{{ penalty_types|length + 4 }}">{{ group_label }}</td>
-                        </tr>
                     {% endif %}
                     <tr class="participant-row status-{{ participant.status }}" data-participant-id="{{ participant.id }}" data-sort-name="{{ row.display_name|lower }}" data-previous-balance-cents="{{ row.previous_balance_cents }}">
                         <td class="player-cell {% if participant.status in ['excused', 'unexcused'] %}player-missing{% endif %}" data-label="Spieler">
@@ -932,7 +929,7 @@
                 <thead>
                     <tr>
                         <th>Spieler</th>
-                        <th>Strafen</th>
+                                <td data-label="Rest/Offen"><span class="settlement-rest">{{ row.balance_euro }}</span> €</td>
                         <th>Bezahlt</th>
                         <th>Rest/Offen</th>
                     </tr>
@@ -942,11 +939,11 @@
                         {% if row.participant.member_id %}
                             <tr class="settlement-row" data-participant-id="{{ row.participant.id }}">
                                 <td data-label="Spieler"><strong>{{ row.display_name }}</strong></td>
-                                <td data-label="Strafen"><span class="settlement-penalty" data-penalty-cents="{{ row.penalty_cents }}">{{ row.penalty_euro }}</span> €</td>
+                                <td data-label="Strafkonto gesamt"><span class="settlement-penalty" data-penalty-cents="{{ row.balance_cents }}">{{ row.balance_euro }}</span> €</td>
                                 <td data-label="Bezahlt">
                                     <input class="form-control paid-input money-input" type="text" inputmode="decimal" autocomplete="off" name="paid_{{ row.participant.id }}" value="{{ row.paid_euro }}" placeholder="Betrag" data-participant-id="{{ row.participant.id }}">
                                 </td>
-                                <td data-label="Rest/Offen"><span class="settlement-rest">{{ row.penalty_euro }}</span> €</td>
+                                <td data-label="Rest/Offen"><span class="settlement-rest">{{ row.balance_euro }}</span> €</td>
                             </tr>
                         {% endif %}
                     {% endfor %}
@@ -1123,26 +1120,15 @@
         let value = String(input.value || '').replace('€', '').replace(/\s/g, '');
         value = value.replace(/[^0-9,.]/g, '');
 
-        // Komfort für mobile Eingabe: ,5 oder .5 während der Eingabe zulassen.
-        if (value.startsWith(',') || value.startsWith('.')) {
-            value = '0' + value;
-        }
+        const firstSeparatorIndex = Math.min(
+            ...[value.indexOf(','), value.indexOf('.')].filter(index => index >= 0)
+        );
 
-        const commaIndex = value.indexOf(',');
-        if (commaIndex !== -1) {
-            value = value.slice(0, commaIndex + 1) + value.slice(commaIndex + 1).replace(/,/g, '');
-            const parts = value.split(',');
-            parts[0] = parts[0].replace(/\./g, '');
-            parts[1] = (parts[1] || '').replace(/\./g, '').slice(0, 2);
-            value = parts[0] + ',' + parts[1];
-        } else {
-            const dotCount = (value.match(/\./g) || []).length;
-            if (dotCount === 1) {
-                const parts = value.split('.');
-                if ((parts[1] || '').length <= 2) {
-                    value = parts[0] + ',' + parts[1];
-                }
-            }
+        if (firstSeparatorIndex >= 0) {
+            const before = value.slice(0, firstSeparatorIndex).replace(/[,.]/g, '');
+            const separator = value.charAt(firstSeparatorIndex);
+            const after = value.slice(firstSeparatorIndex + 1).replace(/[,.]/g, '').slice(0, 2);
+            value = before + separator + after;
         }
 
         input.value = value;
@@ -1379,8 +1365,17 @@
     }
 
     function updateTotals() {
-        updateEntryLockVisuals();
-        sortParticipantRowsLive();
+updateEntryLockVisuals();
+
+const active = document.activeElement;
+const editingManualAmount =
+    active &&
+    active.classList &&
+    active.classList.contains('manual-amount');
+
+if (!editingManualAmount) {
+    sortParticipantRowsLive();
+}
         const rawAverage = calculateAverageRaw();
         const roundedAverage = roundToTenCents(rawAverage);
         const averageDisplay = document.getElementById('averageDisplay');
@@ -1506,28 +1501,32 @@
 
     document.querySelectorAll('.money-input').forEach(input => {
         input.addEventListener('focus', () => {
-            if (input.classList.contains('clear-on-first-focus') && input.dataset.wasCleared !== '1') {
-                input.value = '';
-                input.dataset.wasCleared = '1';
-                updateSettlementRest();
-                updateLaneCostPreview();
-                return;
-            }
-            if ((input.value || '').trim() === '0,00' || (input.value || '').trim() === '0.00') {
+            const currentValue = (input.value || '').trim();
+
+            if (currentValue === '0,00' || currentValue === '0.00') {
                 input.value = '';
             }
         });
+
         input.addEventListener('input', () => {
-            normalizeMoneyInput(input);
-            if (input.classList.contains('paid-input')) syncPaidInputs(input);
+            if (input.classList.contains('manual-amount')) {
+                return;
+            }
+
+            if (input.classList.contains('paid-input')) {
+                syncPaidInputs(input);
+            }
+
             updateTotals();
             updateSettlementRest();
         });
+
         input.addEventListener('blur', () => {
             formatMoneyInput(input);
             if (input.classList.contains('paid-input')) syncPaidInputs(input);
             updateTotals();
             updateSettlementRest();
+            updateLaneCostPreview();
         });
     });
 
@@ -1599,10 +1598,14 @@
     document.querySelectorAll('.counter-plus, .counter-minus').forEach(button => {
         button.addEventListener('click', () => autosaveEventSoon(250));
     });
-    document.querySelectorAll('.quantity-input, .manual-amount, .note-input, .status-input').forEach(input => {
+    document.querySelectorAll('.quantity-input, .note-input, .status-input').forEach(input => {
         input.addEventListener('input', () => autosaveEventSoon(700));
         input.addEventListener('change', () => autosaveEventSoon(250));
         input.addEventListener('blur', () => autosaveEventSoon(250));
+    });
+
+    document.querySelectorAll('.manual-amount').forEach(input => {
+        input.addEventListener('blur', () => autosaveEventSoon(500));
     });
     {% endif %}
 
