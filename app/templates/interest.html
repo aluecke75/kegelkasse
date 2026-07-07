@@ -112,14 +112,40 @@
                     placeholder="z. B. ,37 oder 12,45" value="{{ expected_interest }}"></label>
         </div>
 
-        <div class="form-grid" style="margin-top:12px;">
-            <label>Kapitalertragsteuer<input id="capital_gains_tax" name="capital_gains_tax" inputmode="decimal"
-                    placeholder="z. B. 0,24" value="0,00"></label>
-            <label>Solidaritätszuschlag<input id="solidarity_tax" name="solidarity_tax" inputmode="decimal"
-                    placeholder="z. B. 0,01" value="0,00"></label>
-            <label>Kirchensteuer<input id="church_tax" name="church_tax" inputmode="decimal" placeholder="optional"
-                    value="0,00"></label>
-        </div>
+<div class="form-grid" style="margin-top:12px;">
+    <label>
+        Kapitalertragsteuer
+        <input
+            class="form-control"
+            id="capital_gains_tax"
+            name="capital_gains_tax"
+            value="{{ suggested_capital_gains_tax }}"
+            inputmode="decimal"
+            placeholder="z. B. 0,24">
+    </label>
+
+    <label>
+        Solidaritätszuschlag
+        <input
+            class="form-control"
+            id="solidarity_tax"
+            name="solidarity_tax"
+            value="{{ suggested_solidarity_tax }}"
+            inputmode="decimal"
+            placeholder="z. B. 0,01">
+    </label>
+
+    <label>
+        Kirchensteuer
+        <input
+            class="form-control"
+            id="church_tax"
+            name="church_tax"
+            value="{{ suggested_church_tax }}"
+            inputmode="decimal"
+            placeholder="optional">
+    </label>
+</div>
 
         <label for="booking_note" class="field-label">Notiz</label>
         <textarea id="booking_note" name="booking_note" rows="3"
@@ -224,7 +250,7 @@
             var churchTax = parseEuro(document.getElementById('church_tax') && document.getElementById('church_tax').value);
 
             var totalTax = capitalTax + solidarityTax + churchTax;
-            var net = gross - totalTax;
+            var net = Math.max(0, gross - totalTax);
             var bankBalance = parseEuro('{{ bank_balance }}');
             var newBankBalance = bankBalance + net;
 

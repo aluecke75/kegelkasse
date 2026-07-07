@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 import uuid
 import hashlib
 import os
@@ -4395,6 +4395,79 @@ def member_penalty_balance(member_id):
     transactions = MemberPenaltyTransaction.query.filter_by(member_id=member_id).all()
     return sum(transaction.amount_cents for transaction in transactions)
 
+def get_app_setting(key, default=None):
+    setting = AppSetting.query.filter_by(key=key).first()
+    if setting is None or setting.value is None:
+        return default
+    return setting.value
+
+
+def get_finance_settings():
+    return {
+        "capital_tax_enabled": get_app_setting("tax_capital_enabled", "1") == "1",
+        "capital_tax_rate": float(
+            get_app_setting("tax_capital_rate", "25,00").replace(",", ".")
+        ),
+
+        "solidarity_enabled": get_app_setting("tax_solidarity_enabled", "1") == "1",
+        "solidarity_rate": float(
+            get_app_setting("tax_solidarity_rate", "5,50").replace(",", ".")
+        ),
+
+        "church_enabled": get_app_setting("tax_church_enabled", "0") == "1",
+        "church_rate": float(
+            get_app_setting("tax_church_rate", "0,00").replace(",", ".")
+        ),
+
+        "calculation_mode": get_app_setting(
+            "tax_calculation_mode",
+            "auto",
+        ),
+
+        "rounding_mode": get_app_setting(
+            "tax_rounding_mode",
+            "commercial",
+        ),
+    }
+
+def calculate_interest_taxes(gross_interest_cents):
+    finance = get_finance_settings()
+
+    gross_interest_cents = gross_interest_cents or 0
+
+    capital_tax = 0
+    solidarity_tax = 0
+    church_tax = 0
+
+    if finance["capital_tax_enabled"]:
+        capital_tax = round(
+            gross_interest_cents * finance["capital_tax_rate"] / 100
+        )
+
+    if finance["solidarity_enabled"]:
+        solidarity_tax = round(
+            capital_tax * finance["solidarity_rate"] / 100
+        )
+
+    if finance["church_enabled"]:
+        church_tax = round(
+            capital_tax * finance["church_rate"] / 100
+        )
+
+    net_interest = (
+        gross_interest_cents
+        - capital_tax
+        - solidarity_tax
+        - church_tax
+    )
+
+    return {
+        "gross": gross_interest_cents,
+        "capital_tax": capital_tax,
+        "solidarity_tax": solidarity_tax,
+        "church_tax": church_tax,
+        "net": net_interest,
+    }
 
 def can_edit_closed_events():
     return current_user.role in ("admin", "cashier")
@@ -5301,16 +5374,20 @@ def interest_module():
 
             try:
                 actual_cents = form_euro_to_cents("actual_interest", "Tatsächliche Zinsen")
+            except ValueError:
+                return redirect(url_for("interest_module"))
+
+            calculated_taxes = calculate_interest_taxes(actual_cents)
+
+            try:
                 capital_gains_tax_cents = form_euro_to_cents("capital_gains_tax", "Kapitalertragsteuer")
                 solidarity_tax_cents = form_euro_to_cents("solidarity_tax", "Solidaritätszuschlag")
                 church_tax_cents = form_euro_to_cents("church_tax", "Kirchensteuer")
             except ValueError:
-                return redirect(url_for("interest_module"))
+                capital_gains_tax_cents = calculated_taxes["capital_tax"]
+                solidarity_tax_cents = calculated_taxes["solidarity_tax"]
+                church_tax_cents = calculated_taxes["church_tax"]
 
-                tax_cents = int(Decimal(actual_cents * tax_rate_basis_points / 10000).quantize(Decimal("1"), rounding=ROUND_HALF_UP))
-                net_cents = actual_cents - tax_cents
-            except ValueError:
-                return redirect(url_for("interest_module"))
             tax_cents = capital_gains_tax_cents + solidarity_tax_cents + church_tax_cents
             net_cents = actual_cents - tax_cents
 
@@ -5394,6 +5471,8 @@ def interest_module():
     settings = InterestSetting.query.order_by(InterestSetting.valid_from.desc(), InterestSetting.created_at.desc()).all()
     bookings = InterestBooking.query.order_by(InterestBooking.booking_date.desc(), InterestBooking.created_at.desc()).all()
 
+    suggested_taxes = calculate_interest_taxes(expected_cents)
+
     return render_template(
         "interest.html",
         active_setting=active_setting,
@@ -5404,6 +5483,9 @@ def interest_module():
         default_end=default_end.isoformat(),
         bank_balance=cents_to_euro(bank_balance_cents),
         expected_interest=cents_to_euro(expected_cents),
+        suggested_capital_gains_tax=cents_to_euro(suggested_taxes["capital_tax"]),
+        suggested_solidarity_tax=cents_to_euro(suggested_taxes["solidarity_tax"]),
+        suggested_church_tax=cents_to_euro(suggested_taxes["church_tax"]),
     )
 
 
@@ -5792,6 +5874,96 @@ def monthly_contribution_rows(year, month, batch=None):
 
     return rows
 
+@app.route("/settings/finance", methods=["GET", "POST"])
+@login_required
+@role_required("admin")
+def finance_settings():
+    defaults = {
+        "tax_capital_enabled": "1",
+        "tax_capital_rate": "25,00",
+        "tax_solidarity_enabled": "1",
+        "tax_solidarity_rate": "5,50",
+        "tax_church_enabled": "0",
+        "tax_church_rate": "0,00",
+        "tax_calculation_mode": "auto",
+        "tax_rounding_mode": "commercial",
+    }
+
+    if request.method == "POST":
+        values = {
+            "tax_capital_enabled": "1" if request.form.get("tax_capital_enabled") == "1" else "0",
+            "tax_capital_rate": request.form.get("tax_capital_rate", "25,00").strip() or "25,00",
+            "tax_solidarity_enabled": "1" if request.form.get("tax_solidarity_enabled") == "1" else "0",
+            "tax_solidarity_rate": request.form.get("tax_solidarity_rate", "5,50").strip() or "5,50",
+            "tax_church_enabled": "1" if request.form.get("tax_church_enabled") == "1" else "0",
+            "tax_church_rate": request.form.get("tax_church_rate", "0,00").strip() or "0,00",
+            "tax_calculation_mode": request.form.get("tax_calculation_mode", "auto"),
+            "tax_rounding_mode": request.form.get("tax_rounding_mode", "commercial"),
+        }
+
+        for key, value in values.items():
+            setting = AppSetting.query.filter_by(key=key).first()
+            if not setting:
+                setting = AppSetting(key=key)
+                db.session.add(setting)
+            setting.value = value
+
+        db.session.commit()
+        flash("Finanzeinstellungen wurden gespeichert.", "success")
+        return redirect(url_for("finance_settings"))
+
+    settings = {}
+    for key, default in defaults.items():
+        setting = AppSetting.query.filter_by(key=key).first()
+        settings[key] = setting.value if setting and setting.value is not None else default
+
+    return render_template("finance_settings.html", settings=settings)
+
+@app.route("/finance/monthly-bank-closing", methods=["GET", "POST"])
+@login_required
+@role_required("admin", "cashier", "auditor")
+def monthly_bank_closing():
+    if current_user.role == "auditor" and request.method == "POST":
+        flash("Kassenprüfer/-innen haben nur Leserechte und können keine Änderungen speichern.", "warning")
+        return redirect(request.referrer or url_for("dashboard"))
+
+    today = datetime.today().date()
+    closing_month_date = today.replace(day=1) - timedelta(days=1)
+    month_value = request.args.get("month") or closing_month_date.strftime("%Y-%m")
+    year, month = parse_month_param(month_value)
+
+    period_start = date(year, month, 1)
+    period_end = date(year, month, last_day_of_month(year, month))
+
+    contribution_batch = MonthlyContributionBatch.query.filter_by(year=year, month=month).first()
+    contribution_rows = monthly_contribution_rows(year, month, contribution_batch)
+
+    contribution_member_count = len(contribution_rows)
+    contribution_paid_count = sum(
+        1
+        for row in contribution_rows
+        if row["expected_cents"] > 0 and row["paid_cents"] >= row["expected_cents"]
+    )
+    contribution_total_paid_cents = sum(row["paid_cents"] for row in contribution_rows)
+    contribution_done = (
+        contribution_batch is not None
+        and contribution_batch.status == "finalized"
+        and contribution_member_count > 0
+        and contribution_paid_count == contribution_member_count
+    )
+
+    return render_template(
+        "monthly_bank_closing.html",
+        year=year,
+        month=month,
+        month_value=f"{year:04d}-{month:02d}",
+        period_start=period_start.isoformat(),
+        period_end=period_end.isoformat(),
+        contribution_done=contribution_done,
+        contribution_paid_count=contribution_paid_count,
+        contribution_member_count=contribution_member_count,
+        contribution_total_paid=cents_to_euro(contribution_total_paid_cents),
+    )
 
 @app.route("/finance/monthly-contributions", methods=["GET", "POST"])
 @login_required

@@ -1,0 +1,81 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="modern-header">
+    <div class="modern-icon">⚙️</div>
+    <div>
+        <h1>Finanzeinstellungen</h1>
+        <p>Steuerabzüge und Berechnungsregeln für Zinsen und Monatsabschluss.</p>
+    </div>
+</div>
+
+<form method="post">
+    <div class="modern-card">
+        <h2>Kapitalertragsteuer</h2>
+
+        <label>
+            <input type="checkbox" name="tax_capital_enabled" value="1" {% if settings.tax_capital_enabled == "1" %}checked{% endif %}>
+            Kapitalertragsteuer berücksichtigen
+        </label>
+
+        <label>
+            Steuersatz
+            <input class="form-control" type="text" name="tax_capital_rate" value="{{ settings.tax_capital_rate }}">
+        </label>
+    </div>
+
+    <div class="modern-card">
+        <h2>Solidaritätszuschlag</h2>
+
+        <label>
+            <input type="checkbox" name="tax_solidarity_enabled" value="1" {% if settings.tax_solidarity_enabled == "1" %}checked{% endif %}>
+            Solidaritätszuschlag berücksichtigen
+        </label>
+
+        <label>
+            Steuersatz auf Kapitalertragsteuer
+            <input class="form-control" type="text" name="tax_solidarity_rate" value="{{ settings.tax_solidarity_rate }}">
+        </label>
+    </div>
+
+    <div class="modern-card">
+        <h2>Kirchensteuer</h2>
+
+        <label>
+            <input type="checkbox" name="tax_church_enabled" value="1" {% if settings.tax_church_enabled == "1" %}checked{% endif %}>
+            Kirchensteuer berücksichtigen
+        </label>
+
+        <label>
+            Steuersatz auf Kapitalertragsteuer
+            <input class="form-control" type="text" name="tax_church_rate" value="{{ settings.tax_church_rate }}">
+        </label>
+    </div>
+
+    <div class="modern-card">
+        <h2>Berechnung</h2>
+
+        <label>
+            Modus
+            <select class="form-control" name="tax_calculation_mode">
+                <option value="auto" {% if settings.tax_calculation_mode == "auto" %}selected{% endif %}>Automatisch berechnen</option>
+                <option value="suggest" {% if settings.tax_calculation_mode == "suggest" %}selected{% endif %}>Nur Vorschläge anzeigen</option>
+                <option value="off" {% if settings.tax_calculation_mode == "off" %}selected{% endif %}>Nicht berechnen</option>
+            </select>
+        </label>
+
+        <label>
+            Rundung
+            <select class="form-control" name="tax_rounding_mode">
+                <option value="commercial" {% if settings.tax_rounding_mode == "commercial" %}selected{% endif %}>Kaufmännisch</option>
+                <option value="up" {% if settings.tax_rounding_mode == "up" %}selected{% endif %}>Immer aufrunden</option>
+                <option value="down" {% if settings.tax_rounding_mode == "down" %}selected{% endif %}>Immer abrunden</option>
+            </select>
+        </label>
+    </div>
+
+    <div class="actions">
+        <button type="submit">Speichern</button>
+    </div>
+</form>
+{% endblock %}

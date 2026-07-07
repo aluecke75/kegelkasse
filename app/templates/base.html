@@ -250,6 +250,7 @@ Nicht löschen – ggf. für spätere Entwicklungsarbeiten wieder aktivieren.
                     <span class="nav-dropbtn">Finanzen{% if current_user.role == "auditor" %} (lesen){% endif %} ▾</span>
                     <span class="nav-dropdown-content">
                         <a href="{{ url_for('cashbook') }}">Kassenbuch</a>
+                        <a href="{{ url_for('monthly_bank_closing') }}">Monatsabschluss Bank</a>
                         <a href="{{ url_for('monthly_contributions') }}">Monatsbeiträge</a>
                         <a href="{{ url_for('interest_module') }}">Zinsen</a>
                         <a href="{{ url_for('cash_audits') }}">Kassenprüfung</a>

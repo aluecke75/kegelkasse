@@ -1,0 +1,255 @@
+{% extends "base.html" %}
+
+{% block content %}
+<style>
+    .bank-closing-steps {
+        display: grid;
+        grid-template-columns: repeat(5, minmax(130px, 1fr));
+        gap: 0.75rem;
+        margin-bottom: 1rem;
+    }
+
+    .bank-closing-step {
+        background:#fff;
+        border:1px solid var(--line);
+        border-radius:1rem;
+        padding:.85rem;
+        text-align:center;
+        font-weight:700;
+        box-shadow:var(--shadow);
+        transition:.2s;
+    }
+
+    .bank-closing-step.done {
+        background:#dff6e7;
+        border-color:#198754;
+        color:#146c43;
+    }
+
+    .bank-closing-step.active {
+        background:#fff6da;
+        border-color:#d4a400;
+        color:#8a6400;
+    }
+
+    .bank-closing-step span {
+        display:block;
+        font-size:1.35rem;
+        margin-bottom:.35rem;
+    }
+
+    .bank-closing-card-grid {
+        display:grid;
+        grid-template-columns:repeat(4, minmax(220px, 1fr));
+        gap:1rem;
+        align-items:stretch;
+    }
+
+    .bank-closing-card {
+        min-height:275px;
+        display:flex;
+        flex-direction:column;
+        justify-content:space-between;
+    }
+
+    .bank-closing-card-body {
+        flex:1;
+    }
+
+    .bank-closing-status {
+        margin-top:auto;
+        border-top:1px solid var(--line);
+        padding-top:14px;
+    }
+
+    .bank-status-title {
+        font-size:.72rem;
+        color:#888;
+        letter-spacing:1px;
+        font-weight:700;
+        margin-bottom:8px;
+    }
+
+    .bank-status-badge {
+        display:inline-block;
+        padding:7px 14px;
+        border-radius:999px;
+        font-weight:800;
+        margin-bottom:14px;
+    }
+
+    .bank-status-open {
+        background:#fff3cd;
+        color:#8a6400;
+    }
+
+    .bank-status-done {
+        background:#dff6e7;
+        color:#146c43;
+    }
+
+    .bank-status-lock {
+        background:#e9ecef;
+        color:#495057;
+    }
+
+    .bank-action {
+        margin-top:12px;
+    }
+
+    .bank-action .button {
+        width:100%;
+        text-align:center;
+    }
+
+    @media (max-width: 900px) {
+        .bank-closing-steps {
+            grid-template-columns:1fr;
+        }
+
+        .bank-closing-card-grid {
+            grid-template-columns:1fr;
+        }
+    }
+</style>
+
+<div class="modern-header">
+    <div class="modern-icon">🏦</div>
+    <div>
+        <h1>Monatsabschluss Bank</h1>
+        <p>Monatsbeiträge, Zinsen und Kontoauszug für einen Bankmonat gemeinsam prüfen.</p>
+    </div>
+</div>
+
+<div class="bank-closing-steps">
+    <div class="bank-closing-step done"><span>①</span>Kontoauszug</div>
+    <div class="bank-closing-step active"><span>②</span>Monatsbeiträge</div>
+    <div class="bank-closing-step"><span>③</span>Zinsen</div>
+    <div class="bank-closing-step"><span>④</span>Kontrolle</div>
+    <div class="bank-closing-step"><span>⑤</span>Abschluss</div>
+</div>
+
+<div class="progress" style="margin-bottom:20px;">
+    <div style="font-weight:700;margin-bottom:8px;">Fortschritt: 20 %</div>
+    <div style="height:14px;border-radius:8px;background:#e9edf2;overflow:hidden;">
+        <div style="width:20%;height:100%;background:#198754;"></div>
+    </div>
+</div>
+
+<div class="modern-card">
+    <div class="modern-header">
+        <div class="modern-icon">📅</div>
+        <div>
+            <h2>Abschlussmonat</h2>
+            <p>Vorgeschlagen wird automatisch der vollständig abgeschlossene Vormonat.</p>
+        </div>
+    </div>
+
+    <form method="get" class="form-grid">
+        <label>
+            Monat
+            <input type="month" name="month" value="{{ month_value }}">
+        </label>
+        <div class="actions" style="align-items:end;">
+            <button type="submit">Monat anzeigen</button>
+        </div>
+    </form>
+</div>
+
+<div class="bank-closing-card-grid">
+
+    <div class="modern-card bank-closing-card">
+        <div class="bank-closing-card-body">
+            <div class="modern-header">
+                <div class="modern-icon">📄</div>
+                <div>
+                    <h2>Kontoauszug</h2>
+                    <p>PDF-Ablage wird im nächsten Schritt ergänzt.</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="bank-closing-status">
+            <div class="bank-status-title">STATUS</div>
+            <div class="bank-status-badge bank-status-open">Offen</div>
+        </div>
+    </div>
+
+<div class="modern-card bank-closing-card"
+     style="cursor:pointer;"
+     onclick="window.location.href='{{ url_for('monthly_contributions', month=month_value) }}'">
+        <div class="bank-closing-card-body">
+            <div class="modern-header">
+                <div class="modern-icon">💶</div>
+                <div>
+                    <h2>Monatsbeiträge</h2>
+                    <p>Prüfung und Buchung werden aus dem Monatsbeitragsmodul übernommen.</p>
+                </div>
+            </div>
+        </div>
+
+{% if contribution_done %}
+    <div class="bank-status-badge bank-status-done">Erledigt</div>
+{% else %}
+    <div class="bank-status-badge bank-status-open">Offen</div>
+{% endif %}
+
+<div style="margin-bottom:12px;font-weight:800;">
+    {{ contribution_paid_count }} / {{ contribution_member_count }} Mitglieder<br>
+    {{ contribution_total_paid }} € gebucht
+</div>
+
+<div class="bank-action">
+    <a class="button"
+       href="{{ url_for('monthly_contributions', month=month_value) }}"
+       onclick="event.stopPropagation();">
+        Schritt öffnen
+    </a>
+</div>
+    </div>
+
+    <div class="modern-card bank-closing-card"
+     style="cursor:pointer;"
+     onclick="window.location.href='{{ url_for('interest_module', period_start=period_start, period_end=period_end) }}'">
+        <div class="bank-closing-card-body">
+            <div class="modern-header">
+                <div class="modern-icon">📈</div>
+                <div>
+                    <h2>Zinsen</h2>
+                    <p>Bruttozinsen, Steuerabzüge und Netto-Gutschrift werden hier zusammengeführt.</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="bank-closing-status">
+            <div class="bank-status-title">STATUS</div>
+            <div class="bank-status-badge bank-status-open">Offen</div>
+            <div class="bank-action">
+                <a class="button"
+   href="{{ url_for('interest_module', period_start=period_start, period_end=period_end) }}"
+   onclick="event.stopPropagation();">
+                    Schritt öffnen
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <div class="modern-card bank-closing-card">
+        <div class="bank-closing-card-body">
+            <div class="modern-header">
+                <div class="modern-icon">✅</div>
+                <div>
+                    <h2>Status</h2>
+                    <p>Der Monatsabschluss wird erst aktiv, wenn alle Schritte erledigt sind.</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="bank-closing-status">
+            <div class="bank-status-title">STATUS</div>
+            <div class="bank-status-badge bank-status-lock">Entwurf</div>
+        </div>
+    </div>
+
+</div>
+{% endblock %}
