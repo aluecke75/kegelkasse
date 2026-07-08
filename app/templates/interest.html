@@ -245,9 +245,29 @@
         function updateTaxPreview() {
             var gross = parseEuro(document.getElementById('actual_interest') && document.getElementById('actual_interest').value);
 
-            var capitalTax = parseEuro(document.getElementById('capital_gains_tax') && document.getElementById('capital_gains_tax').value);
-            var solidarityTax = parseEuro(document.getElementById('solidarity_tax') && document.getElementById('solidarity_tax').value);
-            var churchTax = parseEuro(document.getElementById('church_tax') && document.getElementById('church_tax').value);
+            var capitalTaxRate = parseEuro('{{ finance_settings.capital_gains_tax_rate|default("25,00") }}');
+            var solidarityRate = parseEuro('{{ finance_settings.solidarity_tax_rate|default("5,50") }}');
+            var churchTaxRate = parseEuro('{{ finance_settings.church_tax_rate|default("0,00") }}');
+
+            var capitalTax = gross * capitalTaxRate / 100;
+            var solidarityTax = capitalTax * solidarityRate / 100;
+            var churchTax = capitalTax * churchTaxRate / 100;
+
+            var capitalTaxInput = document.getElementById('capital_gains_tax');
+            var solidarityTaxInput = document.getElementById('solidarity_tax');
+            var churchTaxInput = document.getElementById('church_tax');
+
+            if (capitalTaxInput) {
+                capitalTaxInput.value = formatEuro(capitalTax);
+            }
+
+            if (solidarityTaxInput) {
+                solidarityTaxInput.value = formatEuro(solidarityTax);
+            }
+
+            if (churchTaxInput) {
+                churchTaxInput.value = formatEuro(churchTax);
+            }
 
             var totalTax = capitalTax + solidarityTax + churchTax;
             var net = Math.max(0, gross - totalTax);

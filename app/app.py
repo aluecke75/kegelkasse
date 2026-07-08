@@ -5473,6 +5473,8 @@ def interest_module():
 
     suggested_taxes = calculate_interest_taxes(expected_cents)
 
+    finance_settings = get_finance_settings()
+
     return render_template(
         "interest.html",
         active_setting=active_setting,
@@ -5486,6 +5488,7 @@ def interest_module():
         suggested_capital_gains_tax=cents_to_euro(suggested_taxes["capital_tax"]),
         suggested_solidarity_tax=cents_to_euro(suggested_taxes["solidarity_tax"]),
         suggested_church_tax=cents_to_euro(suggested_taxes["church_tax"]),
+        finance_settings=finance_settings,
     )
 
 

@@ -27,16 +27,16 @@ services:
     volumes:
 
       # Datenbank
-      - ./data/database:/app/database
+      - ${KEGELKASSE_DATABASE_PATH:-./data/database}:/app/database
 
       # Backups
-      - //volume1/Backups/Docker/kegelkasse/data/backups:/app/backups
+      - ${KEGELKASSE_BACKUP_PATH:-./data/backups}:/app/backups
 
       # Dokumente / Uploads
-      - ./data/uploads:/app/uploads
+      - ${KEGELKASSE_UPLOADS_PATH:-./data/uploads}:/app/uploads
 
       # Logs
-      - ./logs:/app/logs
+      - ${KEGELKASSE_LOGS_PATH:-./logs}:/app/logs
 
     healthcheck:
       test: ["CMD", "wget", "--spider", "-q", "http://localhost:5000"]
