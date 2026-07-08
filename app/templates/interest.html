@@ -243,52 +243,58 @@
         }
         function formatEuro(number) { return number.toFixed(2).replace('.', ','); }
         function updateTaxPreview() {
-            var gross = parseEuro(document.getElementById('actual_interest') && document.getElementById('actual_interest').value);
-
-            var capitalTaxRate = parseEuro('{{ finance_settings.capital_gains_tax_rate|default("25,00") }}');
-            var solidarityRate = parseEuro('{{ finance_settings.solidarity_tax_rate|default("5,50") }}');
-            var churchTaxRate = parseEuro('{{ finance_settings.church_tax_rate|default("0,00") }}');
-
-            var capitalTax = gross * capitalTaxRate / 100;
-            var solidarityTax = capitalTax * solidarityRate / 100;
-            var churchTax = capitalTax * churchTaxRate / 100;
-
-            var capitalTaxInput = document.getElementById('capital_gains_tax');
-            var solidarityTaxInput = document.getElementById('solidarity_tax');
-            var churchTaxInput = document.getElementById('church_tax');
-
-            if (capitalTaxInput) {
-                capitalTaxInput.value = formatEuro(capitalTax);
-            }
-
-            if (solidarityTaxInput) {
-                solidarityTaxInput.value = formatEuro(solidarityTax);
-            }
-
-            if (churchTaxInput) {
-                churchTaxInput.value = formatEuro(churchTax);
-            }
-
-            var totalTax = capitalTax + solidarityTax + churchTax;
-            var net = Math.max(0, gross - totalTax);
+            var actualInterestInput = document.getElementById('actual_interest');
             var bankBalance = parseEuro('{{ bank_balance }}');
-            var newBankBalance = bankBalance + net;
 
-            var taxTotalPreview = document.getElementById('taxTotalPreview');
-            var netInterestPreview = document.getElementById('netInterestPreview');
-            var newBankBalancePreview = document.getElementById('newBankBalancePreview');
+            fetch('/api/interest/calculate', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    gross_interest: actualInterestInput ? actualInterestInput.value : '0'
+                })
+            })
+                .then(function (response) {
+                    return response.json();
+                })
+                .then(function (data) {
+                    var capitalTaxInput = document.getElementById('capital_gains_tax');
+                    var solidarityTaxInput = document.getElementById('solidarity_tax');
+                    var churchTaxInput = document.getElementById('church_tax');
 
-            if (taxTotalPreview) {
-                taxTotalPreview.textContent = formatEuro(totalTax) + ' €';
-            }
+                    if (capitalTaxInput) {
+                        capitalTaxInput.value = data.capital_tax;
+                    }
 
-            if (netInterestPreview) {
-                netInterestPreview.textContent = formatEuro(net) + ' €';
-            }
+                    if (solidarityTaxInput) {
+                        solidarityTaxInput.value = data.solidarity_tax;
+                    }
 
-            if (newBankBalancePreview) {
-                newBankBalancePreview.textContent = formatEuro(newBankBalance) + ' €';
-            }
+                    if (churchTaxInput) {
+                        churchTaxInput.value = data.church_tax;
+                    }
+
+                    var totalTax = parseEuro(data.total_tax);
+                    var net = parseEuro(data.net_interest);
+                    var newBankBalance = bankBalance + net;
+
+                    var taxTotalPreview = document.getElementById('taxTotalPreview');
+                    var netInterestPreview = document.getElementById('netInterestPreview');
+                    var newBankBalancePreview = document.getElementById('newBankBalancePreview');
+
+                    if (taxTotalPreview) {
+                        taxTotalPreview.textContent = formatEuro(totalTax) + ' €';
+                    }
+
+                    if (netInterestPreview) {
+                        netInterestPreview.textContent = formatEuro(net) + ' €';
+                    }
+
+                    if (newBankBalancePreview) {
+                        newBankBalancePreview.textContent = formatEuro(newBankBalance) + ' €';
+                    }
+                });
         }
         normalizePercentInput(document.getElementById('annual_rate'));
         normalizeDecimalCommaInput(document.getElementById('actual_interest'), 2);

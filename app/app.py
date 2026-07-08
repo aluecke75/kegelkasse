@@ -5287,6 +5287,26 @@ def confirm_cash_audit(audit_id):
     flash("Kassenprüfung wurde bestätigt und im Revisionsprotokoll dokumentiert.", "success")
     return redirect(url_for("cash_audits"))
 
+@app.route("/api/interest/calculate", methods=["POST"])
+@login_required
+@role_required("admin", "cashier")
+def api_interest_calculate():
+    data = request.get_json(silent=True) or {}
+    gross_interest_cents = euro_to_cents(data.get("gross_interest", "0"))
+
+    taxes = calculate_interest_taxes(gross_interest_cents)
+
+    return jsonify({
+        "capital_tax": cents_to_euro(taxes["capital_tax"]),
+        "solidarity_tax": cents_to_euro(taxes["solidarity_tax"]),
+        "church_tax": cents_to_euro(taxes["church_tax"]),
+        "total_tax": cents_to_euro(
+            taxes["capital_tax"]
+            + taxes["solidarity_tax"]
+            + taxes["church_tax"]
+        ),
+        "net_interest": cents_to_euro(max(0, taxes["net"])),
+    })
 
 @app.route("/interest", methods=["GET", "POST"])
 @login_required
