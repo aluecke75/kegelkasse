@@ -5384,6 +5384,19 @@ def interest_module():
                 flash("Der Zeitraum ist ungültig: Bis-Datum liegt vor dem Von-Datum.", "danger")
                 return redirect(url_for("interest_module"))
 
+            existing_interest_booking = (
+                InterestBooking.query
+                .filter_by(period_start=period_start, period_end=period_end)
+                .first()
+            )
+
+            if existing_interest_booking:
+                flash(
+                    "Für diesen Zinszeitraum wurde bereits eine Zinsgutschrift gebucht. Eine Doppelbuchung ist nicht erlaubt.",
+                    "warning"
+                )
+                return redirect(url_for("interest_module"))
+
             basis_balance_cents = account_balance("bank")
             expected_cents = calculate_expected_interest_cents(
                 basis_balance_cents,
@@ -5511,6 +5524,67 @@ def interest_module():
         finance_settings=finance_settings,
     )
 
+@app.route("/interest/<int:booking_id>/cancel", methods=["POST"])
+@login_required
+@role_required("admin", "cashier")
+def interest_booking_cancel(booking_id):
+    booking = InterestBooking.query.get_or_404(booking_id)
+
+    if booking.is_cancelled:
+        flash("Diese Zinsbuchung wurde bereits storniert.", "warning")
+        return redirect(url_for("interest_module"))
+
+    reason = request.form.get("cancel_reason", "").strip()
+    if not reason:
+        reason = "Stornierung der Zinsbuchung"
+
+    reversal_entry = CashbookEntry(
+        booking_date=datetime.today().date(),
+        direction="expense",
+        account="bank",
+        amount_cents=booking.net_interest_cents,
+        category="Zinsen Storno",
+        person="Bank",
+        reason=f"Storno Zinsgutschrift {booking.period_start.strftime('%d.%m.%Y')} - {booking.period_end.strftime('%d.%m.%Y')}",
+        note=reason,
+        created_by_user_id=current_user.id,
+    )
+    db.session.add(reversal_entry)
+    db.session.flush()
+
+    db.session.add(AccountTransaction(
+        account="bank",
+        category="interest_cancel",
+        amount_cents=-booking.net_interest_cents,
+        booking_date=datetime.today().date(),
+        description=f"Storno Zinsgutschrift #{booking.id}",
+    ))
+
+    booking.is_cancelled = True
+    booking.cancelled_at = datetime.utcnow()
+    booking.cancelled_by_user_id = current_user.id
+    booking.cancel_reason = reason
+    booking.reversal_cashbook_entry_id = reversal_entry.id
+
+    audit_log(
+        "interest",
+        "interest_booking_cancelled",
+        f"Zinsgutschrift {booking.actual_interest_euro()} € storniert",
+        details=(
+            f"Zeitraum: {booking.period_start} bis {booking.period_end}\n"
+            f"Brutto: {booking.actual_interest_euro()} €\n"
+            f"Netto: {booking.net_interest_euro()} €\n"
+            f"Grund: {reason}"
+        ),
+        object_type="InterestBooking",
+        object_id=booking.id,
+        old_value="gebucht",
+        new_value="storniert",
+    )
+
+    db.session.commit()
+    flash("Zinsbuchung wurde storniert und als Gegenbuchung im Kassenbuch erfasst.", "success")
+    return redirect(url_for("interest_module"))
 
 @app.route("/cashbook", methods=["GET", "POST"])
 @login_required
@@ -5975,6 +6049,47 @@ def monthly_bank_closing():
         and contribution_paid_count == contribution_member_count
     )
 
+    interest_booking = (
+        InterestBooking.query
+        .filter(InterestBooking.period_start == period_start)
+        .filter(InterestBooking.period_end == period_end)
+        .filter(InterestBooking.is_cancelled == False)
+        .order_by(InterestBooking.booking_date.desc(), InterestBooking.created_at.desc())
+        .first()
+    )
+    interest_done = interest_booking is not None
+
+    statement_uploaded = False
+
+    checks = {
+        "statement": {
+            "label": "Kontoauszug",
+            "done": statement_uploaded,
+            "status": "vorhanden" if statement_uploaded else "fehlt",
+            "url": None,
+        },
+        "contributions": {
+            "label": "Monatsbeiträge",
+            "done": contribution_done,
+            "status": f"{contribution_paid_count} / {contribution_member_count} erledigt",
+            "url": url_for("monthly_contributions", month=f"{year:04d}-{month:02d}"),
+        },
+        "interest": {
+            "label": "Zinsen",
+            "done": interest_done,
+            "status": "gebucht" if interest_done else "offen",
+            "url": url_for("interest_module"),
+        },
+    }
+
+    all_required_done = all(item["done"] for item in checks.values())
+
+    next_step = None
+    for key in ("statement", "contributions", "interest"):
+        if not checks[key]["done"]:
+            next_step = checks[key]
+            break
+
     return render_template(
         "monthly_bank_closing.html",
         year=year,
@@ -5986,6 +6101,10 @@ def monthly_bank_closing():
         contribution_paid_count=contribution_paid_count,
         contribution_member_count=contribution_member_count,
         contribution_total_paid=cents_to_euro(contribution_total_paid_cents),
+        interest_done=interest_done,
+        checks=checks,
+        all_required_done=all_required_done,
+        next_step=next_step,
     )
 
 @app.route("/finance/monthly-contributions", methods=["GET", "POST"])
@@ -7028,9 +7147,39 @@ def penalty_balances():
         today=datetime.today().date().isoformat(),
     )
 
+def ensure_interest_booking_cancel_columns():
+    inspector = db.inspect(db.engine)
+    columns = {
+        column["name"]
+        for column in inspector.get_columns("interest_bookings")
+    }
+
+    statements = []
+
+    if "reversal_cashbook_entry_id" not in columns:
+        statements.append("ALTER TABLE interest_bookings ADD COLUMN reversal_cashbook_entry_id INTEGER")
+
+    if "is_cancelled" not in columns:
+        statements.append("ALTER TABLE interest_bookings ADD COLUMN is_cancelled BOOLEAN NOT NULL DEFAULT 0")
+
+    if "cancelled_at" not in columns:
+        statements.append("ALTER TABLE interest_bookings ADD COLUMN cancelled_at DATETIME")
+
+    if "cancelled_by_user_id" not in columns:
+        statements.append("ALTER TABLE interest_bookings ADD COLUMN cancelled_by_user_id INTEGER")
+
+    if "cancel_reason" not in columns:
+        statements.append("ALTER TABLE interest_bookings ADD COLUMN cancel_reason TEXT")
+
+    for statement in statements:
+        db.session.execute(db.text(statement))
+
+    if statements:
+        db.session.commit()
 
 with app.app_context():
     db.create_all()
+    ensure_interest_booking_cancel_columns()
     migrate_schema_extensions()
 
     # Öffentliche-Version-Basis: Bei einer leeren Installation wird kein versteckter

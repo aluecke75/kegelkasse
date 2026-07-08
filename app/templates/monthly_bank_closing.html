@@ -2,149 +2,176 @@
 
 {% block content %}
 <style>
-    .bank-closing-steps {
+    .closing-accordion {
         display: grid;
-        grid-template-columns: repeat(5, minmax(130px, 1fr));
-        gap: 0.75rem;
-        margin-bottom: 1rem;
+        gap: 14px;
+        margin-top: 18px;
     }
 
-    .bank-closing-step {
-        background:#fff;
-        border:1px solid var(--line);
-        border-radius:1rem;
-        padding:.85rem;
-        text-align:center;
-        font-weight:700;
-        box-shadow:var(--shadow);
-        transition:.2s;
+    .closing-panel {
+        background: #fff;
+        border: 1px solid var(--line);
+        border-radius: 16px;
+        box-shadow: var(--shadow);
+        overflow: hidden;
     }
 
-    .bank-closing-step.done {
-        background:#dff6e7;
-        border-color:#198754;
-        color:#146c43;
+    .closing-summary {
+        display: grid;
+        grid-template-columns: 58px 1fr auto;
+        gap: 16px;
+        align-items: center;
+        padding: 18px 20px;
+        cursor: pointer;
+        list-style: none;
     }
 
-    .bank-closing-step.active {
-        background:#fff6da;
-        border-color:#d4a400;
-        color:#8a6400;
+    .closing-summary::-webkit-details-marker {
+        display: none;
     }
 
-    .bank-closing-step span {
-        display:block;
-        font-size:1.35rem;
-        margin-bottom:.35rem;
+    .closing-icon {
+        width: 46px;
+        height: 46px;
+        border-radius: 14px;
+        display: grid;
+        place-items: center;
+        background: #eaf7ef;
+        font-size: 24px;
     }
 
-    .bank-closing-card-grid {
-        display:grid;
-        grid-template-columns:repeat(4, minmax(220px, 1fr));
-        gap:1rem;
-        align-items:stretch;
+    .closing-summary h2 {
+        margin: 0 0 5px 0;
     }
 
-    .bank-closing-card {
-        min-height:275px;
-        display:flex;
-        flex-direction:column;
-        justify-content:space-between;
+    .closing-summary p {
+        margin: 0;
+        color: #526178;
     }
 
-    .bank-closing-card-body {
-        flex:1;
+    .closing-chevron {
+        font-size: 22px;
+        font-weight: 900;
     }
 
-    .bank-closing-status {
-        margin-top:auto;
-        border-top:1px solid var(--line);
-        padding-top:14px;
+    details[open] .closing-chevron {
+        transform: rotate(180deg);
     }
 
-    .bank-status-title {
-        font-size:.72rem;
-        color:#888;
-        letter-spacing:1px;
-        font-weight:700;
-        margin-bottom:8px;
+    .closing-content {
+        border-top: 1px solid var(--line);
+        padding: 18px 20px 22px;
     }
 
-    .bank-status-badge {
-        display:inline-block;
-        padding:7px 14px;
-        border-radius:999px;
-        font-weight:800;
-        margin-bottom:14px;
+    .status-overview {
+        margin-top: 22px;
     }
 
-    .bank-status-open {
-        background:#fff3cd;
-        color:#8a6400;
+    .status-grid {
+        display: grid;
+        grid-template-columns: repeat(5, minmax(160px, 1fr));
+        gap: 12px;
     }
 
-    .bank-status-done {
-        background:#dff6e7;
-        color:#146c43;
+.status-mini-card {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    justify-content: flex-start;
+    gap: 12px;
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 16px;
+    background: #fff;
+    min-height: 118px;
+    overflow: visible;
+}
+
+.status-mini-left {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-weight: 900;
+    width: 100%;
+    line-height: 1.25;
+}
+
+.status-mini-card .status-badge {
+    margin-top: auto;
+    max-width: 100%;
+    white-space: normal;
+    text-align: center;
+    line-height: 1.25;
+}
+
+    .status-badge {
+        display: inline-block;
+        padding: 7px 14px;
+        border-radius: 999px;
+        font-weight: 900;
+        white-space: nowrap;
     }
 
-    .bank-status-lock {
-        background:#e9ecef;
-        color:#495057;
+    .status-open {
+        background: #fff3cd;
+        color: #8a6400;
     }
 
-    .bank-action {
-        margin-top:12px;
+    .status-done {
+        background: #dff6e7;
+        color: #146c43;
     }
 
-    .bank-action .button {
-        width:100%;
-        text-align:center;
+    .status-lock {
+        background: #e9ecef;
+        color: #495057;
     }
 
-    @media (max-width: 900px) {
-        .bank-closing-steps {
-            grid-template-columns:1fr;
+    .progress-box {
+        margin-top: 18px;
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        padding: 16px;
+        background: #fff;
+    }
+
+    .progress-line {
+        height: 14px;
+        border-radius: 999px;
+        background: #e9edf2;
+        overflow: hidden;
+        margin-top: 10px;
+    }
+
+    .progress-line div {
+        height: 100%;
+        background: #198754;
+    }
+
+    @media (max-width: 1000px) {
+        .status-grid {
+            grid-template-columns: 1fr;
         }
 
-        .bank-closing-card-grid {
-            grid-template-columns:1fr;
+        .closing-summary {
+            grid-template-columns: 48px 1fr auto;
         }
     }
 </style>
+
+{% set done_count = checks.values() | selectattr("done") | list | length %}
+{% set total_count = checks | length %}
+{% set progress_percent = (done_count * 100 / total_count) | round(0, "floor") if total_count else 0 %}
 
 <div class="modern-header">
     <div class="modern-icon">🏦</div>
     <div>
         <h1>Monatsabschluss Bank</h1>
-        <p>Monatsbeiträge, Zinsen und Kontoauszug für einen Bankmonat gemeinsam prüfen.</p>
-    </div>
-</div>
-
-<div class="bank-closing-steps">
-    <div class="bank-closing-step done"><span>①</span>Kontoauszug</div>
-    <div class="bank-closing-step active"><span>②</span>Monatsbeiträge</div>
-    <div class="bank-closing-step"><span>③</span>Zinsen</div>
-    <div class="bank-closing-step"><span>④</span>Kontrolle</div>
-    <div class="bank-closing-step"><span>⑤</span>Abschluss</div>
-</div>
-
-<div class="progress" style="margin-bottom:20px;">
-    <div style="font-weight:700;margin-bottom:8px;">Fortschritt: 20 %</div>
-    <div style="height:14px;border-radius:8px;background:#e9edf2;overflow:hidden;">
-        <div style="width:20%;height:100%;background:#198754;"></div>
+        <p>{{ "%02d"|format(month) }}.{{ year }} · Abschlusszeitraum {{ period_start }} bis {{ period_end }}</p>
     </div>
 </div>
 
 <div class="modern-card">
-    <div class="modern-header">
-        <div class="modern-icon">📅</div>
-        <div>
-            <h2>Abschlussmonat</h2>
-            <p>Vorgeschlagen wird automatisch der vollständig abgeschlossene Vormonat.</p>
-        </div>
-    </div>
-
     <form method="get" class="form-grid">
         <label>
             Monat
@@ -156,100 +183,172 @@
     </form>
 </div>
 
-<div class="bank-closing-card-grid">
+<div class="closing-accordion">
 
-    <div class="modern-card bank-closing-card">
-        <div class="bank-closing-card-body">
-            <div class="modern-header">
-                <div class="modern-icon">📄</div>
-                <div>
-                    <h2>Kontoauszug</h2>
-                    <p>PDF-Ablage wird im nächsten Schritt ergänzt.</p>
-                </div>
+    <details class="closing-panel" data-panel="statement">
+        <summary class="closing-summary">
+            <div class="closing-icon">📄</div>
+            <div>
+                <h2>1. Kontoauszug</h2>
+                <p>PDF-Kontoauszug für diesen Zeitraum hochladen und verwalten.</p>
             </div>
+            <div class="closing-chevron">⌄</div>
+        </summary>
+        <div class="closing-content">
+            <p><strong>Status:</strong>
+                {% if checks.statement.done %}
+                    <span class="status-badge status-done">{{ checks.statement.status }}</span>
+                {% else %}
+                    <span class="status-badge status-open">{{ checks.statement.status }}</span>
+                {% endif %}
+            </p>
+            <p class="muted">Upload-Funktion wird im nächsten Schritt ergänzt.</p>
         </div>
+    </details>
 
-        <div class="bank-closing-status">
-            <div class="bank-status-title">STATUS</div>
-            <div class="bank-status-badge bank-status-open">Offen</div>
-        </div>
-    </div>
-
-<div class="modern-card bank-closing-card"
-     style="cursor:pointer;"
-     onclick="window.location.href='{{ url_for('monthly_contributions', month=month_value) }}'">
-        <div class="bank-closing-card-body">
-            <div class="modern-header">
-                <div class="modern-icon">💶</div>
-                <div>
-                    <h2>Monatsbeiträge</h2>
-                    <p>Prüfung und Buchung werden aus dem Monatsbeitragsmodul übernommen.</p>
-                </div>
+    <details class="closing-panel" data-panel="contributions">
+        <summary class="closing-summary">
+            <div class="closing-icon">💶</div>
+            <div>
+                <h2>2. Monatsbeiträge</h2>
+                <p>Prüfung und Buchung der Monatsbeiträge.</p>
             </div>
+            <div class="closing-chevron">⌄</div>
+        </summary>
+        <div class="closing-content">
+            <p><strong>Status:</strong>
+                {% if checks.contributions.done %}
+                    <span class="status-badge status-done">{{ checks.contributions.status }}</span>
+                {% else %}
+                    <span class="status-badge status-open">{{ checks.contributions.status }}</span>
+                {% endif %}
+            </p>
+            <p><strong>{{ contribution_total_paid }} €</strong> gebucht</p>
+            <a class="button" href="{{ url_for('monthly_contributions', month=month_value) }}">Schritt öffnen</a>
         </div>
+    </details>
 
-{% if contribution_done %}
-    <div class="bank-status-badge bank-status-done">Erledigt</div>
-{% else %}
-    <div class="bank-status-badge bank-status-open">Offen</div>
-{% endif %}
+    <details class="closing-panel" data-panel="interest">
+        <summary class="closing-summary">
+            <div class="closing-icon">📈</div>
+            <div>
+                <h2>3. Zinsen</h2>
+                <p>Bruttozinsen erfassen, Steuerabzüge berechnen und Netto-Gutschrift zusammenführen.</p>
+            </div>
+            <div class="closing-chevron">⌄</div>
+        </summary>
+        <div class="closing-content">
+            <p><strong>Status:</strong>
+                {% if checks.interest.done %}
+                    <span class="status-badge status-done">{{ checks.interest.status }}</span>
+                {% else %}
+                    <span class="status-badge status-open">{{ checks.interest.status }}</span>
+                {% endif %}
+            </p>
+            <a class="button" href="{{ url_for('interest_module', period_start=period_start, period_end=period_end) }}">Schritt öffnen</a>
+        </div>
+    </details>
 
-<div style="margin-bottom:12px;font-weight:800;">
-    {{ contribution_paid_count }} / {{ contribution_member_count }} Mitglieder<br>
-    {{ contribution_total_paid }} € gebucht
+    <details class="closing-panel" data-panel="control">
+        <summary class="closing-summary">
+            <div class="closing-icon">🛡️</div>
+            <div>
+                <h2>4. Kontrolle</h2>
+                <p>Automatische Prüfungen und Plausibilitätschecks für diesen Monat.</p>
+            </div>
+            <div class="closing-chevron">⌄</div>
+        </summary>
+        <div class="closing-content">
+            {% if all_required_done %}
+                <span class="status-badge status-done">plausibel</span>
+            {% else %}
+                <span class="status-badge status-lock">offen</span>
+            {% endif %}
+        </div>
+    </details>
+
+    <details class="closing-panel" data-panel="closing">
+        <summary class="closing-summary">
+            <div class="closing-icon">✅</div>
+            <div>
+                <h2>5. Abschluss</h2>
+                <p>Monat abschließen. Danach sind keine Änderungen mehr möglich.</p>
+            </div>
+            <div class="closing-chevron">⌄</div>
+        </summary>
+        <div class="closing-content">
+            {% if all_required_done %}
+                <span class="status-badge status-done">freigegeben</span>
+            {% else %}
+                <span class="status-badge status-lock">Entwurf</span>
+            {% endif %}
+        </div>
+    </details>
+
 </div>
 
-<div class="bank-action">
-    <a class="button"
-       href="{{ url_for('monthly_contributions', month=month_value) }}"
-       onclick="event.stopPropagation();">
-        Schritt öffnen
-    </a>
+<div class="modern-card status-overview">
+    <h2>Statusübersicht</h2>
+
+    <div class="status-grid">
+        <div class="status-mini-card">
+            <div class="status-mini-left">📄 Kontoauszug</div>
+            <span class="status-badge {% if checks.statement.done %}status-done{% else %}status-open{% endif %}">
+                {{ checks.statement.status }}
+            </span>
+        </div>
+
+        <div class="status-mini-card">
+            <div class="status-mini-left">💶 Monatsbeiträge</div>
+            <span class="status-badge {% if checks.contributions.done %}status-done{% else %}status-open{% endif %}">
+                {{ checks.contributions.status }}
+            </span>
+        </div>
+
+        <div class="status-mini-card">
+            <div class="status-mini-left">📈 Zinsen</div>
+            <span class="status-badge {% if checks.interest.done %}status-done{% else %}status-open{% endif %}">
+                {{ checks.interest.status }}
+            </span>
+        </div>
+
+        <div class="status-mini-card">
+            <div class="status-mini-left">🛡️ Kontrolle</div>
+            <span class="status-badge {% if all_required_done %}status-done{% else %}status-lock{% endif %}">
+                {% if all_required_done %}plausibel{% else %}offen{% endif %}
+            </span>
+        </div>
+
+        <div class="status-mini-card">
+            <div class="status-mini-left">✅ Abschluss</div>
+            <span class="status-badge {% if all_required_done %}status-done{% else %}status-lock{% endif %}">
+                {% if all_required_done %}freigegeben{% else %}Entwurf{% endif %}
+            </span>
+        </div>
+    </div>
+
+    <div class="progress-box">
+        <strong>Fortschritt</strong>
+        <span style="float:right;font-weight:900;">{{ done_count }} von {{ total_count }} Schritten erledigt ({{ progress_percent }} %)</span>
+        <div class="progress-line">
+            <div style="width:{{ progress_percent }}%;"></div>
+        </div>
+    </div>
 </div>
-    </div>
 
-    <div class="modern-card bank-closing-card"
-     style="cursor:pointer;"
-     onclick="window.location.href='{{ url_for('interest_module', period_start=period_start, period_end=period_end) }}'">
-        <div class="bank-closing-card-body">
-            <div class="modern-header">
-                <div class="modern-icon">📈</div>
-                <div>
-                    <h2>Zinsen</h2>
-                    <p>Bruttozinsen, Steuerabzüge und Netto-Gutschrift werden hier zusammengeführt.</p>
-                </div>
-            </div>
-        </div>
+<script>
+(function () {
+    document.querySelectorAll("details[data-panel]").forEach(function (panel) {
+        var key = "monthly-bank-closing-" + panel.dataset.panel;
 
-        <div class="bank-closing-status">
-            <div class="bank-status-title">STATUS</div>
-            <div class="bank-status-badge bank-status-open">Offen</div>
-            <div class="bank-action">
-                <a class="button"
-   href="{{ url_for('interest_module', period_start=period_start, period_end=period_end) }}"
-   onclick="event.stopPropagation();">
-                    Schritt öffnen
-                </a>
-            </div>
-        </div>
-    </div>
+        if (localStorage.getItem(key) === "open") {
+            panel.open = true;
+        }
 
-    <div class="modern-card bank-closing-card">
-        <div class="bank-closing-card-body">
-            <div class="modern-header">
-                <div class="modern-icon">✅</div>
-                <div>
-                    <h2>Status</h2>
-                    <p>Der Monatsabschluss wird erst aktiv, wenn alle Schritte erledigt sind.</p>
-                </div>
-            </div>
-        </div>
-
-        <div class="bank-closing-status">
-            <div class="bank-status-title">STATUS</div>
-            <div class="bank-status-badge bank-status-lock">Entwurf</div>
-        </div>
-    </div>
-
-</div>
+        panel.addEventListener("toggle", function () {
+            localStorage.setItem(key, panel.open ? "open" : "closed");
+        });
+    });
+})();
+</script>
 {% endblock %}

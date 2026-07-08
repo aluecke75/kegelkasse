@@ -385,7 +385,16 @@ class InterestBooking(db.Model):
     net_interest_cents = db.Column(db.Integer, nullable=False, default=0)
 
     cashbook_entry_id = db.Column(db.Integer, db.ForeignKey("cashbook_entries.id"), nullable=True)
-    cashbook_entry = db.relationship("CashbookEntry")
+    cashbook_entry = db.relationship("CashbookEntry", foreign_keys=[cashbook_entry_id])
+
+    reversal_cashbook_entry_id = db.Column(db.Integer, db.ForeignKey("cashbook_entries.id"), nullable=True)
+    reversal_cashbook_entry = db.relationship("CashbookEntry", foreign_keys=[reversal_cashbook_entry_id])
+
+    is_cancelled = db.Column(db.Boolean, nullable=False, default=False)
+    cancelled_at = db.Column(db.DateTime, nullable=True)
+    cancelled_by_user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
+    cancelled_by_user = db.relationship("User", foreign_keys=[cancelled_by_user_id])
+    cancel_reason = db.Column(db.Text, nullable=True)
 
     note = db.Column(db.Text, nullable=True)
     created_by_user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)

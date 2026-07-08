@@ -169,6 +169,8 @@
                         <th>Steuern</th>
                         <th>Netto</th>
                         <th>Notiz</th>
+                        <th>Status</th>
+                        <th>Aktion</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -180,6 +182,25 @@
                         <td>{{ booking.tax_euro() }} €</td>
                         <td><strong>{{ booking.net_interest_euro() }} €</strong></td>
                         <td>{{ booking.note or '-' }}</td>
+<td>
+    {% if booking.is_cancelled %}
+        <span class="bank-status-badge bank-status-lock">storniert</span>
+    {% else %}
+        <span class="bank-status-badge bank-status-done">gebucht</span>
+    {% endif %}
+</td>
+<td>
+    {% if not booking.is_cancelled and current_user.role in ["admin", "cashier"] %}
+        <form method="post"
+              action="{{ url_for('interest_booking_cancel', booking_id=booking.id) }}"
+              onsubmit="return confirm('Diese Zinsbuchung wirklich stornieren? Es wird automatisch eine Gegenbuchung im Kassenbuch erstellt.');">
+            <input type="hidden" name="cancel_reason" value="Stornierung über Zinsmodul">
+            <button type="submit" class="button secondary">Stornieren</button>
+        </form>
+    {% else %}
+        -
+    {% endif %}
+</td>
                     </tr>
                     {% endfor %}
                 </tbody>
@@ -302,13 +323,15 @@
         normalizeDecimalCommaInput(document.getElementById('solidarity_tax'), 2);
         normalizeDecimalCommaInput(document.getElementById('church_tax'), 2);
         normalizePercentInput(document.getElementById('tax_rate'));
-        ['actual_interest', 'capital_gains_tax', 'solidarity_tax', 'church_tax'].forEach(function (id) {
+        ['actual_interest'].forEach(function (id) {
             var el = document.getElementById(id);
             if (el) {
                 el.addEventListener('input', updateTaxPreview);
                 el.addEventListener('blur', updateTaxPreview);
             }
-        }); updateTaxPreview();
+        });
+
+        updateTaxPreview();
     })();
 </script>
 {% endblock %}
