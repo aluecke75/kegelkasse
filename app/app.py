@@ -152,20 +152,19 @@ def inject_active_event_navigation():
         "active_event_nav": active_event_nav,
     }
 
+
 @app.context_processor
-def inject_active_event_navigation():
+def inject_nav_badges():
+    """Kleine Erledigungs-Zähler für das Menü (z. B. offene Monatsbeiträge)."""
     try:
-        active_event_nav = (
-            BowlingEvent.query
-            .filter(BowlingEvent.status.in_(("open", "settlement", "lane_cost")))
-            .order_by(BowlingEvent.event_date.desc(), BowlingEvent.id.desc())
-            .first()
-        )
+        if not (current_user.is_authenticated and current_user.role in ("admin", "cashier", "auditor")):
+            return {"nav_open_monthly_count": 0}
+        nav_open_monthly_count = MonthlyContributionBatch.query.filter(MonthlyContributionBatch.status != "finalized").count()
     except Exception:
-        active_event_nav = None
+        nav_open_monthly_count = 0
 
     return {
-        "active_event_nav": active_event_nav,
+        "nav_open_monthly_count": nav_open_monthly_count,
     }
 
 RATE_TYPES = {

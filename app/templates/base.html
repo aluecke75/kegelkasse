@@ -50,6 +50,7 @@
         nav a:hover, .nav-dropbtn:hover { background: rgba(255,255,255,0.12); }
         .nav-dropdown { display:inline-block; position:relative; }
         .nav-dropbtn { cursor:pointer; }
+        .nav-badge { display:inline-flex; align-items:center; justify-content:center; min-width:18px; height:18px; padding:0 5px; margin-left:4px; border-radius:999px; background:#f59e0b; color:#1a1200; font-size:0.72rem; font-weight:900; vertical-align:middle; }
         .nav-dropdown-content { display:none; position:absolute; background:#ffffff; min-width:230px; z-index:60; border-radius:14px; overflow:hidden; box-shadow: var(--shadow); border:1px solid var(--line); padding:6px; }
         .nav-dropdown-content a { display:block; padding:10px 12px; margin:0; color:var(--text); border-radius:10px; }
         .nav-dropdown-content a:hover { background:#f2f6f3; }
@@ -266,7 +267,9 @@ Nicht löschen – ggf. für spätere Entwicklungsarbeiten wieder aktivieren.
 
             {% if current_user.role in ["admin", "cashier", "auditor"] %}
                 <span class="nav-dropdown">
-                    <span class="nav-dropbtn">Finanzen{% if current_user.role == "auditor" %} (lesen){% endif %} ▾</span>
+                    <span class="nav-dropbtn">Finanzen{% if current_user.role == "auditor" %} (lesen){% endif %}
+                        {% if nav_open_monthly_count %}<span class="nav-badge" title="{{ nav_open_monthly_count }} offene Monatsbeitrags-Abrechnung(en)">{{ nav_open_monthly_count }}</span>{% endif %}
+                        ▾</span>
                     <span class="nav-dropdown-content">
                         <a href="{{ url_for('cashbook') }}">Kassenbuch</a>
                         <a href="{{ url_for('monthly_bank_closing') }}">Monatsabschluss Bank</a>
