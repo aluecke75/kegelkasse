@@ -28,12 +28,11 @@ Stand: 2026-07-09. Aktueller Gesamtstatus: siehe [PROJECT_STATUS.md](PROJECT_STA
    - Abschlussworkflow, Bestätigung (mit Passwort-Bestätigung durch Kassenprüfer/-in) und Prüfprotokoll waren schon vollständig
    - Export ergänzt (PDF/Excel/CSV), analog zu den anderen Bereichen
 
-6. **Jahresabschluss**
-   - Jahresabschluss-Assistent
-   - Archivierung
-   - Jahresberichte
-   - Saldenübernahme
-   - Abschlussprotokoll
+6. **Jahresabschluss** — ✅ abgeschlossen (2026-07-09)
+   - Archivierung und Abschlussprotokoll waren bereits vollständig
+   - Saldenübernahme: Schreibsperre für abgeschlossene Jahre ergänzt (Kassenbuch, Zinsen, Kegelabend-Abrechnung), mit bewusstem Admin-Override
+   - Jahresberichte: neuer, übersichtlich gestalteter PDF/Excel/CSV-Export mit den wichtigsten Jahreszahlen
+   - Jahresabschluss-Assistent: bewusst zurückgestellt — die einzelne Vorschau-Seite mit Prüfung auf offene Kegelabende reicht aktuell aus; bei Bedarf später zu einem mehrstufigen Assistenten ausbauen
 
 7. **Statistiken**
    - Diagramme
