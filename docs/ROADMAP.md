@@ -49,11 +49,9 @@ Stand: 2026-07-09. Aktueller Gesamtstatus: siehe [PROJECT_STATUS.md](PROJECT_STA
 9. **Dokumentenverwaltung** — ✅ bereits vollständig, am 2026-07-09 geprüft und bestätigt
    - Upload (Titel, Kategorie, Datum, Beschreibung), Verknüpfung mit Kegelabend oder Kassenbuch-Eintrag, Vorschau (bild-/PDF-/textbasiert je nach Typ), Download, Archivieren/Wiederherstellen, Suche/Filter — alles mit echten Daten getestet (18 vorhandene Dokumente)
 
-10. **Backup-Modul**
-    - "Backup jetzt"
-    - Wiederherstellung
-    - Zeitplanung
-    - externe Ziele (WebDAV, SMB/NAS, Nextcloud, Dropbox, Google Drive)
+10. **Backup-Modul** — ✅ abgeschlossen (2026-07-09)
+    - "Backup jetzt", Wiederherstellung (mit automatischer Sicherheitskopie vorher + Bestätigungscode) und Zeitplanung (täglich/wöchentlich/monatlich mit Aufbewahrungsregeln) waren bereits vollständig
+    - Externe Ziele: WebDAV/Nextcloud war schon fertig (deckt auch NAS-Systeme ab, z. B. Synology). Neu: Dropbox und Google Drive per OAuth2 angebunden (App-Key/Secret durch Admin selbst hinterlegbar, Verbinden/Trennen per Klick, automatischer Token-Refresh). OneDrive bleibt bewusst vorbereitet (nicht gewünscht). Echter Verbindungstest steht noch aus, bis reale Zugangsdaten (eigene Dropbox-/Google-App) hinterlegt werden.
 
 11. **Öffentliche Version** (nach Vereinsversion)
     - Einrichtungsassistent
