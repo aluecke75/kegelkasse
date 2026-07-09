@@ -6,6 +6,8 @@ import json
 import zipfile
 import shutil
 import sqlite3
+import zlib
+import struct
 from pathlib import Path
 from decimal import Decimal, ROUND_HALF_UP, ROUND_CEILING, ROUND_FLOOR
 import calendar
@@ -405,39 +407,240 @@ def _pdf_text_cmd(x, y, text, size=10, font="F1"):
     return f"BT /{font} {size} Tf {x} {y} Td ({pdf_escape(text)}) Tj ET"
 
 
+def decode_png_image(data):
+    """Minimaler, abhängigkeitsfreier PNG-Decoder für 8-Bit RGB/RGBA, nicht interlaced.
+
+    Nutzt nur die Python-Standardbibliothek (zlib/struct). Gibt (width, height,
+    rgb_bytes, alpha_bytes_or_none) zurück oder wirft ValueError bei nicht
+    unterstützten PNG-Varianten (Palette, 16-Bit, interlaced, ...).
+    """
+    if data[:8] != b"\x89PNG\r\n\x1a\n":
+        raise ValueError("Keine gültige PNG-Datei.")
+
+    pos = 8
+    width = height = bit_depth = color_type = interlace = None
+    idat = bytearray()
+
+    while pos < len(data):
+        length = struct.unpack(">I", data[pos:pos + 4])[0]
+        chunk_type = data[pos + 4:pos + 8]
+        chunk = data[pos + 8:pos + 8 + length]
+        pos += 8 + length + 4  # + CRC
+
+        if chunk_type == b"IHDR":
+            width, height, bit_depth, color_type, _, _, interlace = struct.unpack(">IIBBBBB", chunk)
+        elif chunk_type == b"IDAT":
+            idat += chunk
+        elif chunk_type == b"IEND":
+            break
+
+    if not width or not height:
+        raise ValueError("PNG-Kopfdaten konnten nicht gelesen werden.")
+    if bit_depth != 8:
+        raise ValueError("Nur 8-Bit-PNGs werden für das Logo unterstützt.")
+    if interlace != 0:
+        raise ValueError("Interlaced PNGs werden für das Logo nicht unterstützt.")
+    if color_type not in (2, 6):
+        raise ValueError("Nur RGB- oder RGBA-PNGs werden für das Logo unterstützt (keine Palette/Graustufen).")
+
+    channels = 3 if color_type == 2 else 4
+    raw = zlib.decompress(bytes(idat))
+    stride = width * channels
+
+    out = bytearray(height * stride)
+    prev_row = bytearray(stride)
+    pos = 0
+    for y in range(height):
+        filter_type = raw[pos]
+        pos += 1
+        row = bytearray(raw[pos:pos + stride])
+        pos += stride
+
+        for x in range(stride):
+            a = row[x - channels] if x >= channels else 0
+            b = prev_row[x]
+            c = prev_row[x - channels] if x >= channels else 0
+            if filter_type == 1:
+                row[x] = (row[x] + a) & 0xFF
+            elif filter_type == 2:
+                row[x] = (row[x] + b) & 0xFF
+            elif filter_type == 3:
+                row[x] = (row[x] + ((a + b) // 2)) & 0xFF
+            elif filter_type == 4:
+                p = a + b - c
+                pa, pb, pc = abs(p - a), abs(p - b), abs(p - c)
+                pred = a if pa <= pb and pa <= pc else (b if pb <= pc else c)
+                row[x] = (row[x] + pred) & 0xFF
+
+        out[y * stride:(y + 1) * stride] = row
+        prev_row = row
+
+    if channels == 4:
+        rgb = bytearray(width * height * 3)
+        alpha = bytearray(width * height)
+        for i in range(width * height):
+            rgb[i * 3:i * 3 + 3] = out[i * 4:i * 4 + 3]
+            alpha[i] = out[i * 4 + 3]
+        return width, height, bytes(rgb), bytes(alpha)
+
+    return width, height, bytes(out), None
+
+
+def jpeg_dimensions_and_components(data):
+    """Liest Breite/Höhe/Farbkomponenten (1=Graustufen, 3=RGB, 4=CMYK) aus JPEG-Markern."""
+    if data[0:2] != b"\xff\xd8":
+        raise ValueError("Keine gültige JPEG-Datei.")
+    i = 2
+    sof_markers = {0xC0, 0xC1, 0xC2, 0xC3, 0xC5, 0xC6, 0xC7, 0xC9, 0xCA, 0xCB, 0xCD, 0xCE, 0xCF}
+    while i < len(data) - 1:
+        if data[i] != 0xFF:
+            i += 1
+            continue
+        marker = data[i + 1]
+        if marker in (0xD8, 0xD9) or 0xD0 <= marker <= 0xD7 or marker == 0x01:
+            i += 2
+            continue
+        length = (data[i + 2] << 8) + data[i + 3]
+        if marker in sof_markers:
+            height = (data[i + 5] << 8) + data[i + 6]
+            width = (data[i + 7] << 8) + data[i + 8]
+            components = data[i + 9]
+            return width, height, components
+        i += 2 + length
+    raise ValueError("JPEG-Abmessungen konnten nicht gelesen werden.")
+
+
+def build_logo_pdf_image(logo_path):
+    """Bereitet die Logo-Datei für die PDF-Einbettung vor.
+
+    Gibt ein Dict mit den PDF-Objektbausteinen zurück, oder None wenn keine
+    Logo-Datei vorhanden bzw. lesbar ist.
+    """
+    if not logo_path or not logo_path.exists():
+        return None
+
+    try:
+        data = logo_path.read_bytes()
+        suffix = logo_path.suffix.lower()
+
+        if suffix == ".png":
+            width, height, rgb, alpha = decode_png_image(data)
+            return {
+                "width": width, "height": height,
+                "color_space": "DeviceRGB", "filter": "FlateDecode",
+                "stream": zlib.compress(rgb),
+                "smask_stream": zlib.compress(alpha) if alpha else None,
+            }
+
+        if suffix in (".jpg", ".jpeg"):
+            width, height, components = jpeg_dimensions_and_components(data)
+            color_space = {1: "DeviceGray", 3: "DeviceRGB", 4: "DeviceCMYK"}.get(components, "DeviceRGB")
+            return {
+                "width": width, "height": height,
+                "color_space": color_space, "filter": "DCTDecode",
+                "stream": data,
+                "smask_stream": None,
+            }
+    except Exception:
+        return None
+
+    return None
+
+
 _PDF_PAGE_WIDTH = 595
 _PDF_PAGE_HEIGHT = 842
 
 
-def _pdf_page_header_cmds(page_no, title, now_text, margin=42, page_width=_PDF_PAGE_WIDTH):
-    """Gemeinsamer Seitenkopf (Titelband + Datum + Seitenzahl) für alle PDF-Exporte."""
+def _pdf_page_header_cmds(page_no, title, now_text, margin=42, page_width=_PDF_PAGE_WIDTH, logo_image=None):
+    """Gemeinsamer Seitenkopf (Titelband + Datum + Seitenzahl + optionales Vereinslogo)."""
     cmds = []
     cmds.append("0.94 0.97 0.95 rg")
     cmds.append(f"{margin} 748 {page_width - 2*margin} 54 re f")
     cmds.append("0 g")
-    cmds.append(_pdf_text_cmd(margin + 14, 782, title, 16, "F2"))
-    cmds.append(_pdf_text_cmd(margin + 14, 762, f"Erstellt am: {now_text}", 9, "F1"))
-    cmds.append(_pdf_text_cmd(page_width - margin - 80, 762, f"Seite {page_no}", 9, "F1"))
+
+    title_x = margin + 14
+    if logo_image:
+        display_height = 34
+        display_width = min(100, display_height * (logo_image["width"] / logo_image["height"]))
+        logo_x = page_width - margin - 14 - display_width
+        logo_y = 754
+        cmds.append("q")
+        cmds.append(f"{display_width:.2f} 0 0 {display_height:.2f} {logo_x:.2f} {logo_y:.2f} cm")
+        cmds.append("/Logo Do")
+        cmds.append("Q")
+
+    cmds.append(_pdf_text_cmd(title_x, 782, title, 16, "F2"))
+    # Datum und Seitenzahl bewusst zusammen links, damit die gesamte rechte Seite
+    # für ein Logo (egal welcher Breite) frei bleibt und nichts überlappt.
+    cmds.append(_pdf_text_cmd(title_x, 762, f"Erstellt am: {now_text}   ·   Seite {page_no}", 9, "F1"))
     cmds.append("0.80 0.80 0.80 RG")
     cmds.append(f"{margin} 735 m {page_width - margin} 735 l S")
     return cmds
 
 
-def _pdf_assemble(pages_cmds, page_width=_PDF_PAGE_WIDTH, page_height=_PDF_PAGE_HEIGHT):
+def _pdf_footer_cmds(margin=42, page_width=_PDF_PAGE_WIDTH):
+    """Gemeinsame Fußzeile für alle PDF-Exporte."""
+    cmds = []
+    cmds.append("0.85 0.85 0.85 RG")
+    cmds.append(f"{margin} 40 m {page_width - margin} 40 l S")
+    cmds.append("0.60 0.60 0.60 rg")
+    cmds.append(_pdf_text_cmd(margin, 28, "Kegelkasse – Vereinsverwaltung", 8, "F1"))
+    cmds.append("0 g")
+    return cmds
+
+
+def _pdf_image_object(object_id, image, smask_id=None):
+    smask_ref = f" /SMask {smask_id} 0 R" if smask_id else ""
+    header = (
+        f"{object_id} 0 obj\n"
+        f"<< /Type /XObject /Subtype /Image /Width {image['width']} /Height {image['height']} "
+        f"/ColorSpace /{image['color_space']} /BitsPerComponent 8 /Filter /{image['filter']}{smask_ref} "
+        f"/Length {len(image['stream'])} >>\nstream\n"
+    ).encode("ascii")
+    return header + image["stream"] + b"\nendstream\nendobj\n"
+
+
+def _pdf_smask_object(object_id, image):
+    header = (
+        f"{object_id} 0 obj\n"
+        f"<< /Type /XObject /Subtype /Image /Width {image['width']} /Height {image['height']} "
+        f"/ColorSpace /DeviceGray /BitsPerComponent 8 /Filter /FlateDecode "
+        f"/Length {len(image['smask_stream'])} >>\nstream\n"
+    ).encode("ascii")
+    return header + image["smask_stream"] + b"\nendstream\nendobj\n"
+
+
+def _pdf_assemble(pages_cmds, page_width=_PDF_PAGE_WIDTH, page_height=_PDF_PAGE_HEIGHT, logo_image=None):
     """Baut aus einer Liste von Befehlslisten (eine pro Seite) die rohen PDF-Bytes.
 
-    Dependency-freie PDF-Erzeugung mit eingebauten Helvetica-Schriften und
-    cp1252-Textkodierung, damit ä/ö/ü/ß in normalen PDF-Readern korrekt erscheinen.
+    Dependency-freie PDF-Erzeugung mit eingebauten Helvetica-Schriften, cp1252-
+    Textkodierung (ä/ö/ü/ß) und optional einem eingebetteten Vereinslogo (PNG mit
+    Transparenz oder JPEG), das über den Namen /Logo in den Seiteninhalten benutzt wird.
     """
     objects = []
-    page_ids = []
+    next_id = 5  # 1=Catalog, 2=Pages, 3=Font F1, 4=Font F2
 
+    logo_id = None
+    xobject_resource = ""
+    if logo_image:
+        smask_id = None
+        if logo_image.get("smask_stream"):
+            smask_id = next_id
+            objects.append(_pdf_smask_object(smask_id, logo_image))
+            next_id += 1
+        logo_id = next_id
+        objects.append(_pdf_image_object(logo_id, logo_image, smask_id))
+        next_id += 1
+        xobject_resource = f" /XObject << /Logo {logo_id} 0 R >>"
+
+    page_ids = []
     for cmds in pages_cmds:
         stream = "\n".join(cmds).encode("latin-1", errors="replace")
-        content_id = len(objects) + 5
-        page_id = content_id + 1
+        content_id = next_id
+        page_id = next_id + 1
+        next_id += 2
         objects.append(f"{content_id} 0 obj\n<< /Length {len(stream)} >>\nstream\n".encode("ascii") + stream + b"\nendstream\nendobj\n")
-        objects.append(f"{page_id} 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 {page_width} {page_height}] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents {content_id} 0 R >>\nendobj\n".encode("ascii"))
+        objects.append(f"{page_id} 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 {page_width} {page_height}] /Resources << /Font << /F1 3 0 R /F2 4 0 R >>{xobject_resource} >> /Contents {content_id} 0 R >>\nendobj\n".encode("ascii"))
         page_ids.append(page_id)
 
     pdf_objects = [
@@ -466,18 +669,25 @@ def export_rows_to_pdf(rows, headers, filename, title="Kegelkasse Export"):
     """Dependency-free, more structured PDF export.
 
     The PDF uses built-in Helvetica fonts and cp1252 text encoding so ä/ö/ü/ß
-    are displayed correctly in normal PDF readers.
+    are displayed correctly in normal PDF readers. Jede Zeile wird als Karte mit
+    zweispaltigem Feld/Wert-Layout dargestellt (Feldname grau, Wert fett), mit
+    gemeinsamem Seitenkopf/-fuß und optional dem hinterlegten Vereinslogo.
     """
     margin = 42
     line_height = 15
-    page_bottom = 52
+    page_bottom = 66
     now_text = datetime.now().strftime("%d.%m.%Y %H:%M")
+    logo_image = get_logo_pdf_image()
 
     rows = rows or []
     pages_cmds = []
 
     def new_page(page_no):
-        return _pdf_page_header_cmds(page_no, title, now_text, margin), 718
+        return _pdf_page_header_cmds(page_no, title, now_text, margin, logo_image=logo_image), 718
+
+    def close_page(cmds):
+        cmds.extend(_pdf_footer_cmds(margin))
+        pages_cmds.append(cmds)
 
     page_no = 1
     cmds, y = new_page(page_no)
@@ -488,7 +698,7 @@ def export_rows_to_pdf(rows, headers, filename, title="Kegelkasse Export"):
         for idx, row in enumerate(rows, 1):
             needed = line_height * (len(headers) + 2) + 14
             if y - needed < page_bottom:
-                pages_cmds.append(cmds)
+                close_page(cmds)
                 page_no += 1
                 cmds, y = new_page(page_no)
 
@@ -504,27 +714,27 @@ def export_rows_to_pdf(rows, headers, filename, title="Kegelkasse Export"):
 
             for header in headers:
                 value = str(row.get(header, ""))
-                line = f"{header}: {value}"
-                # wrap rough text length, PDF-safe and readable
-                max_len = 92
-                if len(line) <= max_len:
-                    cmds.append(_pdf_text_cmd(margin + 16, y, line, 9, "F1"))
+                cmds.append("0.42 0.42 0.42 rg")
+                cmds.append(_pdf_text_cmd(margin + 16, y, header, 9, "F1"))
+                cmds.append("0 g")
+                max_value_len = 58
+                if len(value) <= max_value_len:
+                    cmds.append(_pdf_text_cmd(margin + 190, y, value, 9, "F2"))
                     y -= line_height
                 else:
-                    first = True
-                    while line:
-                        part = line[:max_len]
-                        line = line[max_len:]
-                        prefix = "" if first else "   "
-                        cmds.append(_pdf_text_cmd(margin + 16, y, prefix + part, 9, "F1"))
+                    y -= line_height
+                    wrap_len = 100
+                    while value:
+                        part = value[:wrap_len]
+                        value = value[wrap_len:]
+                        cmds.append(_pdf_text_cmd(margin + 24, y, part, 9, "F2"))
                         y -= line_height
-                        first = False
             y -= 10
 
-    pages_cmds.append(cmds)
+    close_page(cmds)
 
     return Response(
-        _pdf_assemble(pages_cmds),
+        _pdf_assemble(pages_cmds, logo_image=logo_image),
         mimetype="application/pdf",
         headers={"Content-Disposition": f"attachment; filename={filename}"},
     )
@@ -897,6 +1107,43 @@ BACKUP_DIR = Path(os.getenv("BACKUP_DIR", "/app/backups"))
 ACTIVE_DATABASE_PROFILE = get_active_database_profile()
 DOCUMENT_DIR = get_document_dir(ACTIVE_DATABASE_PROFILE)
 ALLOWED_DOCUMENT_EXTENSIONS = {"pdf", "jpg", "jpeg", "png", "gif", "webp", "doc", "docx", "xls", "xlsx", "txt", "csv", "json", "html", "htm", "rtf"}
+
+BRANDING_DIR = Path("/app/uploads/branding")
+ALLOWED_LOGO_EXTENSIONS = {"png", "jpg", "jpeg"}
+_LOGO_MAGIC_BYTES = {
+    "png": (b"\x89PNG\r\n\x1a\n",),
+    "jpg": (b"\xff\xd8\xff",),
+    "jpeg": (b"\xff\xd8\xff",),
+}
+
+
+def branding_logo_path():
+    """Pfad zur gespeicherten Vereinslogo-Datei, falls vorhanden (sonst None)."""
+    if not BRANDING_DIR.exists():
+        return None
+    for ext in ("png", "jpg", "jpeg"):
+        candidate = BRANDING_DIR / f"logo.{ext}"
+        if candidate.exists():
+            return candidate
+    return None
+
+
+_logo_pdf_cache = {"mtime": None, "image": None}
+
+
+def get_logo_pdf_image():
+    """Für PDFs vorbereitetes Logo-Bild, mit einfachem Cache anhand der Dateizeit."""
+    path = branding_logo_path()
+    if not path:
+        _logo_pdf_cache["mtime"] = None
+        _logo_pdf_cache["image"] = None
+        return None
+
+    mtime = path.stat().st_mtime
+    if _logo_pdf_cache["mtime"] != mtime:
+        _logo_pdf_cache["image"] = build_logo_pdf_image(path)
+        _logo_pdf_cache["mtime"] = mtime
+    return _logo_pdf_cache["image"]
 DEFAULT_DOCUMENT_CATEGORIES = ["Bahnrechnungen", "Kassenprüfung", "Jahresabschluss", "Kegeltour", "Historische Importdaten", "Vereinsunterlagen", "Sonstiges"]
 DATABASE_PATH = get_database_path(ACTIVE_DATABASE_PROFILE)
 
@@ -3016,6 +3263,74 @@ def admin_area():
             flash("Passwortvorgaben wurden gespeichert.", "success")
             return redirect(url_for("admin_area"))
 
+        if form_action == "logo_upload":
+            file = request.files.get("logo_file")
+            if not file or not file.filename:
+                flash("Bitte eine Bilddatei für das Vereinslogo auswählen.", "danger")
+                return redirect(url_for("admin_area"))
+
+            ext = file.filename.rsplit(".", 1)[-1].lower() if "." in file.filename else ""
+            if ext not in ALLOWED_LOGO_EXTENSIONS:
+                flash("Bitte eine PNG- oder JPG-Datei für das Logo hochladen.", "danger")
+                return redirect(url_for("admin_area"))
+
+            file_bytes = file.read()
+            if len(file_bytes) > 3 * 1024 * 1024:
+                flash("Die Bilddatei ist zu groß (maximal 3 MB).", "danger")
+                return redirect(url_for("admin_area"))
+
+            magic_ok = any(file_bytes.startswith(sig) for sig in _LOGO_MAGIC_BYTES.get(ext, ()))
+            if not magic_ok:
+                flash("Die Datei sieht nicht wie ein gültiges Bild aus. Bitte eine echte PNG/JPG-Datei hochladen.", "danger")
+                return redirect(url_for("admin_area"))
+
+            BRANDING_DIR.mkdir(parents=True, exist_ok=True)
+            for old_ext in ("png", "jpg", "jpeg"):
+                old_file = BRANDING_DIR / f"logo.{old_ext}"
+                if old_file.exists():
+                    old_file.unlink()
+
+            stored_name = f"logo.{ext}"
+            (BRANDING_DIR / stored_name).write_bytes(file_bytes)
+
+            try:
+                test_image = build_logo_pdf_image(BRANDING_DIR / stored_name)
+            except Exception:
+                test_image = None
+            if not test_image:
+                (BRANDING_DIR / stored_name).unlink(missing_ok=True)
+                flash("Diese Bilddatei konnte nicht gelesen werden. Unterstützt werden 8-Bit-PNG (RGB/RGBA, nicht interlaced) und JPEG.", "danger")
+                return redirect(url_for("admin_area"))
+
+            audit_log(
+                "settings",
+                "logo_uploaded",
+                "Vereinslogo hochgeladen",
+                details=f"Datei: {file.filename}; Format: {ext}; Größe: {len(file_bytes)} Bytes",
+                object_type="Branding",
+            )
+            db.session.commit()
+            flash("Vereinslogo wurde gespeichert und erscheint ab sofort in PDF-Exporten.", "success")
+            return redirect(url_for("admin_area"))
+
+        if form_action == "logo_remove":
+            removed = False
+            for ext in ("png", "jpg", "jpeg"):
+                old_file = BRANDING_DIR / f"logo.{ext}"
+                if old_file.exists():
+                    old_file.unlink()
+                    removed = True
+            if removed:
+                audit_log(
+                    "settings",
+                    "logo_removed",
+                    "Vereinslogo entfernt",
+                    object_type="Branding",
+                )
+                db.session.commit()
+                flash("Vereinslogo wurde entfernt.", "success")
+            return redirect(url_for("admin_area"))
+
         if form_action == "create_system_user":
             username = clean_username(request.form.get("new_username", ""))
             email = request.form.get("new_email", "").strip() or None
@@ -3159,6 +3474,7 @@ def admin_area():
         return redirect(url_for("admin_area"))
 
     users = User.query.order_by(User.username).all()
+    logo_path = branding_logo_path()
     return render_template(
         "admin.html",
         users=users,
@@ -3167,7 +3483,18 @@ def admin_area():
         reset_tokens=active_password_reset_tokens(),
         mail_settings=mail_settings(),
         mail_settings_summary=mail_settings_summary(),
+        has_logo=logo_path is not None,
+        logo_filename=logo_path.name if logo_path else None,
     )
+
+
+@app.route("/branding/logo")
+def branding_logo():
+    path = branding_logo_path()
+    if not path:
+        abort(404)
+    mimetype = "image/png" if path.suffix.lower() == ".png" else "image/jpeg"
+    return send_file(path, mimetype=mimetype)
 
 
 
@@ -5443,8 +5770,9 @@ def build_annual_report_pdf(year):
     margin = 42
     page_width = _PDF_PAGE_WIDTH
     now_text = datetime.now().strftime("%d.%m.%Y %H:%M")
+    logo_image = get_logo_pdf_image()
 
-    cmds = _pdf_page_header_cmds(1, f"Jahresbericht {year} – Kegelkasse", now_text, margin)
+    cmds = _pdf_page_header_cmds(1, f"Jahresbericht {year} – Kegelkasse", now_text, margin, logo_image=logo_image)
     y = 700
 
     def section_title(label, y_pos):
@@ -5512,7 +5840,8 @@ def build_annual_report_pdf(year):
         cmds.append(_pdf_text_cmd(margin + 8, y, figures["closing"].note[:110], 9, "F1"))
         y -= 18
 
-    return _pdf_assemble([cmds])
+    cmds.extend(_pdf_footer_cmds(margin))
+    return _pdf_assemble([cmds], logo_image=logo_image)
 
 
 @app.route("/annual-closings", methods=["GET", "POST"])

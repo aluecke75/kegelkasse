@@ -263,6 +263,42 @@
             </div>
         </div>
     </details>
+
+    <details class="admin-section">
+        <summary>🖼️ Vereinslogo</summary>
+        <p class="admin-section-intro">Eigenes Logo für PDF-Exporte (Kopfzeile). Wird nur lokal gespeichert, nicht an Dritte übertragen.</p>
+        <div class="admin-section-body">
+            <div class="modern-card">
+                <h2>🖼️ Vereinslogo</h2>
+                <p class="muted">PNG (auch mit transparentem Hintergrund) oder JPG, maximal 3&nbsp;MB. Erscheint automatisch oben rechts in allen PDF-Exporten.</p>
+
+                {% if has_logo %}
+                    <div class="subtle-box" style="display:flex; align-items:center; gap:16px; margin-bottom:14px;">
+                        <img src="{{ url_for('branding_logo') }}?v={{ logo_filename }}" alt="Aktuelles Vereinslogo" style="max-height:64px; max-width:180px;">
+                        <div>
+                            <strong>Aktuelles Logo</strong>
+                            <p class="muted" style="margin:4px 0 0;">Datei: {{ logo_filename }}</p>
+                        </div>
+                    </div>
+                    <form method="post" class="inline-actions" style="margin-bottom:16px;" onsubmit="return confirm('Vereinslogo wirklich entfernen?');">
+                        <input type="hidden" name="form_action" value="logo_remove">
+                        <button type="submit" class="button secondary">Logo entfernen</button>
+                    </form>
+                {% else %}
+                    <p class="muted" style="margin-bottom:14px;">Noch kein Logo hinterlegt.</p>
+                {% endif %}
+
+                <form method="post" enctype="multipart/form-data" class="settings-form">
+                    <input type="hidden" name="form_action" value="logo_upload">
+                    <label>
+                        Logo-Datei
+                        <input type="file" name="logo_file" accept=".png,.jpg,.jpeg" required>
+                    </label>
+                    <button type="submit">{{ "Logo ersetzen" if has_logo else "Logo hochladen" }}</button>
+                </form>
+            </div>
+        </div>
+    </details>
 </div>
 
 {% endblock %}
