@@ -10,6 +10,7 @@
     </div>
 </div>
 
+{% if dashboard_cards.next_event %}
 <div class="two-column-grid">
         <div class="modern-card next-event-card {% if current_user.role == 'member' %}member-next-event-card{% endif %}">
         {% if active_event %}
@@ -35,8 +36,9 @@
         {% endif %}
     </div>
 </div>
+{% endif %}
 
-{% if dashboard_tasks %}
+{% if dashboard_cards.tasks and dashboard_tasks %}
 <div class="modern-card">
     <h2>📋 Heute zu erledigen</h2>
 
@@ -55,7 +57,7 @@
 </div>
 {% endif %}
 
-{% if member_dashboard and current_user.role == "member" %}
+{% if dashboard_cards.member_stats and member_dashboard and current_user.role == "member" %}
 <div class="modern-card">
     <h2>👤 Meine Statistik</h2>
 
@@ -120,8 +122,9 @@
 </div>
 {% endif %}
 
-{% if current_user.role != "member" %}
 <div class="section-grid">
+{% if current_user.role != "member" %}
+    {% if dashboard_cards.cash_balance %}
     <div class="modern-card">
         <h2>💰 Kassenstand</h2>
         <div class="metric-grid">
@@ -134,7 +137,9 @@
         </div>
         <p><a href="{{ url_for('cashbook') }}">Kassenbuch öffnen</a></p>
     </div>
+    {% endif %}
 
+    {% if dashboard_cards.members_overview %}
     <div class="modern-card">
         <h2>👥 Mitglieder</h2>
         <div class="metric-grid">
@@ -152,7 +157,9 @@
             <p class="muted">Keine offenen Strafen bei aktiven Mitgliedern.</p>
         {% endif %}
     </div>
+    {% endif %}
 
+    {% if dashboard_cards.year_overview %}
     <div class="modern-card">
         <h2>📅 Dieses Jahr {{ current_year }}</h2>
         <div class="metric-grid">
@@ -163,7 +170,9 @@
         </div>
         <p><a href="{{ url_for('reports', year=current_year) }}">Jahresstatistik öffnen</a></p>
     </div>
+    {% endif %}
 
+    {% if dashboard_cards.top_rankings %}
     <div class="modern-card">
         <h2>🏆 Top-Wertungen {{ current_year }}</h2>
         <ul class="compact-list no-bullets">
@@ -173,9 +182,10 @@
         </ul>
         <p><a href="{{ url_for('reports', year=current_year) }}">Alle Auswertungen ansehen</a></p>
     </div>
-
+    {% endif %}
 {% endif %}
 
+    {% if dashboard_cards.cash_audit %}
     <div class="modern-card">
         <h2>✅ Kassenprüfung</h2>
         {% if last_cash_audit %}
@@ -189,7 +199,9 @@
         {% endif %}
         <p><a href="{{ url_for('cash_audits') }}">Kassenprüfung öffnen</a></p>
     </div>
+    {% endif %}
 
+    {% if dashboard_cards.annual_closing %}
     <div class="modern-card">
         <h2>📘 Jahresabschluss</h2>
         {% if last_closing %}
@@ -203,7 +215,9 @@
         {% endif %}
         <p><a href="{{ url_for('annual_closings') }}">Jahresabschluss öffnen</a></p>
     </div>
+    {% endif %}
 
+    {% if dashboard_cards.monthly_contributions %}
     <div class="modern-card">
         <h2>📌 Offene Monatsbeiträge</h2>
         {% if open_monthly_batches %}
@@ -217,6 +231,7 @@
         {% endif %}
         <p><a href="{{ url_for('monthly_contributions') }}">Monatsbeiträge öffnen</a></p>
     </div>
+    {% endif %}
 </div>
 
 <style>

@@ -299,6 +299,32 @@
             </div>
         </div>
     </details>
+
+    <details class="admin-section" data-remember-key="admin-dashboard">
+        <summary>🏠 Dashboard</summary>
+        <p class="admin-section-intro">Legt fest, welche Karten auf dem Dashboard für alle Benutzer angezeigt werden. Kein Verschieben, nur An/Aus.</p>
+        <div class="admin-section-body">
+            <div class="modern-card">
+                <h2>🏠 Sichtbare Dashboard-Karten</h2>
+                <form method="post" class="settings-form">
+                    <input type="hidden" name="form_action" value="dashboard_cards">
+                    <div class="dashboard-card-toggle-list">
+                        {% for key, label in dashboard_card_definitions %}
+                            <label class="checkbox-row">
+                                <input type="checkbox" name="dashboard_card_{{ key }}" value="1" {% if dashboard_cards[key] %}checked{% endif %}>
+                                {{ label }}
+                            </label>
+                        {% endfor %}
+                    </div>
+                    <button type="submit">Dashboard-Einstellungen speichern</button>
+                </form>
+            </div>
+        </div>
+    </details>
 </div>
+
+<style>
+.dashboard-card-toggle-list { display:grid; gap:4px; margin-bottom:16px; }
+</style>
 
 {% endblock %}

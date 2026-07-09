@@ -2929,6 +2929,24 @@ def first_start_setup():
     return render_template("setup_wizard.html", setup_mode=mode)
 
 
+DASHBOARD_CARD_DEFINITIONS = [
+    ("next_event", "Aktiver/Nächster Kegelabend"),
+    ("tasks", "Heute zu erledigen"),
+    ("member_stats", "Meine Statistik (nur für Mitglieder sichtbar)"),
+    ("cash_balance", "Kassenstand"),
+    ("members_overview", "Mitglieder-Übersicht"),
+    ("year_overview", "Dieses Jahr"),
+    ("top_rankings", "Top-Wertungen"),
+    ("cash_audit", "Kassenprüfung"),
+    ("annual_closing", "Jahresabschluss"),
+    ("monthly_contributions", "Offene Monatsbeiträge"),
+]
+
+
+def dashboard_card_visibility():
+    return {key: setting_value(f"dashboard_card_{key}", "1") == "1" for key, _ in DASHBOARD_CARD_DEFINITIONS}
+
+
 @app.route("/")
 @login_required
 def dashboard():
@@ -3100,6 +3118,7 @@ def dashboard():
         top_wreath=top_wreath,
         top_absence=top_absence,
         member_dashboard=member_dashboard,
+        dashboard_cards=dashboard_card_visibility(),
     )
 
 
@@ -3501,6 +3520,29 @@ def admin_area():
             flash("Passwortvorgaben wurden gespeichert.", "success")
             return redirect(url_for("admin_area"))
 
+        if form_action == "dashboard_cards":
+            def summary():
+                return ", ".join(
+                    f"{label}: {'an' if setting_value(f'dashboard_card_{key}', '1') == '1' else 'aus'}"
+                    for key, label in DASHBOARD_CARD_DEFINITIONS
+                )
+            old_summary = summary()
+            for key, _label in DASHBOARD_CARD_DEFINITIONS:
+                set_setting_value(f"dashboard_card_{key}", "1" if request.form.get(f"dashboard_card_{key}") else "0")
+            new_summary = summary()
+            audit_log(
+                "settings",
+                "dashboard_cards_updated",
+                "Dashboard-Kartenauswahl geändert",
+                details="Sichtbare Dashboard-Karten aktualisiert.",
+                object_type="AppSetting",
+                old_value=old_summary,
+                new_value=new_summary,
+            )
+            db.session.commit()
+            flash("Dashboard-Einstellungen wurden gespeichert.", "success")
+            return redirect(url_for("admin_area"))
+
         if form_action == "logo_upload":
             file = request.files.get("logo_file")
             if not file or not file.filename:
@@ -3723,6 +3765,8 @@ def admin_area():
         mail_settings_summary=mail_settings_summary(),
         has_logo=logo_path is not None,
         logo_filename=logo_path.name if logo_path else None,
+        dashboard_card_definitions=DASHBOARD_CARD_DEFINITIONS,
+        dashboard_cards=dashboard_card_visibility(),
     )
 
 
