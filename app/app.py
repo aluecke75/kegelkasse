@@ -86,7 +86,7 @@ login_manager.login_view = "login"
 login_manager.login_message = "Bitte zuerst anmelden."
 login_manager.init_app(app)
 
-APP_VERSION = "0.99.0"
+APP_VERSION = "0.99.1"
 
 
 def active_database_info():
@@ -3192,6 +3192,21 @@ def dashboard():
             "url": url_for("penalty_balances"),
         })
 
+    if show_admin_tasks:
+        days_since_audit = (today - last_cash_audit.audit_date).days if last_cash_audit and last_cash_audit.audit_date else None
+        if days_since_audit is None or days_since_audit > 90:
+            dashboard_tasks.append({
+                "priority": "medium" if days_since_audit is not None else "low",
+                "icon": "🔎",
+                "title": "Kassenprüfung fällig",
+                "description": (
+                    f"Letzte Prüfung vor {days_since_audit} Tagen ({last_cash_audit.audit_date.strftime('%d.%m.%Y')})"
+                    if days_since_audit is not None
+                    else "Noch keine Kassenprüfung erfasst"
+                ),
+                "url": url_for("cash_audits"),
+            })
+
     return render_template(
         "dashboard.html",
         member_count=member_count,
@@ -6082,7 +6097,7 @@ def parse_partial_date_query(q):
 @role_required("admin", "cashier", "auditor")
 def search_page():
     q = (request.args.get("q") or "").strip()
-    results = {"members": [], "events": [], "cashbook": [], "documents": [], "penalty_types": []}
+    results = {"members": [], "events": [], "cashbook": [], "documents": [], "penalty_types": [], "audit_log": []}
     total = 0
 
     if q:
@@ -6131,6 +6146,16 @@ def search_page():
         ).order_by(Document.uploaded_at.desc()).limit(20).all()
 
         results["penalty_types"] = PenaltyType.query.filter(PenaltyType.name.ilike(like)).limit(20).all()
+
+        if current_user.role in ("admin", "cashier", "auditor"):
+            results["audit_log"] = AuditLog.query.filter(
+                or_(
+                    AuditLog.title.ilike(like),
+                    AuditLog.details.ilike(like),
+                    AuditLog.old_value.ilike(like),
+                    AuditLog.new_value.ilike(like),
+                )
+            ).order_by(AuditLog.created_at.desc()).limit(20).all()
 
         total = sum(len(v) for v in results.values())
 

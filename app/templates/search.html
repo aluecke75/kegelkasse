@@ -120,5 +120,27 @@
     </div>
     {% endif %}
 
+    {% if results.audit_log %}
+    <div class="modern-card">
+        <h2>🧾 Revisionsprotokoll ({{ results.audit_log|length }})</h2>
+        <div class="mobile-table-wrap">
+            <table>
+                <thead><tr><th>Datum</th><th>Titel</th><th>Bereich</th><th>Benutzer</th></tr></thead>
+                <tbody>
+                    {% for entry in results.audit_log %}
+                        <tr>
+                            <td>{{ entry.created_at.strftime('%d.%m.%Y %H:%M') if entry.created_at else '-' }}</td>
+                            <td>{{ entry.title }}</td>
+                            <td>{{ entry.category_label() }}</td>
+                            <td>{{ entry.username or '-' }}</td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        <p><a href="{{ url_for('audit_log_page', q=q) }}">Im Revisionsprotokoll öffnen</a></p>
+    </div>
+    {% endif %}
+
 {% endif %}
 {% endblock %}
