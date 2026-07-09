@@ -111,6 +111,3 @@ docker-compose.override.yml
 # Daten / Uploads / Backups
 data/database_backup_*/
 data/uploads/
-
-# Archivierte Altlasten (zur späteren Löschung)
-_ARCHIV_ALTLASTEN/
