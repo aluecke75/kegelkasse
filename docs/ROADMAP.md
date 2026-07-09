@@ -46,11 +46,8 @@ Stand: 2026-07-09. Aktueller Gesamtstatus: siehe [PROJECT_STATUS.md](PROJECT_STA
    - Modernes Layout/Tabellenoptik: zweispaltiges Feld/Wert-Layout statt Fließtext
    - Vereinslogo: Admin kann im Adminbereich selbst ein Logo hochladen (PNG mit Transparenz oder JPEG), erscheint automatisch in allen PDF-Exporten
 
-9. **Dokumentenverwaltung**
-   - Upload von Rechnungen
-   - Verknüpfung mit Buchungen
-   - Vorschau
-   - Download
+9. **Dokumentenverwaltung** — ✅ bereits vollständig, am 2026-07-09 geprüft und bestätigt
+   - Upload (Titel, Kategorie, Datum, Beschreibung), Verknüpfung mit Kegelabend oder Kassenbuch-Eintrag, Vorschau (bild-/PDF-/textbasiert je nach Typ), Download, Archivieren/Wiederherstellen, Suche/Filter — alles mit echten Daten getestet (18 vorhandene Dokumente)
 
 10. **Backup-Modul**
     - "Backup jetzt"
