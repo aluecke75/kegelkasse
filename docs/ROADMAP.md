@@ -5,24 +5,19 @@ Stand: 2026-07-09. Aktueller Gesamtstatus: siehe [PROJECT_STATUS.md](PROJECT_STA
 ## Priorisierte offene Arbeiten (Vereinsversion)
 
 1. **Revisionsprotokoll** (höchste Priorität)
-   - Detailansicht verbessern
-   - Vorher-/Nachher-Werte
-   - Filter optimieren
-   - Ereignisse bereinigen
-   - Darstellung modernisieren
+   - ✅ Vorher-/Nachher-Werte: zeigt jetzt nur noch geänderte Felder als kompakte Tabelle (2026-07-09)
+   - Filter optimieren (Datumsfilter, "alle Änderungen zu Person/Kegelabend X") — noch offen
+   - Ereignisse bereinigen — noch offen, genaue Anforderung noch zu klären
+   - Darstellung modernisieren — im Wesentlichen bereits modern, keine weiteren Punkte bekannt
 
 2. **Mobile Optimierung**
-   - Feinschliff der Tabellen
-   - Live-Updates
-   - Scrollverhalten
-   - Performance
-   - kleine Darstellungsfehler
+   - Stand 2026-07-09: keine konkreten Probleme bekannt, Nutzer aktuell zufrieden
+   - Feinschliff der Tabellen, Live-Updates, Scrollverhalten, Performance, kleine Darstellungsfehler — bei Bedarf erneut aufgreifen, sobald konkrete Probleme auftreten
 
-3. **Mein Kegelabend**
-   - Live-Aktualisierung während des laufenden Abends
-   - getrennte Anzeige "Alle Neune verursacht" / "wegen anderer bezahlt"
-   - Strafkonto prominenter
-   - aktueller Abend prominenter
+3. **Mein Kegelabend** — ✅ bereits vollständig umgesetzt, am 2026-07-09 geprüft und bestätigt
+   - Live-Aktualisierung während des laufenden Abends (Polling alle 4 Sekunden)
+   - getrennte Anzeige "geworfen" / "bezahlen" bei Strafarten wie "Alle Neune"/"Kranz"
+   - Strafkonto & aktueller Abend als Karten am Seitenende — Platzierung vom Nutzer bestätigt, keine Änderung gewünscht
 
 4. **Zinsmodul**
    - restliche Oberfläche
