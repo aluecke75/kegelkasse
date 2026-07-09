@@ -7,7 +7,7 @@ import zipfile
 import shutil
 import sqlite3
 from pathlib import Path
-from decimal import Decimal, ROUND_HALF_UP
+from decimal import Decimal, ROUND_HALF_UP, ROUND_CEILING, ROUND_FLOOR
 import calendar
 import re
 import secrets
@@ -4448,28 +4448,45 @@ def get_finance_settings():
         ),
     }
 
+_TAX_ROUNDING_MODES = {
+    "up": ROUND_CEILING,
+    "down": ROUND_FLOOR,
+    "commercial": ROUND_HALF_UP,
+}
+
+
+def round_tax_cents(value_cents, rounding_mode):
+    """Rundet einen Steuer-Cent-Betrag gemäß der gewählten Rundungsregel."""
+    quantize_mode = _TAX_ROUNDING_MODES.get(rounding_mode, ROUND_HALF_UP)
+    return int(Decimal(value_cents).quantize(Decimal("1"), rounding=quantize_mode))
+
+
 def calculate_interest_taxes(gross_interest_cents):
     finance = get_finance_settings()
+    rounding_mode = finance["rounding_mode"]
 
-    gross_interest_cents = gross_interest_cents or 0
+    gross_interest_cents = Decimal(gross_interest_cents or 0)
 
     capital_tax = 0
     solidarity_tax = 0
     church_tax = 0
 
     if finance["capital_tax_enabled"]:
-        capital_tax = round(
-            gross_interest_cents * finance["capital_tax_rate"] / 100
+        capital_tax = round_tax_cents(
+            gross_interest_cents * Decimal(str(finance["capital_tax_rate"])) / 100,
+            rounding_mode,
         )
 
     if finance["solidarity_enabled"]:
-        solidarity_tax = round(
-            capital_tax * finance["solidarity_rate"] / 100
+        solidarity_tax = round_tax_cents(
+            Decimal(capital_tax) * Decimal(str(finance["solidarity_rate"])) / 100,
+            rounding_mode,
         )
 
     if finance["church_enabled"]:
-        church_tax = round(
-            capital_tax * finance["church_rate"] / 100
+        church_tax = round_tax_cents(
+            Decimal(capital_tax) * Decimal(str(finance["church_rate"])) / 100,
+            rounding_mode,
         )
 
     net_interest = (
@@ -4480,11 +4497,11 @@ def calculate_interest_taxes(gross_interest_cents):
     )
 
     return {
-        "gross": gross_interest_cents,
+        "gross": int(gross_interest_cents),
         "capital_tax": capital_tax,
         "solidarity_tax": solidarity_tax,
         "church_tax": church_tax,
-        "net": net_interest,
+        "net": int(net_interest),
     }
 
 def can_edit_closed_events():
