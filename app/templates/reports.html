@@ -310,6 +310,38 @@
 </div>
 {% endif %}
 
+{% if current_user.role in ["admin", "cashier", "auditor"] %}
+<div class="card">
+    <h2>Zinsstatistik</h2>
+    <p class="muted section-note">
+        {% if selected_year %}Gebuchte Zinsgutschriften {{ selected_year }}{% else %}Gebuchte Zinsgutschriften, alle Jahre{% endif %}
+        ({{ interest_bookings_count }} Buchung{{ '' if interest_bookings_count == 1 else 'en' }}, stornierte ausgenommen).
+    </p>
+
+    <div class="report-grid">
+        <div class="card report-card"><h3>Brutto-Zinsen</h3><p class="stat-number">{{ interest_totals_euro.gross }} €</p></div>
+        <div class="card report-card"><h3>Steuern gesamt</h3><p class="stat-number">{{ interest_totals_euro.tax_total }} €</p></div>
+        <div class="card report-card"><h3>Netto-Zinsen</h3><p class="stat-number">{{ interest_totals_euro.net }} €</p></div>
+    </div>
+
+    <div class="table-scroll" style="margin-top:14px;">
+        <table class="small-table">
+            <thead>
+                <tr><th>Kapitalertragsteuer</th><th>Solidaritätszuschlag</th><th>Kirchensteuer</th></tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>{{ interest_totals_euro.capital_tax }} €</td>
+                    <td>{{ interest_totals_euro.solidarity_tax }} €</td>
+                    <td>{{ interest_totals_euro.church_tax }} €</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+    <p class="muted section-note" style="margin-top:10px;">Details je Buchung: <a href="{{ url_for('interest_module') }}">Zinsmodul</a>. Für die Steuererklärung: <a href="{{ url_for('exports_page') }}">Export &raquo; Zinsen</a>.</p>
+</div>
+{% endif %}
+
 <div class="card">
     <h2>Kegelabendstatistik</h2>
     <p class="muted section-note">Teuerste/günstigste Abende nach Strafsumme. Bahnkosten werden separat angezeigt.</p>

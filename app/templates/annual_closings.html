@@ -36,6 +36,18 @@
         <div class="metric-card"><span>Letzte Kassenprüfung</span><strong>{% if summary.last_audit %}{{ summary.last_audit.audit_date.strftime('%d.%m.%Y') }}{% else %}keine{% endif %}</strong></div>
     </div>
 
+    {% if interest_totals.count > 0 %}
+        <div class="subtle-box" style="margin-top:14px;">
+            <strong>Zinsen {{ selected_year }}</strong>
+            <span class="muted"> — bereits in "Einnahmen im Jahr" enthalten, hier nur zur Übersicht aufgeschlüsselt.</span>
+            <div class="metric-grid" style="margin-top:10px;">
+                <div class="metric-card"><span>Brutto-Zinsen</span><strong>{{ interest_totals_euro.gross }} €</strong></div>
+                <div class="metric-card"><span>Steuern gesamt</span><strong>{{ interest_totals_euro.tax_total }} €</strong></div>
+                <div class="metric-card"><span>Netto-Zinsen</span><strong>{{ interest_totals_euro.net }} €</strong></div>
+            </div>
+        </div>
+    {% endif %}
+
     {% if current_user.role != "auditor" %}
     <form method="post" style="margin-top:14px;">
         <input type="hidden" name="year" value="{{ selected_year }}">

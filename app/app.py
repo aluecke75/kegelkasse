@@ -626,6 +626,7 @@ def export_headers(export_type):
         "penalty_balances": ["Mitglied", "Offene Strafen", "Guthaben", "Saldo"],
         "annual_closing": ["Jahr", "Abschlussdatum", "Barkasse", "Bank", "Gesamtbestand", "Offene Strafen", "Guthaben Mitglieder", "Einnahmen im Jahr", "Ausgaben im Jahr", "Kegelabende abgeschlossen", "Kegelabende ausgefallen", "Kegelabende offen", "Letzte Kassenprüfung", "Notiz"],
         "statistics": ["Mitglied", "Anwesend", "Fehlt entschuldigt", "Fehlt unentschuldigt", "Strafen gesamt", "Höchste Einzelstrafe", "Eingezahlt", "Offen", "Guthaben"],
+        "interest": ["Buchungsdatum", "Zeitraum", "Zinssatz", "Bankbestand Grundlage", "Brutto-Zinsen", "Kapitalertragsteuer", "Solidaritätszuschlag", "Kirchensteuer", "Netto-Zinsen", "Notiz"],
     }.get(export_type, [])
 
 
@@ -5000,6 +5001,75 @@ def interest_booking_snapshot(booking):
     }
 
 
+def interest_bookings_query(year=None):
+    query = InterestBooking.query.filter(InterestBooking.is_cancelled == False)  # noqa: E712
+    if year:
+        query = query.filter(db.extract("year", InterestBooking.booking_date) == year)
+    return query
+
+
+def interest_year_totals(year=None):
+    """Summiert alle nicht stornierten Zinsgutschriften eines Jahres (oder aller Jahre, falls year=None)."""
+    bookings = interest_bookings_query(year).all()
+    return {
+        "count": len(bookings),
+        "gross_cents": sum(b.actual_interest_cents for b in bookings),
+        "capital_tax_cents": sum(b.capital_gains_tax_cents for b in bookings),
+        "solidarity_tax_cents": sum(b.solidarity_tax_cents for b in bookings),
+        "church_tax_cents": sum(b.church_tax_cents for b in bookings),
+        "tax_total_cents": sum(b.tax_cents for b in bookings),
+        "net_cents": sum(b.net_interest_cents for b in bookings),
+    }
+
+
+def interest_year_options():
+    years = [
+        row[0] for row in
+        db.session.query(db.extract("year", InterestBooking.booking_date))
+        .filter(InterestBooking.is_cancelled == False)  # noqa: E712
+        .distinct().all()
+        if row[0] is not None
+    ]
+    return sorted({int(year) for year in years}, reverse=True)
+
+
+def interest_year_rows():
+    """Zins-Jahresübersicht: eine Zeile pro Jahr mit gebuchten Zinsgutschriften."""
+    rows = []
+    for year in interest_year_options():
+        totals = interest_year_totals(year)
+        rows.append({
+            "Jahr": year,
+            "Anzahl Buchungen": totals["count"],
+            "Brutto-Zinsen": f"{cents_to_euro(totals['gross_cents'])} €",
+            "Kapitalertragsteuer": f"{cents_to_euro(totals['capital_tax_cents'])} €",
+            "Solidaritätszuschlag": f"{cents_to_euro(totals['solidarity_tax_cents'])} €",
+            "Kirchensteuer": f"{cents_to_euro(totals['church_tax_cents'])} €",
+            "Steuern gesamt": f"{cents_to_euro(totals['tax_total_cents'])} €",
+            "Netto-Zinsen": f"{cents_to_euro(totals['net_cents'])} €",
+        })
+    return rows
+
+
+def interest_export_rows(year=None):
+    bookings = interest_bookings_query(year).order_by(InterestBooking.booking_date.desc()).all()
+    rows = []
+    for booking in bookings:
+        rows.append({
+            "Buchungsdatum": booking.booking_date.strftime("%d.%m.%Y") if booking.booking_date else "",
+            "Zeitraum": f"{booking.period_start.strftime('%d.%m.%Y')} - {booking.period_end.strftime('%d.%m.%Y')}",
+            "Zinssatz": f"{booking.setting.rate_percent()} % p. a." if booking.setting else "-",
+            "Bankbestand Grundlage": f"{cents_to_euro(booking.basis_balance_cents)} €",
+            "Brutto-Zinsen": f"{cents_to_euro(booking.actual_interest_cents)} €",
+            "Kapitalertragsteuer": f"{cents_to_euro(booking.capital_gains_tax_cents)} €",
+            "Solidaritätszuschlag": f"{cents_to_euro(booking.solidarity_tax_cents)} €",
+            "Kirchensteuer": f"{cents_to_euro(booking.church_tax_cents)} €",
+            "Netto-Zinsen": f"{cents_to_euro(booking.net_interest_cents)} €",
+            "Notiz": booking.note or "",
+        })
+    return rows
+
+
 def parse_interest_rate_basis_points(raw):
     """Wandelt Prozent-Eingaben robust in Basispunkte um: 1,25 -> 125."""
     value = (raw or "").strip().replace("%", "").replace(" ", "")
@@ -5156,6 +5226,13 @@ def annual_closings():
     closings = AnnualClosing.query.order_by(AnnualClosing.year.desc()).all()
     years = sorted(set([current_year - i for i in range(0, 8)] + [c.year for c in closings]), reverse=True)
 
+    interest_totals = interest_year_totals(selected_year)
+    interest_totals_euro = {
+        "gross": cents_to_euro(interest_totals["gross_cents"]),
+        "tax_total": cents_to_euro(interest_totals["tax_total_cents"]),
+        "net": cents_to_euro(interest_totals["net_cents"]),
+    }
+
     return render_template(
         "annual_closings.html",
         years=years,
@@ -5170,6 +5247,8 @@ def annual_closings():
         member_credits=cents_to_euro(summary["member_credits_cents"]),
         income=cents_to_euro(summary["income_cents"]),
         expense=cents_to_euro(summary["expense_cents"]),
+        interest_totals=interest_totals,
+        interest_totals_euro=interest_totals_euro,
     )
 
 
@@ -6636,6 +6715,16 @@ def reports():
     highest_event_rows = sorted(event_rows, key=lambda row: row["penalty_sum_cents"], reverse=True)[:10]
     lowest_event_rows = sorted([row for row in event_rows if row["penalty_sum_cents"] > 0], key=lambda row: row["penalty_sum_cents"])[:10]
 
+    interest_totals = interest_year_totals(selected_year)
+    interest_totals_euro = {
+        "gross": cents_to_euro(interest_totals["gross_cents"]),
+        "capital_tax": cents_to_euro(interest_totals["capital_tax_cents"]),
+        "solidarity_tax": cents_to_euro(interest_totals["solidarity_tax_cents"]),
+        "church_tax": cents_to_euro(interest_totals["church_tax_cents"]),
+        "tax_total": cents_to_euro(interest_totals["tax_total_cents"]),
+        "net": cents_to_euro(interest_totals["net_cents"]),
+    }
+
     return render_template(
         "reports.html",
         years=report_year_options(),
@@ -6661,6 +6750,9 @@ def reports():
         most_credit_rows=top_rows(player_rows, "credit_cents"),
         highest_event_rows=highest_event_rows,
         lowest_event_rows=lowest_event_rows,
+        interest_totals=interest_totals,
+        interest_totals_euro=interest_totals_euro,
+        interest_bookings_count=interest_totals["count"],
     )
 
 
@@ -6704,6 +6796,9 @@ def exports_download():
     elif export_type == "statistics":
         rows = statistics_export_rows(year)
         title = "Statistiken Export"
+    elif export_type == "interest":
+        rows = interest_export_rows(year)
+        title = "Zinsen Export"
     else:
         flash("Unbekannter Exportbereich.", "danger")
         return redirect(url_for("exports_page"))
