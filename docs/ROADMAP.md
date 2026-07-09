@@ -51,7 +51,7 @@ Stand: 2026-07-09. Aktueller Gesamtstatus: siehe [PROJECT_STATUS.md](PROJECT_STA
 
 10. **Backup-Modul** — ✅ abgeschlossen (2026-07-09)
     - "Backup jetzt", Wiederherstellung (mit automatischer Sicherheitskopie vorher + Bestätigungscode) und Zeitplanung (täglich/wöchentlich/monatlich mit Aufbewahrungsregeln) waren bereits vollständig
-    - Externe Ziele: WebDAV/Nextcloud war schon fertig (deckt auch NAS-Systeme ab, z. B. Synology). Neu: Dropbox und Google Drive per OAuth2 angebunden (App-Key/Secret durch Admin selbst hinterlegbar, Verbinden/Trennen per Klick, automatischer Token-Refresh). OneDrive bleibt bewusst vorbereitet (nicht gewünscht). Echter Verbindungstest steht noch aus, bis reale Zugangsdaten (eigene Dropbox-/Google-App) hinterlegt werden.
+    - Externe Ziele: WebDAV/Nextcloud war schon fertig (deckt auch NAS-Systeme ab, z. B. Synology). Neu: Dropbox, Google Drive und OneDrive per OAuth2 angebunden (App-Key/Secret bzw. Client-ID/Secret durch Admin selbst hinterlegbar, Verbinden/Trennen per Klick, automatischer Token-Refresh). Echter Verbindungstest steht noch aus, bis reale Zugangsdaten (eigene App bei Dropbox/Google/Microsoft) hinterlegt werden.
 
 11. **Öffentliche Version** (nach Vereinsversion)
     - Einrichtungsassistent
