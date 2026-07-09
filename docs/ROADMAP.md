@@ -24,11 +24,9 @@ Stand: 2026-07-09. Aktueller Gesamtstatus: siehe [PROJECT_STATUS.md](PROJECT_STA
    - Tests durchgeführt: Fehler gefunden und behoben — die Rundungseinstellung (Kaufmännisch/Aufrunden/Abrunden) wurde bei der Steuerberechnung bisher ignoriert
    - Berichte ergänzt: Zinsstatistik in den Auswertungen, Aufschlüsselung im Jahresabschluss, Export (PDF/Excel/CSV) für die Steuererklärung
 
-5. **Kassenprüfung**
-   - Abschlussworkflow
-   - Bestätigung
-   - Export
-   - Prüfprotokoll
+5. **Kassenprüfung** — ✅ abgeschlossen (2026-07-09)
+   - Abschlussworkflow, Bestätigung (mit Passwort-Bestätigung durch Kassenprüfer/-in) und Prüfprotokoll waren schon vollständig
+   - Export ergänzt (PDF/Excel/CSV), analog zu den anderen Bereichen
 
 6. **Jahresabschluss**
    - Jahresabschluss-Assistent
