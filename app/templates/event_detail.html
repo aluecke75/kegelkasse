@@ -695,6 +695,9 @@
             {% endif %}
         </h1>
         <p class="subline">Kegelabend vom {{ event.event_date.strftime('%d.%m.%Y') }}</p>
+        {% if current_user.role in ["admin", "cashier", "auditor"] %}
+            <p><a href="{{ url_for('audit_log_page', object_type='BowlingEvent', object_id=event.id) }}">Änderungshistorie ansehen</a></p>
+        {% endif %}
         <div class="event-status">
             {% if event.status == "open" %}
                 Offen

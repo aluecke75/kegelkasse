@@ -31,12 +31,30 @@
             <input id="q" type="text" name="q" value="{{ q }}" placeholder="z. B. Monatsbeitrag, Kegelabend, Strafart">
         </label>
 
+        <label for="date_from">Datum von
+            <input id="date_from" type="date" name="date_from" value="{{ date_from }}" class="auto-submit-filter">
+        </label>
+
+        <label for="date_to">Datum bis
+            <input id="date_to" type="date" name="date_to" value="{{ date_to }}" class="auto-submit-filter">
+        </label>
+
         <div class="inline-actions audit-filter-buttons">
             <button type="submit">Filtern</button>
             <a class="button secondary" href="{{ url_for('audit_log_page') }}">Zurücksetzen</a>
         </div>
     </form>
 </div>
+
+{% if object_filter_label %}
+<div class="info-box">
+    <div>🔎</div>
+    <div>
+        Gefiltert auf: <strong>{{ object_filter_label }}</strong>
+        · <a href="{{ url_for('audit_log_page') }}">Filter aufheben</a>
+    </div>
+</div>
+{% endif %}
 
 <div class="modern-card">
     <div class="inline-actions" style="justify-content:space-between; margin-bottom:12px;">
@@ -108,7 +126,8 @@
 </script>
 
 <style>
-.audit-modern-filter { display:grid; grid-template-columns: repeat(3, minmax(180px, 1fr)) auto; gap:14px; align-items:end; }
+.audit-modern-filter { display:grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap:14px; align-items:end; }
+.audit-filter-buttons { grid-column: 1 / -1; }
 .audit-filter-buttons { padding-bottom:4px; }
 .audit-list { display:grid; gap:12px; }
 .audit-item { display:grid; grid-template-columns:170px 1fr; gap:14px; padding:14px; border:1px solid var(--line); border-radius:16px; background:#fbfcfd; }

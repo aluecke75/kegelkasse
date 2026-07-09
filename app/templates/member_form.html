@@ -8,6 +8,9 @@
     <div>
         <h1>{{ "Mitglied bearbeiten" if member else "Mitglied anlegen" }}</h1>
         <p>Stammdaten und optionales Login-Konto an einer Stelle pflegen.</p>
+        {% if member and current_user.role in ["admin", "cashier", "auditor"] %}
+            <p><a href="{{ url_for('audit_log_page', object_type='Member', object_id=member.id) }}">Änderungshistorie ansehen</a></p>
+        {% endif %}
     </div>
 </div>
 

@@ -7896,6 +7896,31 @@ def monthly_contributions():
     )
 
 
+_AUDIT_OBJECT_LABELS = {
+    "Member": "Mitglied",
+    "BowlingEvent": "Kegelabend",
+    "PenaltyType": "Strafart",
+    "CashbookEntry": "Kassenbuch-Eintrag",
+    "CashAudit": "Kassenprüfung",
+    "AnnualClosing": "Jahresabschluss",
+    "InterestSetting": "Zinseinstellung",
+    "InterestBooking": "Zinsbuchung",
+    "document": "Dokument",
+    "Document": "Dokument",
+    "Branding": "Vereinslogo",
+    "Backup": "Datensicherung",
+    "Export": "Export",
+    "MonthlyContributionPayment": "Monatsbeitrag",
+}
+
+
+def audit_object_label(object_type, object_id):
+    if not object_type:
+        return None
+    label = _AUDIT_OBJECT_LABELS.get(object_type, object_type)
+    return f"{label} #{object_id}" if object_id else label
+
+
 @app.route("/audit-log")
 @login_required
 @role_required("admin", "cashier", "auditor")
@@ -7903,6 +7928,10 @@ def audit_log_page():
     category = request.args.get("category", "").strip()
     user = request.args.get("user", "").strip()
     q = request.args.get("q", "").strip()
+    date_from = request.args.get("date_from", "").strip()
+    date_to = request.args.get("date_to", "").strip()
+    object_type = request.args.get("object_type", "").strip()
+    object_id_raw = request.args.get("object_id", "").strip()
 
     query = AuditLog.query
     if category:
@@ -7919,6 +7948,27 @@ def audit_log_page():
                 AuditLog.new_value.ilike(like),
             )
         )
+    if date_from:
+        try:
+            query = query.filter(AuditLog.created_at >= datetime.strptime(date_from, "%Y-%m-%d"))
+        except ValueError:
+            flash("Filter ignoriert: Datum von ist ungültig.", "warning")
+            date_from = ""
+    if date_to:
+        try:
+            query = query.filter(AuditLog.created_at < datetime.strptime(date_to, "%Y-%m-%d") + timedelta(days=1))
+        except ValueError:
+            flash("Filter ignoriert: Datum bis ist ungültig.", "warning")
+            date_to = ""
+
+    object_id = None
+    if object_type and object_id_raw:
+        try:
+            object_id = int(object_id_raw)
+        except ValueError:
+            object_id = None
+        if object_id is not None:
+            query = query.filter(AuditLog.object_type == object_type, AuditLog.object_id == object_id)
 
     entries = query.order_by(AuditLog.created_at.desc()).limit(300).all()
     categories = [
@@ -7941,6 +7991,9 @@ def audit_log_page():
         selected_category=category,
         selected_user=user,
         q=q,
+        date_from=date_from,
+        date_to=date_to,
+        object_filter_label=audit_object_label(object_type, object_id) if object_id else None,
     )
 
 
