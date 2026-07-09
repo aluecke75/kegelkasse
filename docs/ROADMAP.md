@@ -34,12 +34,11 @@ Stand: 2026-07-09. Aktueller Gesamtstatus: siehe [PROJECT_STATUS.md](PROJECT_STA
    - Jahresberichte: neuer, übersichtlich gestalteter PDF/Excel/CSV-Export mit den wichtigsten Jahreszahlen
    - Jahresabschluss-Assistent: bewusst zurückgestellt — die einzelne Vorschau-Seite mit Prüfung auf offene Kegelabende reicht aktuell aus; bei Bedarf später zu einem mehrstufigen Assistenten ausbauen
 
-7. **Statistiken**
-   - Diagramme
-   - Trends
-   - Jahresvergleiche
-   - individuelle Auswertungen
-   - Export
+7. **Statistiken** — ✅ abgeschlossen (2026-07-09)
+   - Export war bereits vollständig
+   - Diagramme & Trends: Strafgeld pro Monat, Anwesenheit/Fehlzeiten pro Monat (neues, abhängigkeitsfreies SVG-Diagramm-Modul)
+   - Jahresvergleiche: Einnahmen/Ausgaben und Kassenbestand-Verlauf je Jahr als Diagramm
+   - Individuelle Auswertungen: neue Seite "Meine Statistik" – Mitglieder sehen ihre eigene Entwicklung über die Jahre
 
 8. **PDF-Export**
    - Umlaute-Bug (z. B. "Höchste" statt "Hˆ¶chste")
