@@ -4,9 +4,9 @@ Stand: 2026-07-09. Aktueller Gesamtstatus: siehe [PROJECT_STATUS.md](PROJECT_STA
 
 ## Priorisierte offene Arbeiten (Vereinsversion)
 
-1. **Revisionsprotokoll** (höchste Priorität)
+1. **Revisionsprotokoll** (höchste Priorität) — ✅ im Wesentlichen abgeschlossen
    - ✅ Vorher-/Nachher-Werte: zeigt jetzt nur noch geänderte Felder als kompakte Tabelle (2026-07-09)
-   - Filter optimieren (Datumsfilter, "alle Änderungen zu Person/Kegelabend X") — noch offen
+   - ✅ Filter optimiert: Datumsfilter (von/bis) sowie Deep-Link-Filterung auf einzelne Datensätze (z. B. "alle Änderungen zu diesem Mitglied/Kegelabend"), mit Links von der Mitglied- und Kegelabend-Seite (2026-07-09)
    - Ereignisse bereinigen — noch offen, genaue Anforderung noch zu klären
    - Darstellung modernisieren — im Wesentlichen bereits modern, keine weiteren Punkte bekannt
 
