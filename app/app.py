@@ -589,6 +589,31 @@ def penalty_balance_export_rows():
     return rows
 
 
+def cash_audit_export_rows(year=None):
+    query = CashAudit.query
+    if year:
+        query = query.filter(db.extract("year", CashAudit.audit_date) == year)
+    audits = query.order_by(CashAudit.audit_date.desc(), CashAudit.created_at.desc()).all()
+    rows = []
+    for audit in audits:
+        rows.append({
+            "Prüfdatum": audit.audit_date.strftime("%d.%m.%Y") if audit.audit_date else "",
+            "Barkasse laut System": f"{cents_to_euro(audit.expected_cash_cents)} €",
+            "Barkasse gezählt": f"{cents_to_euro(audit.counted_cash_cents)} €",
+            "Barkasse Differenz": f"{cents_to_euro(audit.difference_cash_cents)} €",
+            "Bank laut System": f"{cents_to_euro(audit.expected_bank_cents)} €",
+            "Bank laut Auszug": f"{cents_to_euro(audit.statement_bank_cents)} €",
+            "Bank Differenz": f"{cents_to_euro(audit.difference_bank_cents)} €",
+            "Erfasst von": audit.created_by_user.username if audit.created_by_user else "",
+            "Status": "Bestätigt" if audit.confirmed_at else "Offen",
+            "Bestätigt von": audit.confirmed_by_user.username if audit.confirmed_by_user else "",
+            "Bestätigt am": audit.confirmed_at.strftime("%d.%m.%Y %H:%M") if audit.confirmed_at else "",
+            "Notiz": audit.note or "",
+            "Prüfernotiz": audit.auditor_note or "",
+        })
+    return rows
+
+
 def annual_closing_export_rows(year=None):
     query = AnnualClosing.query
     if year:
@@ -627,6 +652,7 @@ def export_headers(export_type):
         "annual_closing": ["Jahr", "Abschlussdatum", "Barkasse", "Bank", "Gesamtbestand", "Offene Strafen", "Guthaben Mitglieder", "Einnahmen im Jahr", "Ausgaben im Jahr", "Kegelabende abgeschlossen", "Kegelabende ausgefallen", "Kegelabende offen", "Letzte Kassenprüfung", "Notiz"],
         "statistics": ["Mitglied", "Anwesend", "Fehlt entschuldigt", "Fehlt unentschuldigt", "Strafen gesamt", "Höchste Einzelstrafe", "Eingezahlt", "Offen", "Guthaben"],
         "interest": ["Buchungsdatum", "Zeitraum", "Zinssatz", "Bankbestand Grundlage", "Brutto-Zinsen", "Kapitalertragsteuer", "Solidaritätszuschlag", "Kirchensteuer", "Netto-Zinsen", "Notiz"],
+        "cash_audits": ["Prüfdatum", "Barkasse laut System", "Barkasse gezählt", "Barkasse Differenz", "Bank laut System", "Bank laut Auszug", "Bank Differenz", "Erfasst von", "Status", "Bestätigt von", "Bestätigt am", "Notiz", "Prüfernotiz"],
     }.get(export_type, [])
 
 
@@ -6799,6 +6825,9 @@ def exports_download():
     elif export_type == "interest":
         rows = interest_export_rows(year)
         title = "Zinsen Export"
+    elif export_type == "cash_audits":
+        rows = cash_audit_export_rows(year)
+        title = "Kassenprüfung Export"
     else:
         flash("Unbekannter Exportbereich.", "danger")
         return redirect(url_for("exports_page"))
