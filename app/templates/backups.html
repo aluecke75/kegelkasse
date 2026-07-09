@@ -608,7 +608,7 @@
 
                         <div class="tip-box">
                             <strong>💡</strong>
-                            <div>Für Nextcloud/WebDAV am besten ein App-Passwort verwenden. OneDrive ist vorbereitet, aber noch nicht aktiv angebunden.</div>
+                            <div>Für Nextcloud/WebDAV am besten ein App-Passwort verwenden.</div>
                         </div>
 
                         <label class="checkbox-row">
@@ -623,7 +623,7 @@
                                     <option value="webdav" {% if settings.target_type in ['webdav', 'local_path'] %}selected{% endif %}>WebDAV / Nextcloud</option>
                                     <option value="dropbox" {% if settings.target_type == 'dropbox' %}selected{% endif %}>Dropbox</option>
                                     <option value="google_drive" {% if settings.target_type == 'google_drive' %}selected{% endif %}>Google Drive</option>
-                                    <option value="onedrive" {% if settings.target_type == 'onedrive' %}selected{% endif %}>OneDrive (vorbereitet)</option>
+                                    <option value="onedrive" {% if settings.target_type == 'onedrive' %}selected{% endif %}>OneDrive</option>
                                 </select>
                             </label>
 
@@ -731,10 +731,50 @@
                                 </div>
                             </div>
 
+                            <div id="backupFieldsOneDrive" class="backup-target-fields">
+                                <div class="info-box" style="grid-column:1 / -1;">
+                                    <strong>ℹ️</strong>
+                                    <div>
+                                        Dazu wird eine eigene Anwendung im
+                                        <a href="https://portal.azure.com/#view/Microsoft_AAD_RegisteredApps/ApplicationsListBlade" target="_blank" rel="noopener">Azure-Portal (App-Registrierungen)</a>
+                                        benötigt (Kontotyp "Persönliche Microsoft-Konten" oder passend zu eurem Konto, Berechtigung <code>Files.ReadWrite</code>).
+                                        Als Weiterleitungs-URI dort genau diese Adresse vom Typ "Web" eintragen:
+                                        <br><code>{{ onedrive_redirect_uri }}</code>
+                                    </div>
+                                </div>
+
+                                <label>
+                                    Anwendungs-ID (Client-ID)
+                                    <input type="text" name="backup_onedrive_client_id" value="{{ settings.onedrive_client_id }}" autocomplete="off">
+                                </label>
+
+                                <label>
+                                    Client-Secret
+                                    <input type="password" name="backup_onedrive_client_secret" value="" autocomplete="new-password" placeholder="{% if settings.onedrive_client_secret_set %}gespeichert – leer lassen zum Behalten{% else %}Client-Secret eingeben{% endif %}">
+                                </label>
+
+                                <div style="grid-column:1 / -1;">
+                                    {% if settings.onedrive_connected %}
+                                        <div class="success-box" style="margin-bottom:10px;">
+                                            <strong>✅</strong>
+                                            <div>Verbunden{% if settings.onedrive_account_label %} als {{ settings.onedrive_account_label }}{% endif %}.</div>
+                                        </div>
+                                    {% else %}
+                                        <p class="muted" style="margin-top:0;">Noch nicht verbunden. Erst Client-ID/Secret speichern, danach "Mit OneDrive verbinden" klicken.</p>
+                                    {% endif %}
+                                    <a class="button secondary" href="{{ url_for('onedrive_oauth_connect') }}">{{ "Neu verbinden" if settings.onedrive_connected else "Mit OneDrive verbinden" }}</a>
+                                    {% if settings.onedrive_connected %}
+                                        <form method="post" action="{{ url_for('onedrive_oauth_disconnect') }}" style="display:inline;" onsubmit="return confirm('OneDrive-Verbindung wirklich trennen?');">
+                                            <button type="submit" class="button secondary">Verbindung trennen</button>
+                                        </form>
+                                    {% endif %}
+                                </div>
+                            </div>
+
                             <div id="backupFieldsPrepared" class="backup-target-fields">
                                 <div class="info-box" style="grid-column:1 / -1; margin-bottom:0;">
                                     <strong>ℹ️</strong>
-                                    <div>Dieses Ziel ist vorbereitet. Die technische Anbindung folgt später. Für sofort nutzbare externe Backups bitte WebDAV/Nextcloud, Dropbox oder Google Drive verwenden.</div>
+                                    <div>Dieses Ziel ist noch nicht angebunden. Für sofort nutzbare externe Backups bitte WebDAV/Nextcloud, Dropbox, Google Drive oder OneDrive verwenden.</div>
                                 </div>
                             </div>
                         </div>
@@ -815,6 +855,7 @@
     const webdavFields = document.getElementById('backupFieldsWebdav');
     const dropboxFields = document.getElementById('backupFieldsDropbox');
     const googleDriveFields = document.getElementById('backupFieldsGoogleDrive');
+    const oneDriveFields = document.getElementById('backupFieldsOneDrive');
     const preparedFields = document.getElementById('backupFieldsPrepared');
     const testButton = document.getElementById('backupTestButton');
 
@@ -822,13 +863,14 @@
         webdav: webdavFields,
         dropbox: dropboxFields,
         google_drive: googleDriveFields,
+        onedrive: oneDriveFields,
     };
 
     function refreshBackupTargetUi() {
         const isEnabled = enabled && enabled.checked;
         if (panel) panel.classList.toggle('active', isEnabled);
 
-        [webdavFields, dropboxFields, googleDriveFields, preparedFields].forEach(function(el) {
+        [webdavFields, dropboxFields, googleDriveFields, oneDriveFields, preparedFields].forEach(function(el) {
             if (el) el.classList.remove('active');
         });
 

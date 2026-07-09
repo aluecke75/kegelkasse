@@ -1250,6 +1250,10 @@ def backup_settings():
         "google_client_secret_set": bool(setting_value("backup_google_client_secret", "")),
         "google_drive_connected": bool(setting_value("google_drive_refresh_token", "")),
         "google_drive_account_label": setting_value("google_drive_account_label", ""),
+        "onedrive_client_id": setting_value("backup_onedrive_client_id", ""),
+        "onedrive_client_secret_set": bool(setting_value("backup_onedrive_client_secret", "")),
+        "onedrive_connected": bool(setting_value("onedrive_refresh_token", "")),
+        "onedrive_account_label": setting_value("onedrive_account_label", ""),
         "last_auto": setting_value("backup_last_auto", ""),
         "last_result": setting_value("backup_last_result", ""),
         "target_label": backup_target_label_raw(target_type),
@@ -1271,7 +1275,7 @@ def backup_target_label(settings=None):
     if not settings.get("extra_target_enabled"):
         return "nur lokal"
     target_type = settings.get("target_type")
-    if target_type in ("webdav", "dropbox", "google_drive"):
+    if target_type in ("webdav", "dropbox", "google_drive", "onedrive"):
         return backup_target_label_raw(target_type)
     return backup_target_label_raw(target_type) + " (vorbereitet)"
 
@@ -1638,6 +1642,104 @@ def google_drive_upload_file(source_path):
     return f"Google Drive: {source_path.name}"
 
 
+# --- OneDrive ----------------------------------------------------------------
+
+def onedrive_authorize_url(redirect_uri):
+    client_id = (setting_value("backup_onedrive_client_id", "") or "").strip()
+    if not client_id:
+        raise ValueError("Bitte zuerst Anwendungs-ID (Client-ID) und Client-Secret für OneDrive eintragen und speichern.")
+    params = {
+        "client_id": client_id,
+        "response_type": "code",
+        "redirect_uri": redirect_uri,
+        "response_mode": "query",
+        "scope": "Files.ReadWrite offline_access",
+    }
+    return "https://login.microsoftonline.com/common/oauth2/v2.0/authorize?" + urllib.parse.urlencode(params)
+
+
+def onedrive_exchange_code(code, redirect_uri):
+    client_id = (setting_value("backup_onedrive_client_id", "") or "").strip()
+    client_secret = (setting_value("backup_onedrive_client_secret", "") or "").strip()
+    if not client_id or not client_secret:
+        raise ValueError("OneDrive Client-ID/Client-Secret fehlen.")
+    data = oauth_token_request("https://login.microsoftonline.com/common/oauth2/v2.0/token", {
+        "code": code,
+        "grant_type": "authorization_code",
+        "client_id": client_id,
+        "client_secret": client_secret,
+        "redirect_uri": redirect_uri,
+        "scope": "Files.ReadWrite offline_access",
+    })
+    set_setting_value("onedrive_access_token", data["access_token"])
+    if data.get("refresh_token"):
+        set_setting_value("onedrive_refresh_token", data["refresh_token"])
+    expires_at = (datetime.utcnow() + timedelta(seconds=max(int(data.get("expires_in", 3600)) - 60, 60))).isoformat()
+    set_setting_value("onedrive_token_expires_at", expires_at)
+
+    info = oauth_get_request("https://graph.microsoft.com/v1.0/me", data["access_token"])
+    set_setting_value("onedrive_account_label", info.get("userPrincipalName") or info.get("mail") or "verbunden")
+
+
+def onedrive_refresh_access_token():
+    client_id = (setting_value("backup_onedrive_client_id", "") or "").strip()
+    client_secret = (setting_value("backup_onedrive_client_secret", "") or "").strip()
+    refresh_token = setting_value("onedrive_refresh_token", "") or ""
+    if not refresh_token:
+        raise ValueError("OneDrive ist nicht verbunden. Bitte zuerst 'Verbindung herstellen' klicken.")
+    data = oauth_token_request("https://login.microsoftonline.com/common/oauth2/v2.0/token", {
+        "grant_type": "refresh_token",
+        "refresh_token": refresh_token,
+        "client_id": client_id,
+        "client_secret": client_secret,
+        "scope": "Files.ReadWrite offline_access",
+    })
+    set_setting_value("onedrive_access_token", data["access_token"])
+    if data.get("refresh_token"):
+        set_setting_value("onedrive_refresh_token", data["refresh_token"])
+    expires_at = (datetime.utcnow() + timedelta(seconds=max(int(data.get("expires_in", 3600)) - 60, 60))).isoformat()
+    set_setting_value("onedrive_token_expires_at", expires_at)
+    return data["access_token"]
+
+
+def onedrive_valid_access_token():
+    token = setting_value("onedrive_access_token", "") or ""
+    expires_raw = setting_value("onedrive_token_expires_at", "") or ""
+    expired = True
+    if expires_raw:
+        try:
+            expired = datetime.utcnow() >= datetime.fromisoformat(expires_raw)
+        except ValueError:
+            expired = True
+    if not token or expired:
+        return onedrive_refresh_access_token()
+    return token
+
+
+def onedrive_upload_file(source_path):
+    access_token = onedrive_valid_access_token()
+    data = source_path.read_bytes()
+    if len(data) > 4 * 1024 * 1024:
+        raise ValueError("Die Datei ist größer als 4 MB - das einfache OneDrive-Hochladen unterstützt aktuell nur kleinere Dateien.")
+    encoded_name = urllib.parse.quote(source_path.name)
+    req = urllib.request.Request(
+        f"https://graph.microsoft.com/v1.0/me/drive/root:/{encoded_name}:/content",
+        data=data, method="PUT",
+    )
+    req.add_header("Authorization", f"Bearer {access_token}")
+    req.add_header("Content-Type", "application/zip")
+    try:
+        with urllib.request.urlopen(req, timeout=90) as response:
+            if response.status not in (200, 201):
+                raise ValueError(f"OneDrive-Upload fehlgeschlagen: HTTP {response.status}")
+    except urllib.error.HTTPError as exc:
+        body = exc.read().decode("utf-8", errors="replace")
+        raise ValueError(f"OneDrive-Upload fehlgeschlagen: HTTP {exc.code} {body[:200]}") from exc
+    except urllib.error.URLError as exc:
+        raise ValueError(f"OneDrive nicht erreichbar: {exc.reason}") from exc
+    return f"OneDrive: {source_path.name}"
+
+
 def copy_backup_to_extra_target(source_path):
     settings = backup_settings()
     if not settings.get("extra_target_enabled"):
@@ -1650,6 +1752,8 @@ def copy_backup_to_extra_target(source_path):
         return dropbox_upload_file(source_path)
     if target_type == "google_drive":
         return google_drive_upload_file(source_path)
+    if target_type == "onedrive":
+        return onedrive_upload_file(source_path)
 
     raise ValueError(f"Das Backup-Ziel '{backup_target_label_raw(target_type)}' ist noch nicht angebunden.")
 
@@ -4116,6 +4220,57 @@ def google_drive_oauth_disconnect():
     return redirect(url_for("backups_page"))
 
 
+@app.route("/backups/onedrive/connect")
+@login_required
+@role_required("admin")
+def onedrive_oauth_connect():
+    redirect_uri = url_for("onedrive_oauth_callback", _external=True)
+    try:
+        auth_url = onedrive_authorize_url(redirect_uri)
+    except ValueError as exc:
+        flash(str(exc), "danger")
+        return redirect(url_for("backups_page"))
+    return redirect(auth_url)
+
+
+@app.route("/backups/onedrive/callback")
+@login_required
+@role_required("admin")
+def onedrive_oauth_callback():
+    error = request.args.get("error")
+    if error:
+        flash(f"OneDrive-Verbindung abgebrochen: {error}", "warning")
+        return redirect(url_for("backups_page"))
+
+    code = request.args.get("code")
+    if not code:
+        flash("Microsoft hat keinen Anmeldecode zurückgegeben.", "danger")
+        return redirect(url_for("backups_page"))
+
+    redirect_uri = url_for("onedrive_oauth_callback", _external=True)
+    try:
+        onedrive_exchange_code(code, redirect_uri)
+        db.session.commit()
+        audit_log("Datensicherung", "onedrive_connected", "OneDrive-Verbindung hergestellt", object_type="Backup")
+        db.session.commit()
+        flash("OneDrive wurde erfolgreich verbunden.", "success")
+    except ValueError as exc:
+        flash(f"OneDrive-Verbindung fehlgeschlagen: {exc}", "danger")
+    return redirect(url_for("backups_page"))
+
+
+@app.route("/backups/onedrive/disconnect", methods=["POST"])
+@login_required
+@role_required("admin")
+def onedrive_oauth_disconnect():
+    for key in ("onedrive_access_token", "onedrive_refresh_token", "onedrive_token_expires_at", "onedrive_account_label"):
+        set_setting_value(key, "")
+    audit_log("Datensicherung", "onedrive_disconnected", "OneDrive-Verbindung getrennt", object_type="Backup")
+    db.session.commit()
+    flash("OneDrive-Verbindung wurde getrennt.", "success")
+    return redirect(url_for("backups_page"))
+
+
 @app.route("/backups", methods=["GET", "POST"])
 @login_required
 @role_required("admin")
@@ -4263,6 +4418,11 @@ def backups_page():
                 if google_secret:
                     set_setting_value("backup_google_client_secret", google_secret)
 
+                set_setting_value("backup_onedrive_client_id", request.form.get("backup_onedrive_client_id", "").strip())
+                onedrive_secret = request.form.get("backup_onedrive_client_secret", "")
+                if onedrive_secret:
+                    set_setting_value("backup_onedrive_client_secret", onedrive_secret)
+
                 new_summary = f"Aktiv: {audit_value(setting_value('backup_enabled', '0'))}; Intervall: {audit_value(setting_value('backup_interval', 'daily'))}; Uhrzeit: {audit_value(setting_value('backup_time', '02:00'))}; Aufbewahrung: {audit_value(setting_value('backup_keep_days', '30'))} Tage; Generationen: {audit_value(setting_value('backup_keep_count', '20'))}; Ziel: {audit_value(backup_target_label())}"
                 audit_log(
                     "Datensicherung",
@@ -4375,6 +4535,7 @@ def backups_page():
         club_import_preview=club_import_preview,
         dropbox_redirect_uri=url_for("dropbox_oauth_callback", _external=True),
         google_drive_redirect_uri=url_for("google_drive_oauth_callback", _external=True),
+        onedrive_redirect_uri=url_for("onedrive_oauth_callback", _external=True),
     )
 
 
