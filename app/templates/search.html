@@ -1,0 +1,124 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="modern-header">
+    <div class="modern-icon">🔍</div>
+    <div>
+        <h1>Suche</h1>
+        <p>Mitglieder, Kegelabende, Kassenbuch, Dokumente und Strafarten durchsuchen.</p>
+    </div>
+</div>
+
+<div class="modern-card">
+    <form method="get" action="{{ url_for('search_page') }}" class="inline-actions">
+        <input type="text" name="q" value="{{ q }}" placeholder="z. B. Mitgliedsname, Datum (3.5.), Grund einer Buchung ..." style="max-width:420px;" autofocus>
+        <button type="submit">Suchen</button>
+    </form>
+    {% if q %}
+        <p class="muted" style="margin-top:10px;">
+            {% if total %}{{ total }} Treffer für "{{ q }}"{% else %}Keine Treffer für "{{ q }}"{% endif %}
+        </p>
+    {% endif %}
+</div>
+
+{% if q and total %}
+
+    {% if results.members %}
+    <div class="modern-card">
+        <h2>👥 Mitglieder ({{ results.members|length }})</h2>
+        <div class="mobile-table-wrap">
+            <table>
+                <thead><tr><th>Name</th><th>E-Mail</th><th>Status</th><th></th></tr></thead>
+                <tbody>
+                    {% for member in results.members %}
+                        <tr>
+                            <td>{{ member.display_name() }}</td>
+                            <td>{{ member.email or '-' }}</td>
+                            <td>{{ "Aktiv" if member.active else "Inaktiv" }}</td>
+                            <td><a href="{{ url_for('member_edit', member_id=member.id) }}">Öffnen</a></td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% endif %}
+
+    {% if results.events %}
+    <div class="modern-card">
+        <h2>🎳 Kegelabende ({{ results.events|length }})</h2>
+        <div class="mobile-table-wrap">
+            <table>
+                <thead><tr><th>Datum</th><th>Status</th><th>Notiz</th><th></th></tr></thead>
+                <tbody>
+                    {% for event in results.events %}
+                        <tr>
+                            <td>{{ event.event_date.strftime('%d.%m.%Y') if event.event_date else '-' }}</td>
+                            <td>{{ event.status }}</td>
+                            <td>{{ event.note or '-' }}</td>
+                            <td><a href="{{ url_for('event_detail', event_id=event.id) }}">Öffnen</a></td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% endif %}
+
+    {% if results.cashbook %}
+    <div class="modern-card">
+        <h2>📒 Kassenbuch ({{ results.cashbook|length }})</h2>
+        <div class="mobile-table-wrap">
+            <table>
+                <thead><tr><th>Datum</th><th>Betrag</th><th>Grund</th><th>Empfänger/Einzahler</th></tr></thead>
+                <tbody>
+                    {% for entry in results.cashbook %}
+                        <tr>
+                            <td>{{ entry.booking_date.strftime('%d.%m.%Y') if entry.booking_date else '-' }}</td>
+                            <td>{{ entry.amount_euro() }} €</td>
+                            <td>{{ entry.reason or '-' }}</td>
+                            <td>{{ entry.person or '-' }}</td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        <p><a href="{{ url_for('cashbook') }}">Kassenbuch öffnen</a></p>
+    </div>
+    {% endif %}
+
+    {% if results.documents %}
+    <div class="modern-card">
+        <h2>📄 Dokumente ({{ results.documents|length }})</h2>
+        <div class="mobile-table-wrap">
+            <table>
+                <thead><tr><th>Titel</th><th>Kategorie</th><th>Datei</th><th></th></tr></thead>
+                <tbody>
+                    {% for doc in results.documents %}
+                        <tr>
+                            <td>{{ doc.title }}</td>
+                            <td>{{ doc.category }}</td>
+                            <td>{{ doc.original_filename }}</td>
+                            <td><a href="{{ url_for('document_download', document_id=doc.id) }}">Herunterladen</a></td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        <p><a href="{{ url_for('documents_page') }}">Dokumente öffnen</a></p>
+    </div>
+    {% endif %}
+
+    {% if results.penalty_types %}
+    <div class="modern-card">
+        <h2>⚡ Strafarten ({{ results.penalty_types|length }})</h2>
+        <ul class="compact-list">
+            {% for pt in results.penalty_types %}
+                <li>{{ pt.name }}</li>
+            {% endfor %}
+        </ul>
+        <p><a href="{{ url_for('penalty_types') }}">Strafarten öffnen</a></p>
+    </div>
+    {% endif %}
+
+{% endif %}
+{% endblock %}

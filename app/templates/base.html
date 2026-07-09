@@ -45,6 +45,13 @@
 
         .auditor-readonly-note { background:#f8fafc; border:1px solid var(--line); border-radius:12px; padding:10px 12px; color:var(--muted); margin-bottom:14px; }
         .user-meta { font-size:0.78rem; color:#d7e6dc; text-align:right; white-space:nowrap; }
+        .topbar-search { display:flex; gap:6px; align-items:center; flex:1 1 220px; max-width:320px; }
+        .topbar-search input { margin:0; padding:6px 10px; border-radius:999px; border:1px solid rgba(255,255,255,0.25); background:rgba(255,255,255,0.12); color:#fff; font-size:0.85rem; width:100%; }
+        .topbar-search input::placeholder { color:#c8d8cd; }
+        .topbar-search input:focus { outline:2px solid rgba(255,255,255,0.4); background:rgba(255,255,255,0.18); }
+        .topbar-search button { margin:0; padding:6px 10px; border-radius:999px; background:rgba(255,255,255,0.12); border:1px solid rgba(255,255,255,0.25); color:#fff; width:auto; }
+        .topbar-search button:hover { background:rgba(255,255,255,0.22); }
+        @media (max-width:760px) { .topbar-search { order:3; max-width:none; flex-basis:100%; } }
         nav { display:flex; gap:0.45rem; align-items:center; flex-wrap:wrap; margin-top:10px; }
         nav a, .nav-dropbtn { color: white; text-decoration: none; border-radius:999px; padding:7px 10px; display:inline-block; }
         nav a:hover, .nav-dropbtn:hover { background: rgba(255,255,255,0.12); }
@@ -228,6 +235,13 @@ Nicht löschen – ggf. für spätere Entwicklungsarbeiten wieder aktivieren.
             {% endif %}
             #}
         </div>
+
+        {% if current_user.is_authenticated and current_user.role in ["admin", "cashier", "auditor"] %}
+            <form method="get" action="{{ url_for('search_page') }}" class="topbar-search">
+                <input type="text" name="q" placeholder="Suche: Mitglied, Datum, Buchung ..." aria-label="Suche">
+                <button type="submit" title="Suchen">🔍</button>
+            </form>
+        {% endif %}
 
         {% if current_user.is_authenticated %}
             <div class="user-meta">Angemeldet als: <a href="{{ url_for('account') }}" style="color:#fff;">{{ current_user.username }}</a> · Rolle: {{ current_user.role_label() }}</div>
