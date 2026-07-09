@@ -18,7 +18,7 @@
 </div>
 
 <div class="modern-card">
-    <div class="modern-header"><div class="modern-icon">📊</div><div><h2>Vorschau für {{ selected_year }}</h2><p>Der Abschluss erzeugt keine Buchung, sondern friert den Stand als Protokoll ein.</p></div></div>
+    <div class="modern-header"><div class="modern-icon">📊</div><div><h2>Vorschau für {{ selected_year }}</h2><p>Der Abschluss erzeugt keine Buchung, sondern friert den Stand als Protokoll ein. Schön aufbereitetes Dokument: <a href="{{ url_for('exports_page') }}">Export &raquo; Jahresbericht</a>.</p></div></div>
     {% if existing_closing %}<div class="info-box"><span>✅</span><div>Für {{ selected_year }} wurde bereits ein Jahresabschluss gespeichert.</div></div>{% endif %}
     {% if summary.open_event_count > 0 %}<div class="tip-box"><span>⚠️</span><div>Für dieses Jahr gibt es noch {{ summary.open_event_count }} offene Kegelabende. Bitte zuerst abschließen oder korrigieren.</div></div>{% endif %}
 

@@ -118,6 +118,38 @@
 
     <section class="modern-card">
         <div class="modern-header">
+            <div class="modern-icon">📰</div>
+            <div>
+                <h2>Jahresbericht</h2>
+                <p>Übersichtliches Dokument mit den wichtigsten Jahreszahlen, z. B. für die Mitgliederversammlung.</p>
+            </div>
+        </div>
+        <form method="get" action="{{ url_for('exports_download') }}">
+            <input type="hidden" name="type" value="annual_report">
+            <div class="form-grid">
+                <label>Format
+                    <select name="format">
+                        <option value="pdf">PDF</option>
+                        <option value="excel">Excel</option>
+                        <option value="csv">CSV</option>
+                    </select>
+                </label>
+                <label>Jahr
+                    <select name="year">
+                        {% for year in years %}
+                            <option value="{{ year }}" {% if year == current_year - 1 %}selected{% endif %}>{{ year }}</option>
+                        {% endfor %}
+                    </select>
+                </label>
+            </div>
+            <div class="inline-actions" style="margin-top:12px;">
+                <button type="submit">Jahresbericht erstellen</button>
+            </div>
+        </form>
+    </section>
+
+    <section class="modern-card">
+        <div class="modern-header">
             <div class="modern-icon">📅</div>
             <div>
                 <h2>Jahresabschluss</h2>

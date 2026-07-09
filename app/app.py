@@ -405,44 +405,79 @@ def _pdf_text_cmd(x, y, text, size=10, font="F1"):
     return f"BT /{font} {size} Tf {x} {y} Td ({pdf_escape(text)}) Tj ET"
 
 
-def export_rows_to_pdf(rows, headers, filename, title="Kegelkasse Export"):
-    """Dependency-free, more structured PDF export.
+_PDF_PAGE_WIDTH = 595
+_PDF_PAGE_HEIGHT = 842
 
-    The PDF uses built-in Helvetica fonts and cp1252 text encoding so ä/ö/ü/ß
-    are displayed correctly in normal PDF readers.
+
+def _pdf_page_header_cmds(page_no, title, now_text, margin=42, page_width=_PDF_PAGE_WIDTH):
+    """Gemeinsamer Seitenkopf (Titelband + Datum + Seitenzahl) für alle PDF-Exporte."""
+    cmds = []
+    cmds.append("0.94 0.97 0.95 rg")
+    cmds.append(f"{margin} 748 {page_width - 2*margin} 54 re f")
+    cmds.append("0 g")
+    cmds.append(_pdf_text_cmd(margin + 14, 782, title, 16, "F2"))
+    cmds.append(_pdf_text_cmd(margin + 14, 762, f"Erstellt am: {now_text}", 9, "F1"))
+    cmds.append(_pdf_text_cmd(page_width - margin - 80, 762, f"Seite {page_no}", 9, "F1"))
+    cmds.append("0.80 0.80 0.80 RG")
+    cmds.append(f"{margin} 735 m {page_width - margin} 735 l S")
+    return cmds
+
+
+def _pdf_assemble(pages_cmds, page_width=_PDF_PAGE_WIDTH, page_height=_PDF_PAGE_HEIGHT):
+    """Baut aus einer Liste von Befehlslisten (eine pro Seite) die rohen PDF-Bytes.
+
+    Dependency-freie PDF-Erzeugung mit eingebauten Helvetica-Schriften und
+    cp1252-Textkodierung, damit ä/ö/ü/ß in normalen PDF-Readern korrekt erscheinen.
     """
-    page_width = 595
-    page_height = 842
-    margin = 42
-    y_start = 785
-    line_height = 15
-    page_bottom = 52
-    now_text = datetime.now().strftime("%d.%m.%Y %H:%M")
-
-    rows = rows or []
     objects = []
     page_ids = []
 
-    def new_page(page_no):
-        cmds = []
-        # Header area
-        cmds.append("0.94 0.97 0.95 rg")
-        cmds.append(f"{margin} 748 {page_width - 2*margin} 54 re f")
-        cmds.append("0 g")
-        cmds.append(_pdf_text_cmd(margin + 14, 782, title, 16, "F2"))
-        cmds.append(_pdf_text_cmd(margin + 14, 762, f"Erstellt am: {now_text}", 9, "F1"))
-        cmds.append(_pdf_text_cmd(page_width - margin - 80, 762, f"Seite {page_no}", 9, "F1"))
-        cmds.append("0.80 0.80 0.80 RG")
-        cmds.append(f"{margin} 735 m {page_width - margin} 735 l S")
-        return cmds, 718
-
-    def add_page(cmds):
+    for cmds in pages_cmds:
         stream = "\n".join(cmds).encode("latin-1", errors="replace")
         content_id = len(objects) + 5
         page_id = content_id + 1
         objects.append(f"{content_id} 0 obj\n<< /Length {len(stream)} >>\nstream\n".encode("ascii") + stream + b"\nendstream\nendobj\n")
         objects.append(f"{page_id} 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 {page_width} {page_height}] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents {content_id} 0 R >>\nendobj\n".encode("ascii"))
         page_ids.append(page_id)
+
+    pdf_objects = [
+        b"1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n",
+        f"2 0 obj\n<< /Type /Pages /Kids [{' '.join(str(i) + ' 0 R' for i in page_ids)}] /Count {len(page_ids)} >>\nendobj\n".encode("ascii"),
+        b"3 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>\nendobj\n",
+        b"4 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>\nendobj\n",
+    ] + objects
+
+    buffer = BytesIO()
+    buffer.write(b"%PDF-1.4\n%\xe2\xe3\xcf\xd3\n")
+    offsets = [0]
+    for obj in pdf_objects:
+        offsets.append(buffer.tell())
+        buffer.write(obj)
+    xref_pos = buffer.tell()
+    buffer.write(f"xref\n0 {len(pdf_objects)+1}\n".encode("ascii"))
+    buffer.write(b"0000000000 65535 f \n")
+    for offset in offsets[1:]:
+        buffer.write(f"{offset:010d} 00000 n \n".encode("ascii"))
+    buffer.write(f"trailer\n<< /Size {len(pdf_objects)+1} /Root 1 0 R >>\nstartxref\n{xref_pos}\n%%EOF".encode("ascii"))
+    return buffer.getvalue()
+
+
+def export_rows_to_pdf(rows, headers, filename, title="Kegelkasse Export"):
+    """Dependency-free, more structured PDF export.
+
+    The PDF uses built-in Helvetica fonts and cp1252 text encoding so ä/ö/ü/ß
+    are displayed correctly in normal PDF readers.
+    """
+    margin = 42
+    line_height = 15
+    page_bottom = 52
+    now_text = datetime.now().strftime("%d.%m.%Y %H:%M")
+
+    rows = rows or []
+    pages_cmds = []
+
+    def new_page(page_no):
+        return _pdf_page_header_cmds(page_no, title, now_text, margin), 718
 
     page_no = 1
     cmds, y = new_page(page_no)
@@ -453,16 +488,16 @@ def export_rows_to_pdf(rows, headers, filename, title="Kegelkasse Export"):
         for idx, row in enumerate(rows, 1):
             needed = line_height * (len(headers) + 2) + 14
             if y - needed < page_bottom:
-                add_page(cmds)
+                pages_cmds.append(cmds)
                 page_no += 1
                 cmds, y = new_page(page_no)
 
             # Record card background
             card_height = line_height * (len(headers) + 1) + 12
             cmds.append("0.98 0.98 0.98 rg")
-            cmds.append(f"{margin} {y - card_height + 8} {page_width - 2*margin} {card_height} re f")
+            cmds.append(f"{margin} {y - card_height + 8} {_PDF_PAGE_WIDTH - 2*margin} {card_height} re f")
             cmds.append("0.82 0.82 0.82 RG")
-            cmds.append(f"{margin} {y - card_height + 8} {page_width - 2*margin} {card_height} re S")
+            cmds.append(f"{margin} {y - card_height + 8} {_PDF_PAGE_WIDTH - 2*margin} {card_height} re S")
             cmds.append("0 g")
             cmds.append(_pdf_text_cmd(margin + 10, y, f"Eintrag {idx}", 11, "F2"))
             y -= line_height + 2
@@ -486,30 +521,10 @@ def export_rows_to_pdf(rows, headers, filename, title="Kegelkasse Export"):
                         first = False
             y -= 10
 
-    add_page(cmds)
-
-    pdf_objects = [
-        b"1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n",
-        f"2 0 obj\n<< /Type /Pages /Kids [{' '.join(str(i) + ' 0 R' for i in page_ids)}] /Count {len(page_ids)} >>\nendobj\n".encode("ascii"),
-        b"3 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>\nendobj\n",
-        b"4 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>\nendobj\n",
-    ] + objects
-
-    buffer = BytesIO()
-    buffer.write(b"%PDF-1.4\n%\xe2\xe3\xcf\xd3\n")
-    offsets = [0]
-    for obj in pdf_objects:
-        offsets.append(buffer.tell())
-        buffer.write(obj)
-    xref_pos = buffer.tell()
-    buffer.write(f"xref\n0 {len(pdf_objects)+1}\n".encode("ascii"))
-    buffer.write(b"0000000000 65535 f \n")
-    for offset in offsets[1:]:
-        buffer.write(f"{offset:010d} 00000 n \n".encode("ascii"))
-    buffer.write(f"trailer\n<< /Size {len(pdf_objects)+1} /Root 1 0 R >>\nstartxref\n{xref_pos}\n%%EOF".encode("ascii"))
+    pages_cmds.append(cmds)
 
     return Response(
-        buffer.getvalue(),
+        _pdf_assemble(pages_cmds),
         mimetype="application/pdf",
         headers={"Content-Disposition": f"attachment; filename={filename}"},
     )
@@ -815,6 +830,51 @@ def annual_closing_snapshot(closing):
 def account_balance(account):
     transactions = AccountTransaction.query.filter_by(account=account).all()
     return sum(transaction.amount_cents for transaction in transactions)
+
+
+def closing_for_year(year):
+    if not year:
+        return None
+    return AnnualClosing.query.filter_by(year=year).first()
+
+
+def closed_year_block_message(booking_date, require_admin_confirmation=True, override_field="confirm_closed_year"):
+    """Prüft, ob eine Buchung mit diesem Datum in ein bereits abgeschlossenes Jahr fällt.
+
+    Schützt den bereits gespeicherten (ggf. vom Kassenprüfer bestätigten) Jahresabschluss
+    davor, durch nachträgliche Buchungen unbemerkt nicht mehr zur echten Kasse zu passen.
+
+    Gibt None zurück, wenn die Buchung zulässig ist, sonst eine Fehlermeldung zum Anzeigen.
+    Für Admins gibt es zwei Modi: `require_admin_confirmation=True` verlangt eine bewusste
+    Bestätigung im Formular (für frei wählbare Buchungsdaten); bei False wird die Buchung mit
+    einem Warnhinweis automatisch zugelassen (für Abläufe ohne eigenes Datumsfeld, z. B. beim
+    Abschluss eines bestehenden Kegelabends). Für alle anderen Rollen ist es eine harte Sperre.
+    """
+    if not booking_date:
+        return None
+
+    closing = closing_for_year(booking_date.year)
+    if not closing:
+        return None
+
+    closed_on = closing.closing_date.strftime("%d.%m.%Y") if closing.closing_date else "-"
+
+    if current_user.role == "admin":
+        if not require_admin_confirmation:
+            flash(f"Hinweis: Das Jahr {closing.year} ist bereits abgeschlossen (Jahresabschluss vom {closed_on}).", "warning")
+            return None
+        if request.form.get(override_field) == "1":
+            return None
+        return (
+            f"Das Jahr {closing.year} ist bereits abgeschlossen (Jahresabschluss vom {closed_on}). "
+            "Bitte weiter unten bewusst bestätigen, falls trotzdem in diesem Jahr gebucht werden soll."
+        )
+
+    return (
+        f"Das Jahr {closing.year} ist bereits abgeschlossen (Jahresabschluss vom {closed_on}) und "
+        "gegen nachträgliche Buchungen geschützt. Bitte an einen Admin wenden, falls diese Buchung "
+        "wirklich in dieses Jahr muss."
+    )
 
 
 def setting_value(key, default=None):
@@ -5181,6 +5241,154 @@ def annual_year_summary(year):
     }
 
 
+def annual_report_figures(year):
+    """Kennzahlen für den Jahresbericht: bevorzugt aus dem gespeicherten Jahresabschluss
+    (die offiziellen, eingefrorenen Werte), sonst live aus den aktuellen Buchungen berechnet."""
+    closing = closing_for_year(year)
+    if closing:
+        figures = {
+            "source": "closing",
+            "closing": closing,
+            "cash_balance_cents": closing.cash_balance_cents,
+            "bank_balance_cents": closing.bank_balance_cents,
+            "total_balance_cents": closing.total_balance_cents,
+            "open_penalties_cents": closing.open_penalties_cents,
+            "member_credits_cents": closing.member_credits_cents,
+            "income_cents": closing.income_cents,
+            "expense_cents": closing.expense_cents,
+            "event_count": closing.event_count,
+            "cancelled_event_count": closing.cancelled_event_count,
+            "open_event_count": closing.open_event_count,
+            "last_audit": closing.last_cash_audit,
+            "closing_date": closing.closing_date,
+            "confirmed": bool(closing.confirmed_at),
+            "confirmed_by": closing.confirmed_by_user.username if closing.confirmed_by_user else None,
+            "confirmed_at": closing.confirmed_at,
+        }
+    else:
+        summary = annual_year_summary(year)
+        figures = {
+            "source": "live",
+            "closing": None,
+            "cash_balance_cents": summary["cash_balance_cents"],
+            "bank_balance_cents": summary["bank_balance_cents"],
+            "total_balance_cents": summary["cash_balance_cents"] + summary["bank_balance_cents"],
+            "open_penalties_cents": summary["open_penalties_cents"],
+            "member_credits_cents": summary["member_credits_cents"],
+            "income_cents": summary["income_cents"],
+            "expense_cents": summary["expense_cents"],
+            "event_count": summary["event_count"],
+            "cancelled_event_count": summary["cancelled_event_count"],
+            "open_event_count": summary["open_event_count"],
+            "last_audit": summary["last_audit"],
+            "closing_date": None,
+            "confirmed": False,
+            "confirmed_by": None,
+            "confirmed_at": None,
+        }
+    figures["interest"] = interest_year_totals(year)
+    return figures
+
+
+def annual_report_export_row(year):
+    figures = annual_report_figures(year)
+    return {
+        "Jahr": year,
+        "Quelle": "Offizieller Jahresabschluss" if figures["source"] == "closing" else "Vorläufig (nicht abgeschlossen)",
+        "Barkasse": f"{cents_to_euro(figures['cash_balance_cents'])} €",
+        "Bank": f"{cents_to_euro(figures['bank_balance_cents'])} €",
+        "Gesamtbestand": f"{cents_to_euro(figures['total_balance_cents'])} €",
+        "Einnahmen im Jahr": f"{cents_to_euro(figures['income_cents'])} €",
+        "Ausgaben im Jahr": f"{cents_to_euro(figures['expense_cents'])} €",
+        "Offene Strafen": f"{cents_to_euro(figures['open_penalties_cents'])} €",
+        "Guthaben Mitglieder": f"{cents_to_euro(figures['member_credits_cents'])} €",
+        "Brutto-Zinsen": f"{cents_to_euro(figures['interest']['gross_cents'])} €",
+        "Netto-Zinsen": f"{cents_to_euro(figures['interest']['net_cents'])} €",
+        "Kegelabende abgeschlossen": figures["event_count"],
+        "Kegelabende ausgefallen": figures["cancelled_event_count"],
+        "Letzte Kassenprüfung": figures["last_audit"].audit_date.strftime("%d.%m.%Y") if figures["last_audit"] and figures["last_audit"].audit_date else "-",
+        "Bestätigt": "Ja" if figures["confirmed"] else "Nein",
+    }
+
+
+def build_annual_report_pdf(year):
+    """Einseitiger, gut lesbarer Jahresbericht (z. B. für die Mitgliederversammlung)."""
+    figures = annual_report_figures(year)
+    margin = 42
+    page_width = _PDF_PAGE_WIDTH
+    now_text = datetime.now().strftime("%d.%m.%Y %H:%M")
+
+    cmds = _pdf_page_header_cmds(1, f"Jahresbericht {year} – Kegelkasse", now_text, margin)
+    y = 700
+
+    def section_title(label, y_pos):
+        cmds.append("0.90 0.94 0.91 rg")
+        cmds.append(f"{margin} {y_pos - 4} {page_width - 2*margin} 22 re f")
+        cmds.append("0 g")
+        cmds.append(_pdf_text_cmd(margin + 8, y_pos + 2, label, 12, "F2"))
+        return y_pos - 30
+
+    def metric_row(label, value, y_pos):
+        cmds.append(_pdf_text_cmd(margin + 8, y_pos, label, 10, "F1"))
+        cmds.append(_pdf_text_cmd(page_width - margin - 170, y_pos, value, 11, "F2"))
+        return y_pos - 18
+
+    if figures["source"] == "closing":
+        status_text = f"Offizieller Jahresabschluss vom {figures['closing_date'].strftime('%d.%m.%Y')}"
+        if figures["confirmed"]:
+            status_text += f" – bestätigt von {figures['confirmed_by']} am {figures['confirmed_at'].strftime('%d.%m.%Y')}"
+        else:
+            status_text += " – noch nicht durch Kassenprüfung bestätigt"
+    else:
+        status_text = "Vorläufige Werte – dieses Jahr wurde noch nicht offiziell abgeschlossen."
+    cmds.append(_pdf_text_cmd(margin, y, status_text, 10, "F1"))
+    y -= 28
+
+    y = section_title("Kassenbestand", y)
+    y = metric_row("Barkasse", f"{cents_to_euro(figures['cash_balance_cents'])} €", y)
+    y = metric_row("Bank", f"{cents_to_euro(figures['bank_balance_cents'])} €", y)
+    y = metric_row("Gesamtbestand", f"{cents_to_euro(figures['total_balance_cents'])} €", y)
+    y -= 10
+
+    y = section_title("Einnahmen & Ausgaben", y)
+    y = metric_row("Einnahmen im Jahr", f"{cents_to_euro(figures['income_cents'])} €", y)
+    y = metric_row("Ausgaben im Jahr", f"{cents_to_euro(figures['expense_cents'])} €", y)
+    y -= 10
+
+    y = section_title("Offene Posten (Stand heute)", y)
+    y = metric_row("Offene Strafen", f"{cents_to_euro(figures['open_penalties_cents'])} €", y)
+    y = metric_row("Guthaben Mitglieder", f"{cents_to_euro(figures['member_credits_cents'])} €", y)
+    y -= 10
+
+    y = section_title("Kegelabende", y)
+    y = metric_row("Abgeschlossen", str(figures["event_count"]), y)
+    y = metric_row("Ausgefallen", str(figures["cancelled_event_count"]), y)
+    y = metric_row("Offen", str(figures["open_event_count"]), y)
+    y -= 10
+
+    interest = figures["interest"]
+    if interest["count"]:
+        y = section_title("Zinsen", y)
+        y = metric_row("Brutto-Zinsen", f"{cents_to_euro(interest['gross_cents'])} €", y)
+        y = metric_row("Steuern gesamt", f"{cents_to_euro(interest['tax_total_cents'])} €", y)
+        y = metric_row("Netto-Zinsen", f"{cents_to_euro(interest['net_cents'])} €", y)
+        y -= 10
+
+    y = section_title("Kassenprüfung", y)
+    if figures["last_audit"] and figures["last_audit"].audit_date:
+        y = metric_row("Letzte Prüfung", figures["last_audit"].audit_date.strftime("%d.%m.%Y"), y)
+    else:
+        y = metric_row("Letzte Prüfung", "keine", y)
+
+    if figures["closing"] and figures["closing"].note:
+        y -= 10
+        y = section_title("Notiz zum Abschluss", y)
+        cmds.append(_pdf_text_cmd(margin + 8, y, figures["closing"].note[:110], 9, "F1"))
+        y -= 18
+
+    return _pdf_assemble([cmds])
+
+
 @app.route("/annual-closings", methods=["GET", "POST"])
 @login_required
 @role_required("admin", "cashier", "auditor")
@@ -5524,6 +5732,11 @@ def interest_module():
                 flash("Der Zeitraum ist ungültig: Bis-Datum liegt vor dem Von-Datum.", "danger")
                 return redirect(url_for("interest_module"))
 
+            block_reason = closed_year_block_message(booking_date)
+            if block_reason:
+                flash(block_reason, "danger")
+                return redirect(url_for("interest_module"))
+
             existing_interest_booking = (
                 InterestBooking.query
                 .filter(InterestBooking.period_start == period_start)
@@ -5742,6 +5955,11 @@ def cashbook():
             booking_date = datetime.strptime(booking_date_raw, "%Y-%m-%d").date()
         except ValueError:
             flash("Bitte ein gültiges Datum eingeben.", "danger")
+            return redirect(url_for("cashbook"))
+
+        block_reason = closed_year_block_message(booking_date)
+        if block_reason:
+            flash(block_reason, "danger")
             return redirect(url_for("cashbook"))
 
         direction = request.form.get("direction", "expense")
@@ -6807,6 +7025,27 @@ def exports_download():
     account = request.args.get("account", "all")
     member_scope = request.args.get("member_scope", "active")
 
+    if export_type == "annual_report":
+        report_year = year or (datetime.now().year - 1)
+        title = f"Jahresbericht {report_year}"
+        audit_log(
+            "system",
+            "export_created",
+            f"Export erstellt: {title}",
+            details=f"Bereich: {title}\nFormat: {fmt}\nJahr: {report_year}",
+            object_type="Export",
+            new_value=title,
+        )
+        db.session.commit()
+        if fmt == "pdf":
+            return Response(
+                build_annual_report_pdf(report_year),
+                mimetype="application/pdf",
+                headers={"Content-Disposition": f"attachment; filename={export_filename(f'jahresbericht_{report_year}', 'pdf')}"},
+            )
+        row = annual_report_export_row(report_year)
+        return export_response([row], list(row.keys()), export_type, fmt, title)
+
     if export_type == "cashbook":
         rows = cashbook_export_rows(year, account)
         title = "Kassenbuch Export"
@@ -7159,6 +7398,11 @@ def event_detail(event_id):
                 flash("Barzahlungen können nur im Abrechnungs-Schritt erfasst werden.", "danger")
                 return redirect(url_for("event_detail", event_id=event.id))
 
+            block_reason = closed_year_block_message(event.event_date, require_admin_confirmation=False)
+            if block_reason:
+                flash(block_reason, "danger")
+                return redirect(url_for("event_detail", event_id=event.id))
+
             reset_event_bookings(event)
 
             participants = EventParticipant.query.filter_by(event_id=event.id).all()
@@ -7245,6 +7489,11 @@ def event_detail(event_id):
             old_snapshot = event_audit_snapshot(event)
             if event.status != "lane_cost":
                 flash("Bitte zuerst die Barzahlungen verbuchen. Danach werden die Bahnkosten erfasst.", "danger")
+                return redirect(url_for("event_detail", event_id=event.id))
+
+            block_reason = closed_year_block_message(event.event_date, require_admin_confirmation=False)
+            if block_reason:
+                flash(block_reason, "danger")
                 return redirect(url_for("event_detail", event_id=event.id))
 
             try:

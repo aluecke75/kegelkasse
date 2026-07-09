@@ -68,6 +68,13 @@
             <textarea id="note" name="note" rows="3" placeholder="Optional"></textarea>
         </label>
 
+        {% if current_user.role == "admin" %}
+            <div class="checkbox-row">
+                <input type="checkbox" id="confirm_closed_year" name="confirm_closed_year" value="1">
+                <label for="confirm_closed_year" style="margin:0;">Bewusst in einem bereits abgeschlossenen Jahr buchen (nur nötig, falls eine entsprechende Meldung erscheint)</label>
+            </div>
+        {% endif %}
+
         <div class="inline-actions"><button type="submit">Eintrag speichern</button></div>
     </form>
 </div>
