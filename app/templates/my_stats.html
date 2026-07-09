@@ -1,0 +1,92 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="page-header">
+    <div class="page-icon">📈</div>
+    <div>
+        <h1>Meine Statistik</h1>
+        <p>Deine eigene Entwicklung über die Jahre – Strafgeld, Anwesenheit und Fehlzeiten.</p>
+    </div>
+</div>
+
+{% if not has_member %}
+    <div class="card">
+        <p class="muted">Dein Benutzerkonto ist noch keinem Mitglied zugeordnet. Bitte an Admin oder Kassierer/-in wenden.</p>
+    </div>
+{% elif years|length == 0 %}
+    <div class="card">
+        <p class="muted">Für dich liegen noch keine abgeschlossenen Kegelabende vor.</p>
+    </div>
+{% else %}
+    <div class="card">
+        <h2>Strafgeld pro Jahr</h2>
+        <div id="chart-my-penalty" class="chart-card"></div>
+    </div>
+
+    <div class="card">
+        <h2>Anwesenheit &amp; Fehlzeiten pro Jahr</h2>
+        <div id="chart-my-attendance" class="chart-card"></div>
+    </div>
+
+    <div class="card">
+        <h2>Alle Jahre im Überblick</h2>
+        <div class="mobile-table-wrap">
+            <table class="small-table">
+                <thead>
+                    <tr>
+                        <th>Jahr</th>
+                        <th>Anwesend</th>
+                        <th>Entschuldigt</th>
+                        <th>Unentschuldigt</th>
+                        <th>Strafgeld</th>
+                        <th>Höchster Abend</th>
+                        <th>Eingezahlt</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for year in years %}
+                        {% set row = year_rows[loop.index0] %}
+                        <tr>
+                            <td>{{ year }}</td>
+                            <td>{{ row.attended }}</td>
+                            <td>{{ row.excused }}</td>
+                            <td>{{ row.unexcused }}</td>
+                            <td>{{ row.penalty_total_euro }} €</td>
+                            <td>{{ row.highest_single_euro }} €</td>
+                            <td>{{ row.paid_euro }} €</td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <script>
+    (function () {
+        if (!window.KegelCharts) return;
+        var data = {{ chart_data | tojson }};
+
+        function formatEuro(value) {
+            return value.toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €';
+        }
+        function formatCount(value) {
+            return Math.round(value).toString();
+        }
+
+        KegelCharts.renderBarChart('chart-my-penalty', {
+            groups: data.penaltyByYear.groups,
+            series: data.penaltyByYear.series,
+            formatValue: formatEuro,
+            ariaLabel: 'Strafgeld pro Jahr',
+        });
+
+        KegelCharts.renderBarChart('chart-my-attendance', {
+            groups: data.attendanceByYear.groups,
+            series: data.attendanceByYear.series,
+            formatValue: formatCount,
+            ariaLabel: 'Anwesenheit und Fehlzeiten pro Jahr',
+        });
+    })();
+    </script>
+{% endif %}
+{% endblock %}

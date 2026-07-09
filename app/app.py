@@ -4917,8 +4917,23 @@ def event_year_filter(query, selected_year):
     return query
 
 
-def build_player_overview_rows(selected_year=None):
-    members = Member.query.order_by(Member.first_name.asc(), Member.last_name.asc()).all()
+def member_active_years(member_id):
+    years = (
+        db.session.query(db.extract("year", BowlingEvent.event_date))
+        .join(EventParticipant, EventParticipant.event_id == BowlingEvent.id)
+        .filter(EventParticipant.member_id == member_id)
+        .filter(BowlingEvent.status == "closed")
+        .distinct()
+        .all()
+    )
+    return sorted({int(row[0]) for row in years if row[0] is not None})
+
+
+def build_player_overview_rows(selected_year=None, member_id=None):
+    members_query = Member.query.order_by(Member.first_name.asc(), Member.last_name.asc())
+    if member_id:
+        members_query = members_query.filter_by(id=member_id)
+    members = members_query.all()
     rows = []
 
     for member in members:
@@ -5046,6 +5061,117 @@ def build_report_totals(player_rows, event_rows, selected_year=None):
 def top_rows(rows, key, reverse=True, limit=10):
     filtered = [row for row in rows if row.get(key, 0)]
     return sorted(filtered, key=lambda row: (row.get(key, 0), row.get("name", "")), reverse=reverse)[:limit]
+
+
+_MONTH_LABELS_DE = ["Jan", "Feb", "Mär", "Apr", "Mai", "Jun", "Jul", "Aug", "Sep", "Okt", "Nov", "Dez"]
+
+
+def _month_label(year, month):
+    return f"{_MONTH_LABELS_DE[month - 1]} {str(year)[2:]}"
+
+
+def _last_n_months(n):
+    """Liste von (Jahr, Monat)-Tupeln für die letzten n Monate, älteste zuerst, inkl. aktuellem Monat."""
+    today = datetime.today().date()
+    months = []
+    year, month = today.year, today.month
+    for _ in range(n):
+        months.append((year, month))
+        month -= 1
+        if month == 0:
+            month = 12
+            year -= 1
+    return list(reversed(months))
+
+
+def report_penalty_month_series(months_back=15):
+    months = _last_n_months(months_back)
+    transactions = MemberPenaltyTransaction.query.filter_by(category="event_penalty").all()
+    totals_by_month = {}
+    for tx in transactions:
+        if not tx.booking_date:
+            continue
+        key = (tx.booking_date.year, tx.booking_date.month)
+        totals_by_month[key] = totals_by_month.get(key, 0) + (tx.amount_cents or 0)
+
+    points = []
+    for year, month in months:
+        cents = totals_by_month.get((year, month), 0)
+        points.append({
+            "x": _month_label(year, month),
+            "y": round(cents / 100, 2),
+            "label": _month_label(year, month),
+        })
+    return points
+
+
+def report_attendance_month_series(months_back=15):
+    months = _last_n_months(months_back)
+    participants = (
+        db.session.query(EventParticipant.status, BowlingEvent.event_date)
+        .join(BowlingEvent, BowlingEvent.id == EventParticipant.event_id)
+        .filter(BowlingEvent.status == "closed")
+        .all()
+    )
+    counts_by_month = {}
+    for status, event_date in participants:
+        if not event_date:
+            continue
+        key = (event_date.year, event_date.month)
+        bucket = counts_by_month.setdefault(key, {"present": 0, "excused": 0, "unexcused": 0})
+        if status in bucket:
+            bucket[status] += 1
+
+    labels = [_month_label(year, month) for year, month in months]
+    series_present = []
+    series_excused = []
+    series_unexcused = []
+    for year, month in months:
+        bucket = counts_by_month.get((year, month), {"present": 0, "excused": 0, "unexcused": 0})
+        label = _month_label(year, month)
+        series_present.append({"x": label, "y": bucket["present"], "label": label})
+        series_excused.append({"x": label, "y": bucket["excused"], "label": label})
+        series_unexcused.append({"x": label, "y": bucket["unexcused"], "label": label})
+    return labels, series_present, series_excused, series_unexcused
+
+
+def report_year_comparison_rows():
+    years = sorted({t.booking_date.year for t in AccountTransaction.query.all() if t.booking_date})
+    rows = []
+    for year in years:
+        start = datetime(year, 1, 1).date()
+        end = datetime(year + 1, 1, 1).date()
+        transactions = AccountTransaction.query.filter(
+            AccountTransaction.booking_date >= start,
+            AccountTransaction.booking_date < end,
+        ).all()
+        income_cents = sum(t.amount_cents for t in transactions if (t.amount_cents or 0) > 0)
+        expense_cents = abs(sum(t.amount_cents for t in transactions if (t.amount_cents or 0) < 0))
+        rows.append({"year": year, "income_cents": income_cents, "expense_cents": expense_cents})
+    return rows
+
+
+def report_cash_balance_history_rows():
+    """Barkasse/Bank zum Jahresende, aus gespeicherten Jahresabschlüssen. Zusätzlich der
+    heutige Live-Stand, falls das laufende Jahr noch nicht abgeschlossen ist."""
+    closings = AnnualClosing.query.order_by(AnnualClosing.year.asc()).all()
+    rows = [
+        {
+            "label": str(closing.year),
+            "cash_cents": closing.cash_balance_cents,
+            "bank_cents": closing.bank_balance_cents,
+        }
+        for closing in closings
+    ]
+
+    current_year = datetime.today().year
+    if not any(closing.year == current_year for closing in closings):
+        rows.append({
+            "label": f"{current_year} (heute)",
+            "cash_cents": account_balance("cash"),
+            "bank_cents": account_balance("bank"),
+        })
+    return rows
 
 
 def cashbook_category_options():
@@ -6969,8 +7095,49 @@ def reports():
         "net": cents_to_euro(interest_totals["net_cents"]),
     }
 
+    penalty_month_points = report_penalty_month_series()
+    attendance_labels, attendance_present, attendance_excused, attendance_unexcused = report_attendance_month_series()
+    year_comparison_rows = report_year_comparison_rows()
+    cash_balance_history_rows = report_cash_balance_history_rows()
+
+    chart_data = {
+        "penaltyTrend": {
+            "series": [{"name": "Strafgeld", "points": penalty_month_points}],
+        },
+        "attendanceTrend": {
+            "labels": attendance_labels,
+            "series": [
+                {"name": "Anwesend", "points": attendance_present},
+                {"name": "Entschuldigt", "points": attendance_excused},
+                {"name": "Unentschuldigt", "points": attendance_unexcused},
+            ],
+        },
+        "yearComparison": {
+            "groups": [str(row["year"]) for row in year_comparison_rows],
+            "series": [
+                {"name": "Einnahmen", "values": [round(row["income_cents"] / 100, 2) for row in year_comparison_rows]},
+                {"name": "Ausgaben", "values": [round(row["expense_cents"] / 100, 2) for row in year_comparison_rows]},
+            ],
+        },
+        "cashBalanceHistory": {
+            "xLabels": [row["label"] for row in cash_balance_history_rows],
+            "series": [
+                {"name": "Barkasse", "points": [{"x": row["label"], "y": round(row["cash_cents"] / 100, 2), "label": row["label"]} for row in cash_balance_history_rows]},
+                {"name": "Bank", "points": [{"x": row["label"], "y": round(row["bank_cents"] / 100, 2), "label": row["label"]} for row in cash_balance_history_rows]},
+            ],
+        },
+    }
+
     return render_template(
         "reports.html",
+        chart_data=chart_data,
+        year_comparison_rows=year_comparison_rows,
+        cash_balance_history_rows=cash_balance_history_rows,
+        penalty_month_points=penalty_month_points,
+        attendance_trend_rows=[
+            {"label": label, "present": p["y"], "excused": e["y"], "unexcused": u["y"]}
+            for label, p, e, u in zip(attendance_labels, attendance_present, attendance_excused, attendance_unexcused)
+        ],
         years=report_year_options(),
         selected_year=selected_year,
         selected_year_value=str(selected_year) if selected_year else "all",
@@ -7095,6 +7262,41 @@ def my_event():
 @login_required
 def my_event_data():
     return jsonify(personal_event_payload())
+
+
+@app.route("/my-stats")
+@login_required
+def my_stats():
+    member = current_member_for_user()
+    if not member:
+        return render_template("my_stats.html", has_member=False)
+
+    years = member_active_years(member.id)
+    year_rows = [build_player_overview_rows(year, member_id=member.id)[0] for year in years]
+
+    chart_data = {
+        "penaltyByYear": {
+            "groups": [str(year) for year in years],
+            "series": [{"name": "Strafgeld", "values": [row["penalty_total_cents"] / 100 for row in year_rows]}],
+        },
+        "attendanceByYear": {
+            "groups": [str(year) for year in years],
+            "series": [
+                {"name": "Anwesend", "values": [row["attended"] for row in year_rows]},
+                {"name": "Entschuldigt", "values": [row["excused"] for row in year_rows]},
+                {"name": "Unentschuldigt", "values": [row["unexcused"] for row in year_rows]},
+            ],
+        },
+    }
+
+    return render_template(
+        "my_stats.html",
+        has_member=True,
+        member=member,
+        years=years,
+        year_rows=year_rows,
+        chart_data=chart_data,
+    )
 
 
 @app.route("/events")

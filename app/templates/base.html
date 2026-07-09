@@ -91,6 +91,12 @@
         .checkbox-row input[type="checkbox"] { width:auto; margin-top:2px; }
         .flash-auto-hide { background:#eefaf1; border:1px solid #c7edd0; border-radius:12px; padding:10px 12px; }
         .mobile-table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+        .kk-chart-root { width:100%; }
+        .kk-chart-legend { display:flex; gap:14px; flex-wrap:wrap; margin-top:10px; }
+        .kk-chart-legend-item { display:inline-flex; align-items:center; gap:6px; font-size:0.85rem; color:var(--muted); font-weight:700; }
+        .kk-chart-legend-dot { width:10px; height:10px; border-radius:3px; display:inline-block; }
+        .kk-chart-tooltip { position:fixed; display:none; z-index:200; background:#0b0b0b; color:#fff; padding:7px 10px; border-radius:8px; font-size:0.8rem; line-height:1.4; pointer-events:none; box-shadow:0 8px 20px rgba(0,0,0,0.25); max-width:220px; }
+        .chart-card { margin-top:10px; }
         .inline-actions { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
         .event-entry-table { min-width: 760px; }
         .event-entry-table th, .event-entry-table td { vertical-align: middle; text-align: center; }
@@ -238,6 +244,9 @@ Nicht löschen – ggf. für spätere Entwicklungsarbeiten wieder aktivieren.
                 <span class="nav-dropbtn">Auswertungen ▾</span>
                 <span class="nav-dropdown-content">
                     <a href="{{ url_for('reports') }}">Statistiken</a>
+                    {% if not current_user.is_system_user %}
+                        <a href="{{ url_for('my_stats') }}">Meine Statistik</a>
+                    {% endif %}
                     {% if current_user.role in ["admin", "cashier", "auditor"] %}
                         <a href="{{ url_for('exports_page') }}">Export</a>
                         <a href="{{ url_for('penalty_balances') }}">Strafkonten</a>
@@ -394,5 +403,7 @@ Nicht löschen – ggf. für spätere Entwicklungsarbeiten wieder aktivieren.
 })();
 </script>
 {% endif %}
+
+<script src="{{ url_for('static', filename='js/charts.js') }}"></script>
 </body>
 </html>

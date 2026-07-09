@@ -111,6 +111,43 @@
 </div>
 
 <div class="card">
+    <h2>Trends</h2>
+    <p class="muted section-note">Verlauf der letzten Monate, unabhängig vom oben gewählten Zeitraum.</p>
+    <div class="report-grid">
+        <div>
+            <h3>Strafgeld pro Monat</h3>
+            <div id="chart-penalty-trend" class="chart-card"></div>
+            <details style="margin-top:8px;">
+                <summary class="muted">Werte als Tabelle anzeigen</summary>
+                <table class="small-table" style="margin-top:8px;">
+                    <thead><tr><th>Monat</th><th>Strafgeld</th></tr></thead>
+                    <tbody>
+                        {% for point in penalty_month_points %}
+                            <tr><td>{{ point.label }}</td><td>{{ "%.2f"|format(point.y)|replace(".", ",") }} €</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </details>
+        </div>
+        <div>
+            <h3>Anwesenheit &amp; Fehlzeiten pro Monat</h3>
+            <div id="chart-attendance-trend" class="chart-card"></div>
+            <details style="margin-top:8px;">
+                <summary class="muted">Werte als Tabelle anzeigen</summary>
+                <table class="small-table" style="margin-top:8px;">
+                    <thead><tr><th>Monat</th><th>Anwesend</th><th>Entschuldigt</th><th>Unentschuldigt</th></tr></thead>
+                    <tbody>
+                        {% for row in attendance_trend_rows %}
+                            <tr><td>{{ row.label }}</td><td>{{ row.present }}</td><td>{{ row.excused }}</td><td>{{ row.unexcused }}</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </details>
+        </div>
+    </div>
+</div>
+
+<div class="card">
     <h2>Könige</h2>
     <p class="muted section-note">Die wichtigsten Zählstrafen auf einen Blick.</p>
     <div class="report-grid">
@@ -289,6 +326,47 @@
 
     <div class="report-grid">
         <div>
+            <h3>Jahresvergleich Einnahmen/Ausgaben</h3>
+            {% if year_comparison_rows|length > 1 %}
+                <div id="chart-year-comparison" class="chart-card"></div>
+                <details style="margin-top:8px;">
+                    <summary class="muted">Werte als Tabelle anzeigen</summary>
+                    <table class="small-table" style="margin-top:8px;">
+                        <thead><tr><th>Jahr</th><th>Einnahmen</th><th>Ausgaben</th></tr></thead>
+                        <tbody>
+                            {% for row in year_comparison_rows %}
+                                <tr><td>{{ row.year }}</td><td>{{ (row.income_cents / 100)|round(2) }} €</td><td>{{ (row.expense_cents / 100)|round(2) }} €</td></tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </details>
+            {% else %}
+                <p class="muted">Noch zu wenige Jahre mit Buchungen für einen Vergleich.</p>
+            {% endif %}
+        </div>
+        <div>
+            <h3>Kassenbestand-Verlauf (Jahresende)</h3>
+            {% if cash_balance_history_rows|length > 1 %}
+                <div id="chart-cash-balance-history" class="chart-card"></div>
+                <details style="margin-top:8px;">
+                    <summary class="muted">Werte als Tabelle anzeigen</summary>
+                    <table class="small-table" style="margin-top:8px;">
+                        <thead><tr><th>Jahr</th><th>Barkasse</th><th>Bank</th></tr></thead>
+                        <tbody>
+                            {% for row in cash_balance_history_rows %}
+                                <tr><td>{{ row.label }}</td><td>{{ (row.cash_cents / 100)|round(2) }} €</td><td>{{ (row.bank_cents / 100)|round(2) }} €</td></tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </details>
+            {% else %}
+                <p class="muted">Noch zu wenige abgeschlossene Jahre für einen Verlauf.</p>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="report-grid">
+        <div>
             <h3>Höchste offene Strafen</h3>
             {% if most_open_rows %}
                 <table class="rank-table small-table">
@@ -377,4 +455,51 @@
     </div>
 </div>
 
+<script>
+(function () {
+    if (!window.KegelCharts) return;
+    var data = {{ chart_data | tojson }};
+
+    function formatEuro(value) {
+        return value.toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €';
+    }
+    function formatCount(value) {
+        return Math.round(value).toString();
+    }
+
+    KegelCharts.renderLineChart('chart-penalty-trend', {
+        xLabels: data.penaltyTrend.series[0].points.map(function (p) { return p.x; }),
+        series: data.penaltyTrend.series,
+        formatValue: formatEuro,
+        ariaLabel: 'Strafgeld pro Monat',
+    });
+
+    KegelCharts.renderBarChart('chart-attendance-trend', {
+        groups: data.attendanceTrend.labels,
+        series: data.attendanceTrend.series.map(function (s) {
+            return { name: s.name, values: s.points.map(function (p) { return p.y; }) };
+        }),
+        formatValue: formatCount,
+        ariaLabel: 'Anwesenheit und Fehlzeiten pro Monat',
+    });
+
+    if (document.getElementById('chart-year-comparison')) {
+        KegelCharts.renderBarChart('chart-year-comparison', {
+            groups: data.yearComparison.groups,
+            series: data.yearComparison.series,
+            formatValue: formatEuro,
+            ariaLabel: 'Jahresvergleich Einnahmen und Ausgaben',
+        });
+    }
+
+    if (document.getElementById('chart-cash-balance-history')) {
+        KegelCharts.renderLineChart('chart-cash-balance-history', {
+            xLabels: data.cashBalanceHistory.xLabels,
+            series: data.cashBalanceHistory.series,
+            formatValue: formatEuro,
+            ariaLabel: 'Kassenbestand-Verlauf',
+        });
+    }
+})();
+</script>
 {% endblock %}
