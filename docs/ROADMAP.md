@@ -19,10 +19,10 @@ Stand: 2026-07-09. Aktueller Gesamtstatus: siehe [PROJECT_STATUS.md](PROJECT_STA
    - getrennte Anzeige "geworfen" / "bezahlen" bei Strafarten wie "Alle Neune"/"Kranz"
    - Strafkonto & aktueller Abend als Karten am Seitenende — Platzierung vom Nutzer bestätigt, keine Änderung gewünscht
 
-4. **Zinsmodul**
-   - restliche Oberfläche
-   - Tests
-   - Berichte
+4. **Zinsmodul** — ✅ abgeschlossen (2026-07-09)
+   - Oberfläche geprüft: bereits vollständig (Einstellung, Buchung mit Live-Steuervorschau, Verlauf, Stornieren)
+   - Tests durchgeführt: Fehler gefunden und behoben — die Rundungseinstellung (Kaufmännisch/Aufrunden/Abrunden) wurde bei der Steuerberechnung bisher ignoriert
+   - Berichte ergänzt: Zinsstatistik in den Auswertungen, Aufschlüsselung im Jahresabschluss, Export (PDF/Excel/CSV) für die Steuererklärung
 
 5. **Kassenprüfung**
    - Abschlussworkflow
