@@ -40,12 +40,11 @@ Stand: 2026-07-09. Aktueller Gesamtstatus: siehe [PROJECT_STATUS.md](PROJECT_STA
    - Jahresvergleiche: Einnahmen/Ausgaben und Kassenbestand-Verlauf je Jahr als Diagramm
    - Individuelle Auswertungen: neue Seite "Meine Statistik" – Mitglieder sehen ihre eigene Entwicklung über die Jahre
 
-8. **PDF-Export**
-   - Umlaute-Bug (z. B. "Höchste" statt "Hˆ¶chste")
-   - modernes Layout
-   - Tabellenoptik
-   - Vereinslogo
-   - Seitenköpfe / Fußzeilen
+8. **PDF-Export** — ✅ abgeschlossen (2026-07-09)
+   - Umlaute waren bereits korrekt (cp1252-Kodierung) — bestätigt getestet
+   - Seitenköpfe gab es schon; Fußzeilen neu ergänzt
+   - Modernes Layout/Tabellenoptik: zweispaltiges Feld/Wert-Layout statt Fließtext
+   - Vereinslogo: Admin kann im Adminbereich selbst ein Logo hochladen (PNG mit Transparenz oder JPEG), erscheint automatisch in allen PDF-Exporten
 
 9. **Dokumentenverwaltung**
    - Upload von Rechnungen
