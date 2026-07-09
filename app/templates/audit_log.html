@@ -60,7 +60,7 @@
                     {% if diff_rows %}
                         <details class="audit-details">
                             <summary>{{ diff_rows|length }} geänderte{{ 's' if diff_rows|length == 1 else '' }} Feld{{ '' if diff_rows|length == 1 else 'er' }} anzeigen</summary>
-                            <div class="audit-detail-block">
+                            <div class="audit-detail-block mobile-table-wrap">
                                 <table class="audit-diff-table">
                                     <thead><tr><th>Feld</th><th>Vorher</th><th>Nachher</th></tr></thead>
                                     <tbody>
