@@ -5386,13 +5386,15 @@ def interest_module():
 
             existing_interest_booking = (
                 InterestBooking.query
-                .filter_by(period_start=period_start, period_end=period_end)
+                .filter(InterestBooking.period_start == period_start)
+                .filter(InterestBooking.period_end == period_end)
+                .filter(InterestBooking.is_cancelled == False)
                 .first()
             )
 
             if existing_interest_booking:
                 flash(
-                    "Für diesen Zinszeitraum wurde bereits eine Zinsgutschrift gebucht. Eine Doppelbuchung ist nicht erlaubt.",
+                    "Für diesen Zinszeitraum wurde bereits eine aktive Zinsgutschrift gebucht. Eine Doppelbuchung ist nicht erlaubt.",
                     "warning"
                 )
                 return redirect(url_for("interest_module"))
@@ -6016,6 +6018,82 @@ def finance_settings():
 
     return render_template("finance_settings.html", settings=settings)
 
+def parse_bank_statement_csv(document, max_rows=20):
+    document_dir = Path(active_database_info()["documents_path"])
+    file_path = document_dir / document.stored_filename
+
+    if not file_path.exists():
+        return {
+            "ok": False,
+            "message": "CSV-Datei wurde nicht gefunden.",
+            "rows": [],
+            "row_count": 0,
+            "income_total_cents": 0,
+            "expense_total_cents": 0,
+        }
+
+    raw = file_path.read_bytes()
+
+    try:
+        text = raw.decode("utf-8-sig")
+    except UnicodeDecodeError:
+        text = raw.decode("cp1252", errors="replace")
+
+    reader = csv.DictReader(StringIO(text), delimiter=";")
+    rows = []
+    income_total_cents = 0
+    expense_total_cents = 0
+
+    for index, row in enumerate(reader, start=1):
+        date_raw = (row.get("Datum") or "").strip()
+        text_raw = (row.get("Buchungstext") or "").strip()
+        purpose_raw = (row.get("Verwendungszweck") or "").strip()
+        amount_raw = (row.get("Betrag") or "0").strip()
+
+        try:
+            sign = -1 if amount_raw.startswith("-") else 1
+            amount_clean = amount_raw.lstrip("+-").strip()
+            amount_cents = euro_to_cents(amount_clean) * sign
+        except ValueError:
+            rows.append({
+                "index": index,
+                "date": date_raw,
+                "text": text_raw,
+                "purpose": purpose_raw,
+                "amount_cents": 0,
+                "amount_euro": "0,00",
+                "type": "Fehler",
+                "error": f"Ungültiger Betrag: {amount_raw}",
+            })
+            continue
+
+        if amount_cents >= 0:
+            income_total_cents += amount_cents
+        else:
+            expense_total_cents += abs(amount_cents)
+
+        if len(rows) < max_rows:
+            rows.append({
+                "index": index,
+                "date": date_raw,
+                "text": text_raw,
+                "purpose": purpose_raw,
+                "amount_cents": amount_cents,
+                "amount_euro": cents_to_euro(amount_cents),
+                "type": "Eingang" if amount_cents >= 0 else "Ausgang",
+            })
+
+    return {
+        "ok": True,
+        "message": "CSV wurde gelesen.",
+        "rows": rows,
+        "row_count": index if "index" in locals() else 0,
+        "income_total_cents": income_total_cents,
+        "expense_total_cents": expense_total_cents,
+        "income_total_euro": cents_to_euro(income_total_cents),
+        "expense_total_euro": cents_to_euro(expense_total_cents),
+    }
+
 @app.route("/finance/monthly-bank-closing", methods=["GET", "POST"])
 @login_required
 @role_required("admin", "cashier", "auditor")
@@ -6031,6 +6109,74 @@ def monthly_bank_closing():
 
     period_start = date(year, month, 1)
     period_end = date(year, month, last_day_of_month(year, month))
+
+    if request.method == "POST":
+        action = request.form.get("action", "")
+
+        if action == "upload_statement":
+            statement_file = request.files.get("statement_file")
+
+            if not statement_file or not statement_file.filename:
+                flash("Bitte eine Kontoauszug-Datei auswählen.", "danger")
+                return redirect(url_for("monthly_bank_closing", month=f"{year:04d}-{month:02d}"))
+
+            original_filename = secure_filename(statement_file.filename)
+            suffix = original_filename.rsplit(".", 1)[1].lower() if "." in original_filename else ""
+
+            if suffix not in {"pdf", "csv"}:
+                flash("Erlaubt sind nur PDF- oder CSV-Dateien.", "danger")
+                return redirect(url_for("monthly_bank_closing", month=f"{year:04d}-{month:02d}"))
+
+            document_dir = Path(active_database_info()["documents_path"])
+            document_dir.mkdir(parents=True, exist_ok=True)
+
+            stored_filename = (
+                f"kontoauszug_{year:04d}_{month:02d}_"
+                f"{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}_"
+                f"{secrets.token_hex(6)}.{suffix}"
+            )
+            target = document_dir / stored_filename
+            statement_file.save(target)
+
+            document_category = "Kontoauszug PDF" if suffix == "pdf" else "Kontoauszug CSV"
+
+            old_documents = (
+                Document.query
+                .filter(Document.category == document_category)
+                .filter(Document.document_date == period_start)
+                .filter(Document.deleted_at.is_(None))
+                .all()
+            )
+
+            for old_document in old_documents:
+                old_document.deleted_at = datetime.utcnow()
+                old_document.deleted_by_user_id = current_user.id
+
+            document = Document(
+                title=f"{document_category} {month:02d}.{year}",
+                category=document_category,
+                document_date=period_start,
+                description=f"Kontoauszug für Monatsabschluss {month:02d}.{year}",
+                original_filename=original_filename,
+                stored_filename=stored_filename,
+                mime_type=statement_file.mimetype,
+                file_size=target.stat().st_size,
+                uploaded_by_user_id=current_user.id,
+            )
+            db.session.add(document)
+
+            audit_log(
+                "finance",
+                "bank_statement_uploaded",
+                f"Kontoauszug {month:02d}.{year} hochgeladen",
+                details=f"Datei: {original_filename}\nGespeichert als: {stored_filename}",
+                object_type="Document",
+                new_value=original_filename,
+            )
+
+            db.session.commit()
+            flash("Kontoauszug wurde hochgeladen.", "success")
+            return redirect(url_for("monthly_bank_closing", month=f"{year:04d}-{month:02d}"))
 
     contribution_batch = MonthlyContributionBatch.query.filter_by(year=year, month=month).first()
     contribution_rows = monthly_contribution_rows(year, month, contribution_batch)
@@ -6059,7 +6205,32 @@ def monthly_bank_closing():
     )
     interest_done = interest_booking is not None
 
-    statement_uploaded = False
+    statement_pdf_document = (
+        Document.query
+        .filter(Document.category == "Kontoauszug PDF")
+        .filter(Document.document_date == period_start)
+        .filter(Document.deleted_at.is_(None))
+        .order_by(Document.uploaded_at.desc())
+        .first()
+    )
+
+    statement_csv_document = (
+        Document.query
+        .filter(Document.category == "Kontoauszug CSV")
+        .filter(Document.document_date == period_start)
+        .filter(Document.deleted_at.is_(None))
+        .order_by(Document.uploaded_at.desc())
+        .first()
+    )
+    
+
+    statement_document = statement_pdf_document
+    statement_uploaded = statement_pdf_document is not None
+
+    csv_preview = None
+
+    if statement_csv_document:
+        csv_preview = parse_bank_statement_csv(statement_csv_document)
 
     checks = {
         "statement": {
@@ -6082,7 +6253,32 @@ def monthly_bank_closing():
         },
     }
 
-    all_required_done = all(item["done"] for item in checks.values())
+    validation_checks = [
+        {
+            "icon": "📄",
+            "title": "Kontoauszug vorhanden",
+            "ok": checks["statement"]["done"],
+            "message": "Kontoauszug wurde hochgeladen." if checks["statement"]["done"] else "Kontoauszug fehlt.",
+        },
+        {
+            "icon": "💶",
+            "title": "Monatsbeiträge",
+            "ok": checks["contributions"]["done"],
+            "message": f"{contribution_paid_count} von {contribution_member_count} Beiträgen verbucht.",
+        },
+        {
+            "icon": "📈",
+            "title": "Zinsen",
+            "ok": checks["interest"]["done"],
+            "message": "Zinsgutschrift vorhanden." if checks["interest"]["done"] else "Noch keine Zinsgutschrift.",
+        },
+    ]
+
+    passed_validation_count = sum(1 for item in validation_checks if item["ok"])
+    validation_count = len(validation_checks)
+    validation_done = passed_validation_count == validation_count and validation_count > 0
+
+    all_required_done = all(item["done"] for item in checks.values()) and validation_done
 
     next_step = None
     for key in ("statement", "contributions", "interest"):
@@ -6105,6 +6301,14 @@ def monthly_bank_closing():
         checks=checks,
         all_required_done=all_required_done,
         next_step=next_step,
+        validation_checks=validation_checks,
+        passed_validation_count=passed_validation_count,
+        validation_count=validation_count,
+        validation_done=validation_done,
+        statement_pdf_document=statement_pdf_document,
+        statement_csv_document=statement_csv_document,
+        statement_document=statement_document,
+        csv_preview=csv_preview,
     )
 
 @app.route("/finance/monthly-contributions", methods=["GET", "POST"])

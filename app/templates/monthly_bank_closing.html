@@ -127,6 +127,56 @@
         color: #495057;
     }
 
+    .validation-list {
+        display: grid;
+        gap: 12px;
+    }
+
+    .validation-item {
+        display: grid;
+        grid-template-columns: 42px 1fr 34px;
+        gap: 12px;
+        align-items: center;
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        padding: 12px;
+        background: #fff;
+    }
+
+    .validation-icon {
+        width: 38px;
+        height: 38px;
+        border-radius: 12px;
+        display: grid;
+        place-items: center;
+        background: #f3f6f8;
+        font-size: 20px;
+    }
+
+    .validation-item p {
+        margin: 4px 0 0;
+        color: #526178;
+    }
+
+    .validation-result {
+        width: 30px;
+        height: 30px;
+        border-radius: 999px;
+        display: grid;
+        place-items: center;
+        font-weight: 900;
+    }
+
+    .validation-ok .validation-result {
+        background: #dff6e7;
+        color: #146c43;
+    }
+
+    .validation-open .validation-result {
+        background: #fff3cd;
+        color: #8a6400;
+    }
+
     .progress-box {
         margin-top: 18px;
         border: 1px solid var(--line);
@@ -183,6 +233,30 @@
     </form>
 </div>
 
+<div class="modern-card">
+    <div class="modern-header">
+        <div class="modern-icon">➡️</div>
+        <div>
+            <h2>Nächster Schritt</h2>
+            {% if next_step %}
+                <p>{{ next_step.label }} ist noch offen.</p>
+            {% elif all_required_done %}
+                <p>Alle Voraussetzungen sind erfüllt. Der Monatsabschluss kann freigegeben werden.</p>
+            {% else %}
+                <p>Bitte die offenen Prüfungen im Bereich Kontrolle bearbeiten.</p>
+            {% endif %}
+        </div>
+    </div>
+
+    {% if next_step and next_step.url %}
+        <a class="button" href="{{ next_step.url }}">Nächsten Schritt öffnen</a>
+    {% elif all_required_done %}
+        <button type="button">Monatsabschluss freigeben</button>
+    {% else %}
+        <span class="status-badge status-lock">Kontrolle offen</span>
+    {% endif %}
+</div>
+
 <div class="closing-accordion">
 
     <details class="closing-panel" data-panel="statement">
@@ -202,7 +276,68 @@
                     <span class="status-badge status-open">{{ checks.statement.status }}</span>
                 {% endif %}
             </p>
-            <p class="muted">Upload-Funktion wird im nächsten Schritt ergänzt.</p>
+            <div class="status-grid" style="margin-top:14px;">
+                <div class="status-mini-card">
+                    <div class="status-mini-left">📄 PDF-Kontoauszug</div>
+                    {% if statement_pdf_document %}
+                        <span class="status-badge status-done">vorhanden</span>
+                        <div class="muted">
+                            {{ statement_pdf_document.original_filename }}<br>
+                            {{ statement_pdf_document.uploaded_at.strftime('%d.%m.%Y %H:%M') if statement_pdf_document.uploaded_at else '' }}
+                        </div>
+                        <div class="actions" style="margin-top:12px;">
+                            <a class="button secondary"
+                               href="{{ url_for('document_preview', document_id=statement_pdf_document.id) }}"
+                               target="_blank">
+                                Anzeigen
+                            </a>
+                        </div>
+                    {% else %}
+                        <span class="status-badge status-open">fehlt</span>
+                    {% endif %}
+                </div>
+
+                <div class="status-mini-card">
+                    <div class="status-mini-left">📊 CSV-Importdatei</div>
+                    {% if statement_csv_document %}
+                        <span class="status-badge status-done">vorhanden</span>
+                        <div class="muted">
+                            {{ statement_csv_document.original_filename }}<br>
+                            {{ statement_csv_document.uploaded_at.strftime('%d.%m.%Y %H:%M') if statement_csv_document.uploaded_at else '' }}
+                        </div>
+                        {% if csv_preview and csv_preview.ok %}
+                            <div class="validation-list" style="margin-top:14px;">
+                                <div class="validation-item validation-ok">
+                                    <div class="validation-icon">📊</div>
+                                    <div>
+                                        <strong>{{ csv_preview.row_count }} CSV-Zeilen erkannt</strong>
+                                        <p>
+                                            Eingänge: {{ csv_preview.income_total_euro }} €
+                                            · Ausgänge: {{ csv_preview.expense_total_euro }} €
+                                        </p>
+                                    </div>
+                                    <div class="validation-result">✓</div>
+                                </div>
+                            </div>
+                        {% endif %}
+                    {% else %}
+                        <span class="status-badge status-lock">optional</span>
+                    {% endif %}
+                </div>
+            </div>
+
+            {% if current_user.role in ["admin", "cashier"] %}
+                <form method="post" enctype="multipart/form-data" style="margin-top:16px;">
+                    <input type="hidden" name="action" value="upload_statement">
+
+                    <label>
+                        Kontoauszug hochladen
+                        <input type="file" name="statement_file" accept=".pdf,.csv,application/pdf,text/csv">
+                    </label>
+
+                    <button type="submit">Kontoauszug speichern</button>
+                </form>
+            {% endif %}
         </div>
     </details>
 
@@ -259,11 +394,32 @@
             <div class="closing-chevron">⌄</div>
         </summary>
         <div class="closing-content">
-            {% if all_required_done %}
-                <span class="status-badge status-done">plausibel</span>
-            {% else %}
-                <span class="status-badge status-lock">offen</span>
-            {% endif %}
+            <div class="validation-list">
+                {% for check in validation_checks %}
+                    <div class="validation-item {% if check.ok %}validation-ok{% else %}validation-open{% endif %}">
+                        <div class="validation-icon">{{ check.icon }}</div>
+                        <div>
+                            <strong>{{ check.title }}</strong>
+                            <p>{{ check.message }}</p>
+                        </div>
+                        <div class="validation-result">
+                            {% if check.ok %}
+                                ✓
+                            {% else %}
+                                !
+                            {% endif %}
+                        </div>
+                    </div>
+                {% endfor %}
+            </div>
+
+            <div style="margin-top:16px;">
+                {% if all_required_done %}
+                    <span class="status-badge status-done">Alle Prüfungen bestanden</span>
+                {% else %}
+                    <span class="status-badge status-lock">Noch nicht vollständig</span>
+                {% endif %}
+            </div>
         </div>
     </details>
 
@@ -314,8 +470,8 @@
 
         <div class="status-mini-card">
             <div class="status-mini-left">🛡️ Kontrolle</div>
-            <span class="status-badge {% if all_required_done %}status-done{% else %}status-lock{% endif %}">
-                {% if all_required_done %}plausibel{% else %}offen{% endif %}
+            <span class="status-badge {% if validation_done %}status-done{% else %}status-lock{% endif %}">
+                {{ passed_validation_count }} / {{ validation_count }} bestanden
             </span>
         </div>
 
