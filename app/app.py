@@ -657,6 +657,24 @@ def audit_diff_lines(old_snapshot, new_snapshot):
     return "\n".join(lines)
 
 
+_AUDIT_DIFF_LINE_RE = re.compile(r"^(.*?): vorher (.*) → nachher (.*)$")
+
+
+def audit_diff_rows(details):
+    """Liest aus dem Details-Text nur die geänderten Felder als (Feld, Vorher, Nachher) heraus."""
+    if not details:
+        return []
+    rows = []
+    for line in details.splitlines():
+        match = _AUDIT_DIFF_LINE_RE.match(line)
+        if match:
+            rows.append((match.group(1), match.group(2), match.group(3)))
+    return rows
+
+
+app.jinja_env.filters["audit_diff_rows"] = audit_diff_rows
+
+
 def member_audit_snapshot(member):
     return {
         "Vorname": member.first_name,

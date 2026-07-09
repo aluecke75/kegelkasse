@@ -56,12 +56,29 @@
                         <span class="audit-badge">{{ entry.category_label() }}</span>
                     </div>
                     <div class="audit-meta">Benutzer: {{ entry.username or '-' }}</div>
-                    {% if entry.details or entry.old_value or entry.new_value %}
+                    {% set diff_rows = entry.details | audit_diff_rows %}
+                    {% if diff_rows %}
+                        <details class="audit-details">
+                            <summary>{{ diff_rows|length }} geänderte{{ 's' if diff_rows|length == 1 else '' }} Feld{{ '' if diff_rows|length == 1 else 'er' }} anzeigen</summary>
+                            <div class="audit-detail-block">
+                                <table class="audit-diff-table">
+                                    <thead><tr><th>Feld</th><th>Vorher</th><th>Nachher</th></tr></thead>
+                                    <tbody>
+                                        {% for field, old, new in diff_rows %}
+                                            <tr><td>{{ field }}</td><td>{{ old }}</td><td>{{ new }}</td></tr>
+                                        {% endfor %}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </details>
+                    {% elif entry.details %}
                         <details class="audit-details">
                             <summary>Änderung anzeigen</summary>
-                            {% if entry.details %}
-                                <div class="audit-detail-block"><strong>Details</strong><pre>{{ entry.details }}</pre></div>
-                            {% endif %}
+                            <div class="audit-detail-block"><pre>{{ entry.details }}</pre></div>
+                        </details>
+                    {% elif entry.old_value or entry.new_value %}
+                        <details class="audit-details">
+                            <summary>Änderung anzeigen</summary>
                             {% if entry.old_value %}
                                 <div class="audit-detail-block"><strong>Vorher</strong><pre>{{ entry.old_value }}</pre></div>
                             {% endif %}
@@ -103,6 +120,10 @@
 .audit-details summary { cursor:pointer; font-weight:800; color:var(--green); }
 .audit-detail-block { margin-top:10px; padding:12px; border-radius:12px; border:1px solid var(--line); background:white; }
 .audit-detail-block pre { white-space:pre-wrap; margin:6px 0 0; font-family:inherit; line-height:1.45; }
+.audit-diff-table { width:100%; border-collapse:collapse; }
+.audit-diff-table th, .audit-diff-table td { text-align:left; padding:7px 10px; border-bottom:1px solid var(--line); font-size:0.92rem; vertical-align:top; }
+.audit-diff-table th { color:var(--muted); font-weight:800; }
+.audit-diff-table tr:last-child td { border-bottom:none; }
 @media (max-width:860px) { .audit-modern-filter { grid-template-columns:1fr; } .audit-item { grid-template-columns:1fr; } }
 </style>
 {% endblock %}
