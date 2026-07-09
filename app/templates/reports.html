@@ -110,8 +110,9 @@
     </div>
 </div>
 
-<div class="card">
-    <h2>Trends</h2>
+<details class="accordion-card" data-remember-key="reports-trends">
+    <summary>📈 Trends</summary>
+    <div class="accordion-card-body">
     <p class="muted section-note">Verlauf der letzten Monate, unabhängig vom oben gewählten Zeitraum.</p>
     <div class="report-grid">
         <div>
@@ -145,10 +146,12 @@
             </details>
         </div>
     </div>
-</div>
+    </div>
+</details>
 
-<div class="card">
-    <h2>Könige</h2>
+<details class="accordion-card" data-remember-key="reports-koenige">
+    <summary>👑 Könige</summary>
+    <div class="accordion-card-body">
     <p class="muted section-note">Die wichtigsten Zählstrafen auf einen Blick.</p>
     <div class="report-grid">
         <div>
@@ -183,10 +186,12 @@
             {% endif %}
         </div>
     </div>
-</div>
+    </div>
+</details>
 
-<div class="card">
-    <h2>Spielerstatistik</h2>
+<details class="accordion-card" data-remember-key="reports-spielerstatistik">
+    <summary>🎳 Spielerstatistik</summary>
+    <div class="accordion-card-body">
     <p class="muted section-note">Strafgeld, Anwesenheit, Fehlzeiten und höchste Einzelbelastung je Mitglied.</p>
     {% if player_rows %}
         <div class="table-scroll">
@@ -230,9 +235,13 @@
     {% else %}
         <p class="muted">Noch keine Spielerdaten im gewählten Zeitraum.</p>
     {% endif %}
-</div>
+    </div>
+</details>
 
-<div class="report-grid">
+<details class="accordion-card" data-remember-key="reports-bestenlisten">
+    <summary>🏆 Bestenlisten</summary>
+    <div class="accordion-card-body">
+    <div class="report-grid">
     <div class="card">
         <h2>Meiste Strafen</h2>
         {% if most_penalties_rows %}
@@ -288,10 +297,13 @@
             </table>
         {% else %}<p class="muted">Keine Daten.</p>{% endif %}
     </div>
-</div>
+    </div>
+    </div>
+</details>
 
-<div class="card">
-    <h2>Fehlstatistik</h2>
+<details class="accordion-card" data-remember-key="reports-fehlstatistik">
+    <summary>🚫 Fehlstatistik</summary>
+    <div class="accordion-card-body">
     {% if absence_rows %}
         <table class="rank-table small-table">
             <thead>
@@ -308,11 +320,13 @@
     {% else %}
         <p class="muted">Keine Fehlzeiten im gewählten Zeitraum.</p>
     {% endif %}
-</div>
+    </div>
+</details>
 
 {% if current_user.role in ["admin", "cashier"] %}
-<div class="card">
-    <h2>Finanzstatistik</h2>
+<details class="accordion-card" data-remember-key="reports-finanzstatistik">
+    <summary>💶 Finanzstatistik</summary>
+    <div class="accordion-card-body">
     <p class="muted section-note">Nur sichtbar für Admin und Kassierer.</p>
 
     <div class="report-grid">
@@ -385,12 +399,14 @@
             {% else %}<p class="muted">Kein Guthaben vorhanden.</p>{% endif %}
         </div>
     </div>
-</div>
+    </div>
+</details>
 {% endif %}
 
 {% if current_user.role in ["admin", "cashier", "auditor"] %}
-<div class="card">
-    <h2>Zinsstatistik</h2>
+<details class="accordion-card" data-remember-key="reports-zinsstatistik">
+    <summary>📈 Zinsstatistik</summary>
+    <div class="accordion-card-body">
     <p class="muted section-note">
         {% if selected_year %}Gebuchte Zinsgutschriften {{ selected_year }}{% else %}Gebuchte Zinsgutschriften, alle Jahre{% endif %}
         ({{ interest_bookings_count }} Buchung{{ '' if interest_bookings_count == 1 else 'en' }}, stornierte ausgenommen).
@@ -417,11 +433,13 @@
         </table>
     </div>
     <p class="muted section-note" style="margin-top:10px;">Details je Buchung: <a href="{{ url_for('interest_module') }}">Zinsmodul</a>. Für die Steuererklärung: <a href="{{ url_for('exports_page') }}">Export &raquo; Zinsen</a>.</p>
-</div>
+    </div>
+</details>
 {% endif %}
 
-<div class="card">
-    <h2>Kegelabendstatistik</h2>
+<details class="accordion-card" data-remember-key="reports-kegelabendstatistik">
+    <summary>🎯 Kegelabendstatistik</summary>
+    <div class="accordion-card-body">
     <p class="muted section-note">Teuerste/günstigste Abende nach Strafsumme. Bahnkosten werden separat angezeigt.</p>
 
     <div class="report-grid">
@@ -453,7 +471,8 @@
             {% else %}<p class="muted">Keine Daten.</p>{% endif %}
         </div>
     </div>
-</div>
+    </div>
+</details>
 
 <script>
 (function () {

@@ -481,7 +481,7 @@
     {% endif %}
 
     <div class="backup-accordion">
-        <details class="backup-panel">
+        <details class="backup-panel" data-remember-key="backups-create">
             <summary>💾 Backup erstellen</summary>
             <div class="backup-panel-body">
                 <div class="backup-grid">
@@ -522,7 +522,7 @@
             </div>
         </details>
 
-        <details class="backup-panel">
+        <details class="backup-panel" data-remember-key="backups-upload">
             <summary>⬆ Sicherung hochladen</summary>
             <div class="backup-panel-body">
                 <p class="backup-card-sub">Eine vorhandene Kegelkasse-Backup-ZIP kann hier abgelegt und automatisch geprüft werden. Danach erscheint sie unten in der Liste und kann bei Bedarf wiederhergestellt werden.</p>
@@ -546,7 +546,7 @@
             </div>
         </details>
 
-        <details class="backup-panel">
+        <details class="backup-panel" data-remember-key="backups-auto">
             <summary>🔄 Automatische Sicherungen</summary>
             <div class="backup-panel-body">
                 <p class="backup-card-sub">Legt fest, wie oft Sicherungen automatisch erstellt und wie lange sie aufbewahrt werden sollen.</p>
@@ -603,7 +603,7 @@
                         <div><strong>Lokales Backup bleibt immer aktiv.</strong><br>Die Kegelkasse sichert immer zuerst lokal in den festen Backup-Ordner der Installation.</div>
                     </div>
 
-                    <details>
+                    <details data-remember-key="backups-second-target">
                         <summary><strong>☁ Zweites Backup-Ziel / WebDAV vorbereiten</strong></summary>
 
                         <div class="tip-box">
@@ -748,7 +748,7 @@
             </div>
         </details>
 
-        <details class="backup-panel">
+        <details class="backup-panel" data-remember-key="backups-list">
             <summary>📦 Vorhandene Sicherungen</summary>
             <div class="backup-panel-body">
                 <p class="backup-card-sub">Vorhandene Sicherungen prüfen, herunterladen, löschen oder bewusst wiederherstellen.</p>

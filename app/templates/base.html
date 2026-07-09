@@ -97,6 +97,12 @@
         .kk-chart-legend-dot { width:10px; height:10px; border-radius:3px; display:inline-block; }
         .kk-chart-tooltip { position:fixed; display:none; z-index:200; background:#0b0b0b; color:#fff; padding:7px 10px; border-radius:8px; font-size:0.8rem; line-height:1.4; pointer-events:none; box-shadow:0 8px 20px rgba(0,0,0,0.25); max-width:220px; }
         .chart-card { margin-top:10px; }
+        .accordion-card { background:var(--card); border:1px solid var(--line); border-radius:16px; box-shadow:var(--shadow); overflow:hidden; margin-bottom:16px; }
+        .accordion-card summary { cursor:pointer; list-style:none; padding:16px 18px; font-weight:800; display:flex; justify-content:space-between; align-items:center; gap:12px; }
+        .accordion-card summary::-webkit-details-marker { display:none; }
+        .accordion-card summary::after { content:"▾"; color:var(--muted); transition:transform 0.2s ease; flex:0 0 auto; }
+        .accordion-card[open] summary::after { transform:rotate(180deg); }
+        .accordion-card-body { padding:0 18px 18px; }
         .inline-actions { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
         .event-entry-table { min-width: 760px; }
         .event-entry-table th, .event-entry-table td { vertical-align: middle; text-align: center; }
@@ -405,5 +411,19 @@ Nicht löschen – ggf. für spätere Entwicklungsarbeiten wieder aktivieren.
 {% endif %}
 
 <script src="{{ url_for('static', filename='js/charts.js') }}"></script>
+
+<script>
+(function () {
+    document.querySelectorAll("details[data-remember-key]").forEach(function (panel) {
+        var key = "kk-open-" + panel.dataset.rememberKey;
+        var saved = localStorage.getItem(key);
+        if (saved === "open") panel.open = true;
+        else if (saved === "closed") panel.open = false;
+        panel.addEventListener("toggle", function () {
+            localStorage.setItem(key, panel.open ? "open" : "closed");
+        });
+    });
+})();
+</script>
 </body>
 </html>
