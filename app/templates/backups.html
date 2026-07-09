@@ -608,7 +608,7 @@
 
                         <div class="tip-box">
                             <strong>💡</strong>
-                            <div>Für Nextcloud/WebDAV am besten ein App-Passwort verwenden. Dropbox, OneDrive und Google Drive sind vorbereitet, aber noch nicht aktiv angebunden.</div>
+                            <div>Für Nextcloud/WebDAV am besten ein App-Passwort verwenden. OneDrive ist vorbereitet, aber noch nicht aktiv angebunden.</div>
                         </div>
 
                         <label class="checkbox-row">
@@ -621,9 +621,9 @@
                                 Zweites Backup-Ziel
                                 <select id="backupTargetType" name="backup_target_type">
                                     <option value="webdav" {% if settings.target_type in ['webdav', 'local_path'] %}selected{% endif %}>WebDAV / Nextcloud</option>
-                                    <option value="dropbox" {% if settings.target_type == 'dropbox' %}selected{% endif %}>Dropbox (vorbereitet)</option>
+                                    <option value="dropbox" {% if settings.target_type == 'dropbox' %}selected{% endif %}>Dropbox</option>
+                                    <option value="google_drive" {% if settings.target_type == 'google_drive' %}selected{% endif %}>Google Drive</option>
                                     <option value="onedrive" {% if settings.target_type == 'onedrive' %}selected{% endif %}>OneDrive (vorbereitet)</option>
-                                    <option value="google_drive" {% if settings.target_type == 'google_drive' %}selected{% endif %}>Google Drive (vorbereitet)</option>
                                 </select>
                             </label>
 
@@ -651,10 +651,90 @@
                                 </label>
                             </div>
 
+                            <div id="backupFieldsDropbox" class="backup-target-fields">
+                                <div class="info-box" style="grid-column:1 / -1;">
+                                    <strong>ℹ️</strong>
+                                    <div>
+                                        Dazu wird eine eigene Dropbox-App benötigt (kostenlos, im
+                                        <a href="https://www.dropbox.com/developers/apps" target="_blank" rel="noopener">Dropbox App Console</a>
+                                        anlegen, Zugriffstyp "Scoped access", Berechtigung <code>files.content.write</code>).
+                                        Als Weiterleitungs-URI dort genau diese Adresse eintragen:
+                                        <br><code>{{ dropbox_redirect_uri }}</code>
+                                    </div>
+                                </div>
+
+                                <label>
+                                    App-Key
+                                    <input type="text" name="backup_dropbox_app_key" value="{{ settings.dropbox_app_key }}" autocomplete="off">
+                                </label>
+
+                                <label>
+                                    App-Secret
+                                    <input type="password" name="backup_dropbox_app_secret" value="" autocomplete="new-password" placeholder="{% if settings.dropbox_app_secret_set %}gespeichert – leer lassen zum Behalten{% else %}App-Secret eingeben{% endif %}">
+                                </label>
+
+                                <div style="grid-column:1 / -1;">
+                                    {% if settings.dropbox_connected %}
+                                        <div class="success-box" style="margin-bottom:10px;">
+                                            <strong>✅</strong>
+                                            <div>Verbunden{% if settings.dropbox_account_label %} als {{ settings.dropbox_account_label }}{% endif %}.</div>
+                                        </div>
+                                    {% else %}
+                                        <p class="muted" style="margin-top:0;">Noch nicht verbunden. Erst App-Key/Secret speichern, danach "Mit Dropbox verbinden" klicken.</p>
+                                    {% endif %}
+                                    <a class="button secondary" href="{{ url_for('dropbox_oauth_connect') }}">{{ "Neu verbinden" if settings.dropbox_connected else "Mit Dropbox verbinden" }}</a>
+                                    {% if settings.dropbox_connected %}
+                                        <form method="post" action="{{ url_for('dropbox_oauth_disconnect') }}" style="display:inline;" onsubmit="return confirm('Dropbox-Verbindung wirklich trennen?');">
+                                            <button type="submit" class="button secondary">Verbindung trennen</button>
+                                        </form>
+                                    {% endif %}
+                                </div>
+                            </div>
+
+                            <div id="backupFieldsGoogleDrive" class="backup-target-fields">
+                                <div class="info-box" style="grid-column:1 / -1;">
+                                    <strong>ℹ️</strong>
+                                    <div>
+                                        Dazu wird ein eigenes Projekt in der
+                                        <a href="https://console.cloud.google.com/apis/credentials" target="_blank" rel="noopener">Google Cloud Console</a>
+                                        benötigt (OAuth-Client vom Typ "Webanwendung", Drive API aktivieren).
+                                        Als autorisierte Weiterleitungs-URI dort genau diese Adresse eintragen:
+                                        <br><code>{{ google_drive_redirect_uri }}</code>
+                                    </div>
+                                </div>
+
+                                <label>
+                                    Client-ID
+                                    <input type="text" name="backup_google_client_id" value="{{ settings.google_client_id }}" autocomplete="off">
+                                </label>
+
+                                <label>
+                                    Client-Secret
+                                    <input type="password" name="backup_google_client_secret" value="" autocomplete="new-password" placeholder="{% if settings.google_client_secret_set %}gespeichert – leer lassen zum Behalten{% else %}Client-Secret eingeben{% endif %}">
+                                </label>
+
+                                <div style="grid-column:1 / -1;">
+                                    {% if settings.google_drive_connected %}
+                                        <div class="success-box" style="margin-bottom:10px;">
+                                            <strong>✅</strong>
+                                            <div>Verbunden{% if settings.google_drive_account_label %} als {{ settings.google_drive_account_label }}{% endif %}.</div>
+                                        </div>
+                                    {% else %}
+                                        <p class="muted" style="margin-top:0;">Noch nicht verbunden. Erst Client-ID/Secret speichern, danach "Mit Google Drive verbinden" klicken.</p>
+                                    {% endif %}
+                                    <a class="button secondary" href="{{ url_for('google_drive_oauth_connect') }}">{{ "Neu verbinden" if settings.google_drive_connected else "Mit Google Drive verbinden" }}</a>
+                                    {% if settings.google_drive_connected %}
+                                        <form method="post" action="{{ url_for('google_drive_oauth_disconnect') }}" style="display:inline;" onsubmit="return confirm('Google-Drive-Verbindung wirklich trennen?');">
+                                            <button type="submit" class="button secondary">Verbindung trennen</button>
+                                        </form>
+                                    {% endif %}
+                                </div>
+                            </div>
+
                             <div id="backupFieldsPrepared" class="backup-target-fields">
                                 <div class="info-box" style="grid-column:1 / -1; margin-bottom:0;">
                                     <strong>ℹ️</strong>
-                                    <div>Dieses Ziel ist vorbereitet. Die technische Anbindung folgt später. Für sofort nutzbare externe Backups bitte WebDAV/Nextcloud verwenden.</div>
+                                    <div>Dieses Ziel ist vorbereitet. Die technische Anbindung folgt später. Für sofort nutzbare externe Backups bitte WebDAV/Nextcloud, Dropbox oder Google Drive verwenden.</div>
                                 </div>
                             </div>
                         </div>
@@ -733,28 +813,33 @@
     const panel = document.getElementById('backupTargetPanel');
     const type = document.getElementById('backupTargetType');
     const webdavFields = document.getElementById('backupFieldsWebdav');
+    const dropboxFields = document.getElementById('backupFieldsDropbox');
+    const googleDriveFields = document.getElementById('backupFieldsGoogleDrive');
     const preparedFields = document.getElementById('backupFieldsPrepared');
     const testButton = document.getElementById('backupTestButton');
+
+    const fieldsByTarget = {
+        webdav: webdavFields,
+        dropbox: dropboxFields,
+        google_drive: googleDriveFields,
+    };
 
     function refreshBackupTargetUi() {
         const isEnabled = enabled && enabled.checked;
         if (panel) panel.classList.toggle('active', isEnabled);
 
-        [webdavFields, preparedFields].forEach(function(el) {
+        [webdavFields, dropboxFields, googleDriveFields, preparedFields].forEach(function(el) {
             if (el) el.classList.remove('active');
         });
 
         const target = type ? type.value : 'webdav';
         if (isEnabled) {
-            if (target === 'webdav') {
-                if (webdavFields) webdavFields.classList.add('active');
-            } else {
-                if (preparedFields) preparedFields.classList.add('active');
-            }
+            const activeFields = fieldsByTarget[target] || preparedFields;
+            if (activeFields) activeFields.classList.add('active');
         }
 
         if (testButton) {
-            testButton.style.display = (isEnabled && target === 'webdav') ? 'inline-block' : 'none';
+            testButton.style.display = (isEnabled && target in fieldsByTarget) ? 'inline-block' : 'none';
         }
     }
 

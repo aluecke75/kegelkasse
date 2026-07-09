@@ -24,6 +24,7 @@ from email.message import EmailMessage
 from sqlalchemy import or_
 
 from flask import Flask, render_template, redirect, url_for, request, flash, jsonify, send_file, Response, abort, after_this_request
+from werkzeug.middleware.proxy_fix import ProxyFix
 from flask_login import (
     LoginManager,
     login_user,
@@ -72,6 +73,11 @@ from models import (
 
 app = Flask(__name__)
 app.config.from_object(Config)
+
+# Hinter einem Reverse Proxy (z. B. Synology) läuft die App intern über HTTP.
+# Damit generierte externe URLs (z. B. für OAuth-Redirects) das richtige
+# https://... und den richtigen Hostnamen bekommen, X-Forwarded-* auswerten.
+app.wsgi_app = ProxyFix(app.wsgi_app, x_proto=1, x_host=1)
 
 db.init_app(app)
 
@@ -1236,6 +1242,14 @@ def backup_settings():
         "webdav_url": setting_value("backup_webdav_url", ""),
         "webdav_username": setting_value("backup_webdav_username", ""),
         "webdav_password_set": bool(setting_value("backup_webdav_password", "")),
+        "dropbox_app_key": setting_value("backup_dropbox_app_key", ""),
+        "dropbox_app_secret_set": bool(setting_value("backup_dropbox_app_secret", "")),
+        "dropbox_connected": bool(setting_value("dropbox_refresh_token", "")),
+        "dropbox_account_label": setting_value("dropbox_account_label", ""),
+        "google_client_id": setting_value("backup_google_client_id", ""),
+        "google_client_secret_set": bool(setting_value("backup_google_client_secret", "")),
+        "google_drive_connected": bool(setting_value("google_drive_refresh_token", "")),
+        "google_drive_account_label": setting_value("google_drive_account_label", ""),
         "last_auto": setting_value("backup_last_auto", ""),
         "last_result": setting_value("backup_last_result", ""),
         "target_label": backup_target_label_raw(target_type),
@@ -1256,9 +1270,10 @@ def backup_target_label(settings=None):
     settings = settings or backup_settings()
     if not settings.get("extra_target_enabled"):
         return "nur lokal"
-    if settings.get("target_type") == "webdav":
-        return "WebDAV/Nextcloud"
-    return backup_target_label_raw(settings.get("target_type")) + " (vorbereitet)"
+    target_type = settings.get("target_type")
+    if target_type in ("webdav", "dropbox", "google_drive"):
+        return backup_target_label_raw(target_type)
+    return backup_target_label_raw(target_type) + " (vorbereitet)"
 
 def is_secret_setting_key(key):
     """True für Zugangsdaten, die nie in Export-/Backup-ZIPs landen sollen.
@@ -1405,15 +1420,238 @@ def webdav_upload_file(source_path):
     return target_url
 
 
+def oauth_token_request(token_url, data):
+    """POST-Formularanfrage für OAuth-Token-Austausch/-Refresh, liefert das geparste JSON."""
+    encoded = urllib.parse.urlencode(data).encode("utf-8")
+    req = urllib.request.Request(token_url, data=encoded, method="POST")
+    req.add_header("Content-Type", "application/x-www-form-urlencoded")
+    try:
+        with urllib.request.urlopen(req, timeout=30) as response:
+            return json.loads(response.read().decode("utf-8"))
+    except urllib.error.HTTPError as exc:
+        body = exc.read().decode("utf-8", errors="replace")
+        raise ValueError(f"OAuth-Anfrage fehlgeschlagen: HTTP {exc.code} {body[:200]}") from exc
+    except urllib.error.URLError as exc:
+        raise ValueError(f"Anbieter nicht erreichbar: {exc.reason}") from exc
+
+
+def oauth_get_request(url, access_token):
+    req = urllib.request.Request(url)
+    req.add_header("Authorization", f"Bearer {access_token}")
+    with urllib.request.urlopen(req, timeout=20) as response:
+        return json.loads(response.read().decode("utf-8"))
+
+
+# --- Dropbox ---------------------------------------------------------------
+
+def dropbox_authorize_url(redirect_uri):
+    app_key = (setting_value("backup_dropbox_app_key", "") or "").strip()
+    if not app_key:
+        raise ValueError("Bitte zuerst App-Key und App-Secret für Dropbox eintragen und speichern.")
+    params = {
+        "client_id": app_key,
+        "response_type": "code",
+        "redirect_uri": redirect_uri,
+        "token_access_type": "offline",
+    }
+    return "https://www.dropbox.com/oauth2/authorize?" + urllib.parse.urlencode(params)
+
+
+def dropbox_exchange_code(code, redirect_uri):
+    app_key = (setting_value("backup_dropbox_app_key", "") or "").strip()
+    app_secret = (setting_value("backup_dropbox_app_secret", "") or "").strip()
+    if not app_key or not app_secret:
+        raise ValueError("Dropbox App-Key/App-Secret fehlen.")
+    data = oauth_token_request("https://api.dropboxapi.com/oauth2/token", {
+        "code": code,
+        "grant_type": "authorization_code",
+        "client_id": app_key,
+        "client_secret": app_secret,
+        "redirect_uri": redirect_uri,
+    })
+    set_setting_value("dropbox_access_token", data["access_token"])
+    if data.get("refresh_token"):
+        set_setting_value("dropbox_refresh_token", data["refresh_token"])
+    expires_at = (datetime.utcnow() + timedelta(seconds=max(int(data.get("expires_in", 14400)) - 60, 60))).isoformat()
+    set_setting_value("dropbox_token_expires_at", expires_at)
+
+    # Dropbox verlangt für get_current_account ein POST mit Body "null", nicht GET.
+    info_req = urllib.request.Request("https://api.dropboxapi.com/2/users/get_current_account", data=b"null", method="POST")
+    info_req.add_header("Authorization", f"Bearer {data['access_token']}")
+    info_req.add_header("Content-Type", "application/json")
+    with urllib.request.urlopen(info_req, timeout=20) as response:
+        info = json.loads(response.read().decode("utf-8"))
+    set_setting_value("dropbox_account_label", info.get("email") or info.get("name", {}).get("display_name", "verbunden"))
+
+
+def dropbox_refresh_access_token():
+    app_key = (setting_value("backup_dropbox_app_key", "") or "").strip()
+    app_secret = (setting_value("backup_dropbox_app_secret", "") or "").strip()
+    refresh_token = setting_value("dropbox_refresh_token", "") or ""
+    if not refresh_token:
+        raise ValueError("Dropbox ist nicht verbunden. Bitte zuerst 'Verbindung herstellen' klicken.")
+    data = oauth_token_request("https://api.dropboxapi.com/oauth2/token", {
+        "grant_type": "refresh_token",
+        "refresh_token": refresh_token,
+        "client_id": app_key,
+        "client_secret": app_secret,
+    })
+    set_setting_value("dropbox_access_token", data["access_token"])
+    expires_at = (datetime.utcnow() + timedelta(seconds=max(int(data.get("expires_in", 14400)) - 60, 60))).isoformat()
+    set_setting_value("dropbox_token_expires_at", expires_at)
+    return data["access_token"]
+
+
+def dropbox_valid_access_token():
+    token = setting_value("dropbox_access_token", "") or ""
+    expires_raw = setting_value("dropbox_token_expires_at", "") or ""
+    expired = True
+    if expires_raw:
+        try:
+            expired = datetime.utcnow() >= datetime.fromisoformat(expires_raw)
+        except ValueError:
+            expired = True
+    if not token or expired:
+        return dropbox_refresh_access_token()
+    return token
+
+
+def dropbox_upload_file(source_path):
+    access_token = dropbox_valid_access_token()
+    data = source_path.read_bytes()
+    api_arg = json.dumps({"path": f"/{source_path.name}", "mode": "overwrite", "mute": True})
+    req = urllib.request.Request("https://content.dropboxapi.com/2/files/upload", data=data, method="POST")
+    req.add_header("Authorization", f"Bearer {access_token}")
+    req.add_header("Dropbox-API-Arg", api_arg)
+    req.add_header("Content-Type", "application/octet-stream")
+    try:
+        with urllib.request.urlopen(req, timeout=90) as response:
+            if response.status != 200:
+                raise ValueError(f"Dropbox-Upload fehlgeschlagen: HTTP {response.status}")
+    except urllib.error.HTTPError as exc:
+        body = exc.read().decode("utf-8", errors="replace")
+        raise ValueError(f"Dropbox-Upload fehlgeschlagen: HTTP {exc.code} {body[:200]}") from exc
+    except urllib.error.URLError as exc:
+        raise ValueError(f"Dropbox nicht erreichbar: {exc.reason}") from exc
+    return f"Dropbox: /{source_path.name}"
+
+
+# --- Google Drive ------------------------------------------------------------
+
+def google_drive_authorize_url(redirect_uri):
+    client_id = (setting_value("backup_google_client_id", "") or "").strip()
+    if not client_id:
+        raise ValueError("Bitte zuerst Client-ID und Client-Secret für Google Drive eintragen und speichern.")
+    params = {
+        "client_id": client_id,
+        "response_type": "code",
+        "redirect_uri": redirect_uri,
+        "scope": "https://www.googleapis.com/auth/drive.file",
+        "access_type": "offline",
+        "prompt": "consent",
+    }
+    return "https://accounts.google.com/o/oauth2/v2/auth?" + urllib.parse.urlencode(params)
+
+
+def google_drive_exchange_code(code, redirect_uri):
+    client_id = (setting_value("backup_google_client_id", "") or "").strip()
+    client_secret = (setting_value("backup_google_client_secret", "") or "").strip()
+    if not client_id or not client_secret:
+        raise ValueError("Google Client-ID/Client-Secret fehlen.")
+    data = oauth_token_request("https://oauth2.googleapis.com/token", {
+        "code": code,
+        "grant_type": "authorization_code",
+        "client_id": client_id,
+        "client_secret": client_secret,
+        "redirect_uri": redirect_uri,
+    })
+    set_setting_value("google_drive_access_token", data["access_token"])
+    if data.get("refresh_token"):
+        set_setting_value("google_drive_refresh_token", data["refresh_token"])
+    expires_at = (datetime.utcnow() + timedelta(seconds=max(int(data.get("expires_in", 3600)) - 60, 60))).isoformat()
+    set_setting_value("google_drive_token_expires_at", expires_at)
+
+    info = oauth_get_request("https://www.googleapis.com/oauth2/v2/userinfo", data["access_token"])
+    set_setting_value("google_drive_account_label", info.get("email", "verbunden"))
+
+
+def google_drive_refresh_access_token():
+    client_id = (setting_value("backup_google_client_id", "") or "").strip()
+    client_secret = (setting_value("backup_google_client_secret", "") or "").strip()
+    refresh_token = setting_value("google_drive_refresh_token", "") or ""
+    if not refresh_token:
+        raise ValueError("Google Drive ist nicht verbunden. Bitte zuerst 'Verbindung herstellen' klicken.")
+    data = oauth_token_request("https://oauth2.googleapis.com/token", {
+        "grant_type": "refresh_token",
+        "refresh_token": refresh_token,
+        "client_id": client_id,
+        "client_secret": client_secret,
+    })
+    set_setting_value("google_drive_access_token", data["access_token"])
+    expires_at = (datetime.utcnow() + timedelta(seconds=max(int(data.get("expires_in", 3600)) - 60, 60))).isoformat()
+    set_setting_value("google_drive_token_expires_at", expires_at)
+    return data["access_token"]
+
+
+def google_drive_valid_access_token():
+    token = setting_value("google_drive_access_token", "") or ""
+    expires_raw = setting_value("google_drive_token_expires_at", "") or ""
+    expired = True
+    if expires_raw:
+        try:
+            expired = datetime.utcnow() >= datetime.fromisoformat(expires_raw)
+        except ValueError:
+            expired = True
+    if not token or expired:
+        return google_drive_refresh_access_token()
+    return token
+
+
+def google_drive_upload_file(source_path):
+    access_token = google_drive_valid_access_token()
+    data = source_path.read_bytes()
+    boundary = "kegelkasseBackupBoundary"
+    metadata = json.dumps({"name": source_path.name})
+    body = (
+        f"--{boundary}\r\n"
+        f"Content-Type: application/json; charset=UTF-8\r\n\r\n"
+        f"{metadata}\r\n"
+        f"--{boundary}\r\n"
+        f"Content-Type: application/zip\r\n\r\n"
+    ).encode("utf-8") + data + f"\r\n--{boundary}--".encode("utf-8")
+
+    req = urllib.request.Request(
+        "https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart",
+        data=body, method="POST",
+    )
+    req.add_header("Authorization", f"Bearer {access_token}")
+    req.add_header("Content-Type", f"multipart/related; boundary={boundary}")
+    try:
+        with urllib.request.urlopen(req, timeout=90) as response:
+            if response.status not in (200, 201):
+                raise ValueError(f"Google-Drive-Upload fehlgeschlagen: HTTP {response.status}")
+    except urllib.error.HTTPError as exc:
+        body_text = exc.read().decode("utf-8", errors="replace")
+        raise ValueError(f"Google-Drive-Upload fehlgeschlagen: HTTP {exc.code} {body_text[:200]}") from exc
+    except urllib.error.URLError as exc:
+        raise ValueError(f"Google Drive nicht erreichbar: {exc.reason}") from exc
+    return f"Google Drive: {source_path.name}"
+
+
 def copy_backup_to_extra_target(source_path):
     settings = backup_settings()
     if not settings.get("extra_target_enabled"):
         return None
 
-    if settings.get("target_type") == "webdav":
+    target_type = settings.get("target_type")
+    if target_type == "webdav":
         return webdav_upload_file(source_path)
+    if target_type == "dropbox":
+        return dropbox_upload_file(source_path)
+    if target_type == "google_drive":
+        return google_drive_upload_file(source_path)
 
-    raise ValueError(f"Das Backup-Ziel '{backup_target_label_raw(settings.get('target_type'))}' ist vorbereitet, aber technisch noch nicht angebunden. Bitte aktuell WebDAV/Nextcloud verwenden.")
+    raise ValueError(f"Das Backup-Ziel '{backup_target_label_raw(target_type)}' ist noch nicht angebunden.")
 
 
 
@@ -3732,6 +3970,108 @@ def document_preview(document_id):
     return send_file(path, as_attachment=False, download_name=doc.original_filename)
 
 
+@app.route("/backups/dropbox/connect")
+@login_required
+@role_required("admin")
+def dropbox_oauth_connect():
+    redirect_uri = url_for("dropbox_oauth_callback", _external=True)
+    try:
+        auth_url = dropbox_authorize_url(redirect_uri)
+    except ValueError as exc:
+        flash(str(exc), "danger")
+        return redirect(url_for("backups_page"))
+    return redirect(auth_url)
+
+
+@app.route("/backups/dropbox/callback")
+@login_required
+@role_required("admin")
+def dropbox_oauth_callback():
+    error = request.args.get("error")
+    if error:
+        flash(f"Dropbox-Verbindung abgebrochen: {error}", "warning")
+        return redirect(url_for("backups_page"))
+
+    code = request.args.get("code")
+    if not code:
+        flash("Dropbox hat keinen Anmeldecode zurückgegeben.", "danger")
+        return redirect(url_for("backups_page"))
+
+    redirect_uri = url_for("dropbox_oauth_callback", _external=True)
+    try:
+        dropbox_exchange_code(code, redirect_uri)
+        db.session.commit()
+        audit_log("Datensicherung", "dropbox_connected", "Dropbox-Verbindung hergestellt", object_type="Backup")
+        db.session.commit()
+        flash("Dropbox wurde erfolgreich verbunden.", "success")
+    except ValueError as exc:
+        flash(f"Dropbox-Verbindung fehlgeschlagen: {exc}", "danger")
+    return redirect(url_for("backups_page"))
+
+
+@app.route("/backups/dropbox/disconnect", methods=["POST"])
+@login_required
+@role_required("admin")
+def dropbox_oauth_disconnect():
+    for key in ("dropbox_access_token", "dropbox_refresh_token", "dropbox_token_expires_at", "dropbox_account_label"):
+        set_setting_value(key, "")
+    audit_log("Datensicherung", "dropbox_disconnected", "Dropbox-Verbindung getrennt", object_type="Backup")
+    db.session.commit()
+    flash("Dropbox-Verbindung wurde getrennt.", "success")
+    return redirect(url_for("backups_page"))
+
+
+@app.route("/backups/google-drive/connect")
+@login_required
+@role_required("admin")
+def google_drive_oauth_connect():
+    redirect_uri = url_for("google_drive_oauth_callback", _external=True)
+    try:
+        auth_url = google_drive_authorize_url(redirect_uri)
+    except ValueError as exc:
+        flash(str(exc), "danger")
+        return redirect(url_for("backups_page"))
+    return redirect(auth_url)
+
+
+@app.route("/backups/google-drive/callback")
+@login_required
+@role_required("admin")
+def google_drive_oauth_callback():
+    error = request.args.get("error")
+    if error:
+        flash(f"Google-Drive-Verbindung abgebrochen: {error}", "warning")
+        return redirect(url_for("backups_page"))
+
+    code = request.args.get("code")
+    if not code:
+        flash("Google hat keinen Anmeldecode zurückgegeben.", "danger")
+        return redirect(url_for("backups_page"))
+
+    redirect_uri = url_for("google_drive_oauth_callback", _external=True)
+    try:
+        google_drive_exchange_code(code, redirect_uri)
+        db.session.commit()
+        audit_log("Datensicherung", "google_drive_connected", "Google-Drive-Verbindung hergestellt", object_type="Backup")
+        db.session.commit()
+        flash("Google Drive wurde erfolgreich verbunden.", "success")
+    except ValueError as exc:
+        flash(f"Google-Drive-Verbindung fehlgeschlagen: {exc}", "danger")
+    return redirect(url_for("backups_page"))
+
+
+@app.route("/backups/google-drive/disconnect", methods=["POST"])
+@login_required
+@role_required("admin")
+def google_drive_oauth_disconnect():
+    for key in ("google_drive_access_token", "google_drive_refresh_token", "google_drive_token_expires_at", "google_drive_account_label"):
+        set_setting_value(key, "")
+    audit_log("Datensicherung", "google_drive_disconnected", "Google-Drive-Verbindung getrennt", object_type="Backup")
+    db.session.commit()
+    flash("Google-Drive-Verbindung wurde getrennt.", "success")
+    return redirect(url_for("backups_page"))
+
+
 @app.route("/backups", methods=["GET", "POST"])
 @login_required
 @role_required("admin")
@@ -3868,6 +4208,17 @@ def backups_page():
                     set_setting_value("backup_webdav_password", webdav_password)
                 if request.form.get("backup_webdav_password_clear"):
                     set_setting_value("backup_webdav_password", "")
+
+                set_setting_value("backup_dropbox_app_key", request.form.get("backup_dropbox_app_key", "").strip())
+                dropbox_secret = request.form.get("backup_dropbox_app_secret", "")
+                if dropbox_secret:
+                    set_setting_value("backup_dropbox_app_secret", dropbox_secret)
+
+                set_setting_value("backup_google_client_id", request.form.get("backup_google_client_id", "").strip())
+                google_secret = request.form.get("backup_google_client_secret", "")
+                if google_secret:
+                    set_setting_value("backup_google_client_secret", google_secret)
+
                 new_summary = f"Aktiv: {audit_value(setting_value('backup_enabled', '0'))}; Intervall: {audit_value(setting_value('backup_interval', 'daily'))}; Uhrzeit: {audit_value(setting_value('backup_time', '02:00'))}; Aufbewahrung: {audit_value(setting_value('backup_keep_days', '30'))} Tage; Generationen: {audit_value(setting_value('backup_keep_count', '20'))}; Ziel: {audit_value(backup_target_label())}"
                 audit_log(
                     "Datensicherung",
@@ -3978,6 +4329,8 @@ def backups_page():
         last_manual=last_manual,
         last_auto=last_auto,
         club_import_preview=club_import_preview,
+        dropbox_redirect_uri=url_for("dropbox_oauth_callback", _external=True),
+        google_drive_redirect_uri=url_for("google_drive_oauth_callback", _external=True),
     )
 
 
