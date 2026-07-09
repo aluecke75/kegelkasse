@@ -246,6 +246,10 @@ Nicht löschen – ggf. für spätere Entwicklungsarbeiten wieder aktivieren.
     {% endif %}
 </a>
 
+            {% if current_user.role == "cashier" %}
+                <a href="{{ url_for('members') }}">Mitglieder</a>
+            {% endif %}
+
             <span class="nav-dropdown">
                 <span class="nav-dropbtn">Auswertungen ▾</span>
                 <span class="nav-dropdown-content">
@@ -271,6 +275,9 @@ Nicht löschen – ggf. für spätere Entwicklungsarbeiten wieder aktivieren.
                         <a href="{{ url_for('cash_audits') }}">Kassenprüfung</a>
                         <a href="{{ url_for('annual_closings') }}">Jahresabschluss</a>
                         <a href="{{ url_for('documents_page') }}">Dokumente</a>
+                        {% if current_user.role in ["cashier", "auditor"] %}
+                            <a href="{{ url_for('audit_log_page') }}">Revisionsprotokoll</a>
+                        {% endif %}
                     </span>
                 </span>
             {% endif %}
@@ -283,27 +290,10 @@ Nicht löschen – ggf. für spätere Entwicklungsarbeiten wieder aktivieren.
                         <a href="{{ url_for('event_rhythm_page') }}">Kegelabend-Rhythmus</a>
                         <a href="{{ url_for('penalty_types') }}">Strafarten</a>
                         <a href="{{ url_for('opening_balances') }}">Startbestände</a>
-                        {% if current_user.role == "cashier" %}
-                            <span class="nav-divider"></span>
-                            <a href="{{ url_for('members') }}">Mitglieder</a>
-                        {% endif %}
                     </span>
                 </span>
             {% else %}
                 <a href="{{ url_for('rate_settings') }}">Aktuelle Werte</a>
-            {% endif %}
-
-            {% if current_user.role == "auditor" %}
-                <span class="nav-dropdown">
-                    <span class="nav-dropbtn">Prüfung ▾</span>
-                    <span class="nav-dropdown-content">
-                        <a href="{{ url_for('cashbook') }}">Kassenbuch</a>
-                        <a href="{{ url_for('cash_audits') }}">Kassenprüfung</a>
-                        <a href="{{ url_for('annual_closings') }}">Jahresabschluss</a>
-                        <a href="{{ url_for('documents_page') }}">Dokumente</a>
-                        <a href="{{ url_for('audit_log_page') }}">Revisionsprotokoll</a>
-                    </span>
-                </span>
             {% endif %}
 
             {% if current_user.role == "admin" %}
