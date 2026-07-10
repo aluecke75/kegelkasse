@@ -221,65 +221,7 @@ def maybe_create_scheduled_backup():
         db.session.rollback()
 
 
-def euro_to_cents(value):
-    """Wandelt Euro-Eingaben robust in Cent um.
-
-    Unterstützt deutsche Schreibweise mit Tausenderpunkt und Cent-Komma:
-    5 -> 5,00 €, 3,7 -> 3,70 €, 1.234,56 -> 1.234,56 €.
-    Zur Sicherheit akzeptieren wir auch alte Punkt-Dezimalwerte wie 3.70.
-    """
-    if value is None:
-        return 0
-
-    raw = str(value).strip().replace("€", "").replace(" ", "")
-
-    if raw == "":
-        return 0
-
-    # Komfort für mobile Eingabe: ,5 oder .5 bedeutet 0,50 €.
-    if raw.startswith((",", ".")):
-        raw = "0" + raw
-
-    if not re.fullmatch(r"\d+(?:[.,]\d+)*", raw):
-        raise ValueError("Ungültiger Euro-Betrag")
-
-    if "," in raw:
-        # Deutsche Schreibweise: Punkte sind Tausendertrenner, Komma trennt Cent.
-        cleaned = raw.replace(".", "").replace(",", ".")
-    elif "." in raw:
-        parts = raw.split(".")
-        if len(parts) == 2 and len(parts[1]) <= 2:
-            # Alte/technische Schreibweise: 3.70 = 3,70
-            cleaned = raw
-        elif len(parts[-1]) == 3 and all(len(part) == 3 for part in parts[1:]):
-            # 1.234 oder 1.234.567 = Tausenderpunkte ohne Cent.
-            cleaned = raw.replace(".", "")
-        else:
-            raise ValueError("Ungültiger Euro-Betrag")
-    else:
-        cleaned = raw
-
-    if not re.fullmatch(r"\d+(?:\.\d{1,2})?", cleaned):
-        raise ValueError("Ungültiger Euro-Betrag")
-
-    return int(round(float(cleaned) * 100))
-
-
-def form_euro_to_cents(field_name, label):
-    try:
-        return euro_to_cents(request.form.get(field_name, "0"))
-    except ValueError:
-        flash(f"Bitte bei '{label}' nur Zahlen eingeben, z. B. 5 oder 3,70.", "danger")
-        raise
-
-
-def cents_to_euro(value):
-    amount = (value or 0) / 100
-    formatted = f"{amount:,.2f}"
-    return formatted.replace(",", "X").replace(".", ",").replace("X", ".")
-
-
-
+from services.money import euro_to_cents, form_euro_to_cents, cents_to_euro, round_tax_cents, round_to_ten_cents
 
 # -----------------------------------------------------------------------------
 # Export-Helfer
@@ -2294,10 +2236,6 @@ def send_system_mail(to_email, subject, body):
         return False, f"E-Mail konnte nicht versendet werden: {exc}"
 
 
-def clean_username(username):
-    return (username or "").strip()
-
-
 def username_is_available(username, current_user_id=None):
     query = User.query.filter(db.func.lower(User.username) == username.lower())
     if current_user_id:
@@ -2333,32 +2271,19 @@ def audit_log(category, action, title, details=None, object_type=None, object_id
     ))
 
 
-def first_weekday_of_month(year, month, weekday):
-    day = datetime(year, month, 1).date()
-    offset = (weekday - day.weekday()) % 7
-    return day + timedelta(days=offset)
-
-
-def add_month(year, month):
-    if month == 12:
-        return year + 1, 1
-    return year, month + 1
-
-
-def last_day_of_month(year, month):
-    next_year, next_month = add_month(year, month)
-    return (datetime(next_year, next_month, 1).date() - timedelta(days=1)).day
-
-
-def nth_weekday_of_month(year, month, weekday, nth):
-    first = first_weekday_of_month(year, month, weekday)
-    return first + timedelta(days=7 * (nth - 1))
-
-
-def last_weekday_of_month(year, month, weekday):
-    day = datetime(year, month, last_day_of_month(year, month)).date()
-    offset = (day.weekday() - weekday) % 7
-    return day - timedelta(days=offset)
+from services.dates import (
+    first_weekday_of_month,
+    add_month,
+    last_day_of_month,
+    nth_weekday_of_month,
+    last_weekday_of_month,
+    _month_label,
+    _last_n_months,
+    parse_month_param,
+    month_label,
+    first_day_of_month,
+    shift_weekend_to_monday,
+)
 
 
 def next_event_date_from_rhythm(reference_date=None):
@@ -2776,52 +2701,13 @@ def update_member_login(member):
         member.user_id = user.id
 
 
-def validate_email_format(value):
-    value = (value or "").strip()
-    if not value:
-        return True
-    return re.match(r"^[^\s@]+@[^\s@]+\.[^\s@]+$", value) is not None
-
-
-def iban_is_valid(iban):
-    """Prüft IBAN-Format und Prüfziffer. Leer ist erlaubt."""
-    iban = re.sub(r"\s+", "", (iban or "")).upper()
-    if not iban:
-        return True
-    if not re.match(r"^[A-Z]{2}\d{2}[A-Z0-9]{10,30}$", iban):
-        return False
-    rearranged = iban[4:] + iban[:4]
-    numeric = ""
-    for ch in rearranged:
-        if ch.isdigit():
-            numeric += ch
-        elif "A" <= ch <= "Z":
-            numeric += str(ord(ch) - 55)
-        else:
-            return False
-    remainder = 0
-    for ch in numeric:
-        remainder = (remainder * 10 + int(ch)) % 97
-    return remainder == 1
-
-
-def bic_is_valid(bic):
-    bic = re.sub(r"\s+", "", (bic or "")).upper()
-    if not bic:
-        return True
-    return re.match(r"^[A-Z]{4}[A-Z]{2}[A-Z0-9]{2}([A-Z0-9]{3})?$", bic) is not None
-
-
-def paypal_link_is_valid(value):
-    value = (value or "").strip()
-    if not value:
-        return True
-    try:
-        parsed = urllib.parse.urlparse(value)
-    except Exception:
-        return False
-    host = (parsed.netloc or "").lower()
-    return parsed.scheme in ("http", "https") and (host.endswith("paypal.me") or host.endswith("paypal.com"))
+from services.validation import (
+    clean_username,
+    validate_email_format,
+    iban_is_valid,
+    bic_is_valid,
+    paypal_link_is_valid,
+)
 
 
 @app.route("/setup", methods=["GET", "POST"])
@@ -5422,19 +5308,6 @@ def get_finance_settings():
         ),
     }
 
-_TAX_ROUNDING_MODES = {
-    "up": ROUND_CEILING,
-    "down": ROUND_FLOOR,
-    "commercial": ROUND_HALF_UP,
-}
-
-
-def round_tax_cents(value_cents, rounding_mode):
-    """Rundet einen Steuer-Cent-Betrag gemäß der gewählten Rundungsregel."""
-    quantize_mode = _TAX_ROUNDING_MODES.get(rounding_mode, ROUND_HALF_UP)
-    return int(Decimal(value_cents).quantize(Decimal("1"), rounding=quantize_mode))
-
-
 def calculate_interest_taxes(gross_interest_cents):
     finance = get_finance_settings()
     rounding_mode = finance["rounding_mode"]
@@ -5488,14 +5361,6 @@ def can_write_running_events():
 
 def can_override_event_lock():
     return current_user.role in ("admin", "cashier")
-
-
-def round_to_ten_cents(cents):
-    """Mathematisch auf den nächsten 0,10-Euro-Schritt runden."""
-    cents = cents or 0
-    if cents <= 0:
-        return 0
-    return int(round(cents / 10) * 10)
 
 
 def acquire_event_lock(event):
@@ -5950,25 +5815,6 @@ def top_rows(rows, key, reverse=True, limit=10):
     return sorted(filtered, key=lambda row: (row.get(key, 0), row.get("name", "")), reverse=reverse)[:limit]
 
 
-_MONTH_LABELS_DE = ["Jan", "Feb", "Mär", "Apr", "Mai", "Jun", "Jul", "Aug", "Sep", "Okt", "Nov", "Dez"]
-
-
-def _month_label(year, month):
-    return f"{_MONTH_LABELS_DE[month - 1]} {str(year)[2:]}"
-
-
-def _last_n_months(n):
-    """Liste von (Jahr, Monat)-Tupeln für die letzten n Monate, älteste zuerst, inkl. aktuellem Monat."""
-    today = datetime.today().date()
-    months = []
-    year, month = today.year, today.month
-    for _ in range(n):
-        months.append((year, month))
-        month -= 1
-        if month == 0:
-            month = 12
-            year -= 1
-    return list(reversed(months))
 
 
 def report_penalty_month_series(months_back=15):
@@ -7285,39 +7131,6 @@ def cashbook_void(entry_id):
     db.session.commit()
     flash("Kassenbuch-Eintrag wurde storniert.", "success")
     return redirect(url_for("cashbook"))
-
-
-def parse_month_param(value):
-    if not value:
-        today = datetime.today().date()
-        previous_month = today.replace(day=1) - timedelta(days=1)
-        return previous_month.year, previous_month.month
-
-    try:
-        parsed = datetime.strptime(value, "%Y-%m").date()
-        return parsed.year, parsed.month
-    except ValueError:
-        today = datetime.today().date()
-        previous_month = today.replace(day=1) - timedelta(days=1)
-        return previous_month.year, previous_month.month
-
-
-def month_label(year, month):
-    return f"{month:02d}.{year}"
-
-
-def first_day_of_month(year, month):
-    return datetime(year, month, 1).date()
-
-
-def shift_weekend_to_monday(value_date):
-    """Verschiebt Samstag/Sonntag auf den folgenden Montag.
-
-    Feiertage bleiben bewusst außen vor, weil das Bundesland sonst zusätzlich gepflegt werden müsste.
-    """
-    while value_date.weekday() >= 5:
-        value_date += timedelta(days=1)
-    return value_date
 
 
 def proposed_member_paid_date(member_id, year, month):
