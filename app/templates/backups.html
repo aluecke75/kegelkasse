@@ -72,6 +72,10 @@
     color: #15803d !important;
 }
 
+.backup-status-warn {
+    color: #b91c1c !important;
+}
+
 .backup-last-info {
     display: flex;
     gap: 12px;
@@ -460,12 +464,30 @@
 
         <div class="backup-status-card">
             <span class="label">Zusätzliches Sicherungsziel</span>
-            <span class="value">{% if settings.extra_target_enabled %}{{ settings.target_label }}{% else %}Keines{% endif %}</span>
+            <span class="value">
+                {% if not settings.extra_target_enabled %}
+                    Keines
+                {% elif settings.target_type == "webdav" %}
+                    {{ settings.target_label }}
+                {% elif settings.extra_target_connected %}
+                    <span class="backup-status-ok">🟢 {{ settings.target_label }}{% if settings.extra_target_account_label %} ({{ settings.extra_target_account_label }}){% endif %}</span>
+                {% else %}
+                    <span class="backup-status-warn">🔴 {{ settings.target_label }} – nicht verbunden!</span>
+                {% endif %}
+            </span>
         </div>
 
         <div class="backup-status-card">
             <span class="label">Status</span>
-            <span class="value backup-status-ok">{% if settings.last_result %}🟢 Backup erfolgreich{% else %}🟢 Alles in Ordnung{% endif %}</span>
+            <span class="value {% if settings.last_result_failed %}backup-status-warn{% else %}backup-status-ok{% endif %}">
+                {% if settings.last_result_failed %}
+                    🔴 {{ settings.last_result }}
+                {% elif settings.last_result %}
+                    🟢 {{ settings.last_result }}
+                {% else %}
+                    🟢 Alles in Ordnung
+                {% endif %}
+            </span>
         </div>
     </div>
 
@@ -516,7 +538,7 @@
                         <div class="backup-stat-row"><span>Einträge ca.</span><strong>{{ db_info.row_count }}</strong></div>
                         <div class="backup-stat-row"><span>Letzte automatische Sicherung</span><strong>{% if last_auto %}{{ last_auto.created_at.strftime('%d.%m.%Y, %H:%M Uhr') }}{% else %}-{% endif %}</strong></div>
                         <div class="backup-stat-row"><span>Zusätzliches Ziel</span><strong>{% if settings.extra_target_enabled %}{{ settings.target_label }}{% else %}-{% endif %}</strong></div>
-                        <div class="backup-stat-row"><span>Letzter Status</span><strong>{% if settings.last_result %}Backup erfolgreich{% else %}-{% endif %}</strong></div>
+                        <div class="backup-stat-row"><span>Letzter Status</span><strong class="{% if settings.last_result_failed %}backup-status-warn{% endif %}">{{ settings.last_result or "-" }}</strong></div>
                     </div>
                 </div>
             </div>

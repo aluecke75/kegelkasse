@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.99.2
+
+- Datensicherung: Status-Anzeige zeigt jetzt korrekt Fehler an (vorher wurde bei jedem gespeicherten Ergebnis fälschlich "Backup erfolgreich" grün angezeigt, auch wenn z. B. die Kopie zu Dropbox fehlgeschlagen war)
+- Datensicherung: Verbindungsstatus zum zusätzlichen Sicherungsziel (Dropbox/Google Drive/OneDrive) wird jetzt deutlich sichtbar gemacht (verbunden/nicht verbunden)
+- Datensicherung: ein fehlgeschlagener Verbindungstest wird jetzt ebenfalls im Status gespeichert, nicht nur bei Erfolg
+
+## v0.99.1
+
+- Globale Suche um das Revisionsprotokoll erweitert
+- Kassenprüfungs-Erinnerung im Dashboard
+
 ## v0.99.0
 
 Große Sammel-Version: praktisch alle priorisierten Restarbeiten vor Version 1.0 abgeschlossen.

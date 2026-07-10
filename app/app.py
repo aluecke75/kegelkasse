@@ -86,7 +86,7 @@ login_manager.login_view = "login"
 login_manager.login_message = "Bitte zuerst anmelden."
 login_manager.init_app(app)
 
-APP_VERSION = "0.99.1"
+APP_VERSION = "0.99.2"
 
 
 def active_database_info():
@@ -1228,7 +1228,7 @@ def backup_settings():
     target_type = setting_value("backup_target_type", "webdav")
     if target_type == "local_path":
         target_type = "webdav"
-    return {
+    result = {
         "enabled": setting_value("backup_enabled", "0") == "1",
         "interval": setting_value("backup_interval", "daily"),
         "time": setting_value("backup_time", "02:00"),
@@ -1255,8 +1255,25 @@ def backup_settings():
         "onedrive_account_label": setting_value("onedrive_account_label", ""),
         "last_auto": setting_value("backup_last_auto", ""),
         "last_result": setting_value("backup_last_result", ""),
+        "last_result_failed": "fehlgeschlagen" in (setting_value("backup_last_result", "") or "").lower(),
         "target_label": backup_target_label_raw(target_type),
     }
+
+    result["extra_target_connected"] = (
+        result["target_type"] == "webdav" and bool(result["webdav_url"])
+        or result["target_type"] == "dropbox" and result["dropbox_connected"]
+        or result["target_type"] == "google_drive" and result["google_drive_connected"]
+        or result["target_type"] == "onedrive" and result["onedrive_connected"]
+    )
+    if result["target_type"] == "dropbox":
+        result["extra_target_account_label"] = result["dropbox_account_label"]
+    elif result["target_type"] == "google_drive":
+        result["extra_target_account_label"] = result["google_drive_account_label"]
+    elif result["target_type"] == "onedrive":
+        result["extra_target_account_label"] = result["onedrive_account_label"]
+    else:
+        result["extra_target_account_label"] = ""
+    return result
 
 
 def backup_target_label_raw(target_type):
@@ -4455,7 +4472,20 @@ def backups_page():
                 test_file = backup_dir() / "kegelkasse_backup_test.txt"
                 test_file.write_text(f"Kegelkasse Backup-Test\n{datetime.now().isoformat(timespec='seconds')}\n", encoding="utf-8")
                 try:
-                    copied_to = copy_backup_to_extra_target(test_file)
+                    try:
+                        copied_to = copy_backup_to_extra_target(test_file)
+                    except Exception as exc:
+                        set_setting_value("backup_last_result", f"Test fehlgeschlagen: {exc}")
+                        audit_log(
+                            "Datensicherung",
+                            "backup_target_tested",
+                            "Backup-Ziel-Test fehlgeschlagen",
+                            details=f"Backup-Ziel-Test fehlgeschlagen: {exc}",
+                            object_type="Backup",
+                            new_value=str(exc),
+                        )
+                        db.session.commit()
+                        raise
                     set_setting_value("backup_last_result", f"Test OK: {copied_to}")
                     audit_log(
                         "Datensicherung",
