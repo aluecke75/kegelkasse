@@ -786,90 +786,18 @@ def export_headers(export_type):
     }.get(export_type, [])
 
 
-def audit_value(value):
-    if value is None:
-        return "-"
-    if value is True:
-        return "Ja"
-    if value is False:
-        return "Nein"
-    return str(value)
-
-
-def audit_diff_lines(old_snapshot, new_snapshot):
-    lines = []
-    keys = list(old_snapshot.keys())
-    for key in new_snapshot.keys():
-        if key not in old_snapshot:
-            keys.append(key)
-
-    for key in keys:
-        old = old_snapshot.get(key)
-        new = new_snapshot.get(key)
-        if audit_value(old) != audit_value(new):
-            lines.append(f"{key}: vorher {audit_value(old)} → nachher {audit_value(new)}")
-
-    if not lines:
-        return "Keine inhaltliche Änderung erkannt."
-    return "\n".join(lines)
-
-
-_AUDIT_DIFF_LINE_RE = re.compile(r"^(.*?): vorher (.*) → nachher (.*)$")
-
-
-def audit_diff_rows(details):
-    """Liest aus dem Details-Text nur die geänderten Felder als (Feld, Vorher, Nachher) heraus."""
-    if not details:
-        return []
-    rows = []
-    for line in details.splitlines():
-        match = _AUDIT_DIFF_LINE_RE.match(line)
-        if match:
-            rows.append((match.group(1), match.group(2), match.group(3)))
-    return rows
-
-
-app.jinja_env.filters["audit_diff_rows"] = audit_diff_rows
-
-
-def member_audit_snapshot(member):
-    return {
-        "Vorname": member.first_name,
-        "Nachname": member.last_name or "",
-        "Spitzname": member.nickname or "",
-        "E-Mail": member.email or "",
-        "Aktiv": member.active,
-        "Eintritt": member.joined_at.isoformat() if member.joined_at else "",
-        "Austritt": member.left_at.isoformat() if member.left_at else "",
-        "Notiz": member.note or "",
-        "Benutzerkonto": member.user.username if member.user else "-",
-    }
-
-
-def penalty_type_audit_snapshot(penalty_type):
-    return {
-        "Name": penalty_type.name,
-        "Typ": penalty_type.kind_label(),
-        "Betrag": f"{cents_to_euro(penalty_type.amount_cents)} €",
-        "Berechnung": penalty_type.target_mode_label(),
-        "Aktiv": penalty_type.active,
-        "Reihenfolge": penalty_type.sort_order,
-    }
-
-
-def event_status_label(status):
-    labels = {
-        "open": "Offen",
-        "settlement": "Barzahlungen erfassen",
-        "lane_cost": "Bahnkosten erfassen",
-        "closed": "Abgeschlossen",
-        "cancelled": "Ausgefallen",
-        "present": "Anwesend",
-        "guest": "Gast",
-        "excused": "Fehlt entschuldigt",
-        "unexcused": "Fehlt unentschuldigt",
-    }
-    return labels.get(status, status or "-")
+from services.audit import (
+    audit_value,
+    audit_diff_lines,
+    audit_diff_rows,
+    member_audit_snapshot,
+    penalty_type_audit_snapshot,
+    event_status_label,
+    cash_audit_snapshot,
+    annual_closing_snapshot,
+    audit_log,
+    audit_object_label,
+)
 
 
 def event_audit_snapshot(event):
@@ -904,43 +832,6 @@ def event_audit_snapshot(event):
     return snapshot
 
 
-
-def cash_audit_snapshot(audit):
-    return {
-        "Prüfdatum": audit.audit_date.isoformat() if audit.audit_date else "",
-        "Barkasse laut System": f"{cents_to_euro(audit.expected_cash_cents)} €",
-        "Barkasse gezählt": f"{cents_to_euro(audit.counted_cash_cents)} €",
-        "Barkasse Differenz": f"{cents_to_euro(audit.difference_cash_cents)} €",
-        "Bank laut System": f"{cents_to_euro(audit.expected_bank_cents)} €",
-        "Bank laut Auszug": f"{cents_to_euro(audit.statement_bank_cents)} €",
-        "Bank Differenz": f"{cents_to_euro(audit.difference_bank_cents)} €",
-        "Notiz": audit.note or "",
-        "Bestätigt von": audit.confirmed_by_user.username if getattr(audit, "confirmed_by_user", None) else "",
-        "Bestätigt am": audit.confirmed_at.isoformat() if getattr(audit, "confirmed_at", None) else "",
-        "Prüfernotiz": getattr(audit, "auditor_note", None) or "",
-    }
-
-
-def annual_closing_snapshot(closing):
-    return {
-        "Jahr": closing.year,
-        "Abschlussdatum": closing.closing_date.isoformat() if closing.closing_date else "",
-        "Barkasse": f"{cents_to_euro(closing.cash_balance_cents)} €",
-        "Bank": f"{cents_to_euro(closing.bank_balance_cents)} €",
-        "Gesamtbestand": f"{cents_to_euro(closing.total_balance_cents)} €",
-        "Offene Strafen": f"{cents_to_euro(closing.open_penalties_cents)} €",
-        "Guthaben Mitglieder": f"{cents_to_euro(closing.member_credits_cents)} €",
-        "Einnahmen im Jahr": f"{cents_to_euro(closing.income_cents)} €",
-        "Ausgaben im Jahr": f"{cents_to_euro(closing.expense_cents)} €",
-        "Kegelabende abgeschlossen": closing.event_count,
-        "Kegelabende ausgefallen": closing.cancelled_event_count,
-        "Kegelabende offen": closing.open_event_count,
-        "Letzte Kassenprüfung": closing.last_cash_audit.audit_date.isoformat() if closing.last_cash_audit and closing.last_cash_audit.audit_date else "-",
-        "Notiz": closing.note or "",
-        "Bestätigt von": closing.confirmed_by_user.username if getattr(closing, "confirmed_by_user", None) else "",
-        "Bestätigt am": closing.confirmed_at.isoformat() if getattr(closing, "confirmed_at", None) else "",
-        "Prüfernotiz": getattr(closing, "auditor_note", None) or "",
-    }
 
 def account_balance(account):
     transactions = AccountTransaction.query.filter_by(account=account).all()
@@ -992,21 +883,14 @@ def closed_year_block_message(booking_date, require_admin_confirmation=True, ove
     )
 
 
-def setting_value(key, default=None):
-    setting = AppSetting.query.filter_by(key=key).first()
-    return setting.value if setting and setting.value not in (None, "") else default
-
-
-def set_setting_value(key, value):
-    setting = AppSetting.query.filter_by(key=key).first()
-    if not setting:
-        setting = AppSetting(key=key, value=str(value))
-        db.session.add(setting)
-    else:
-        setting.value = str(value)
-    return setting
-
-
+from services.settings import (
+    setting_value,
+    set_setting_value,
+    safe_int_setting,
+    is_secret_setting_key,
+    sanitized_app_settings_dict,
+    get_app_setting,
+)
 
 BACKUP_DIR = Path(os.getenv("BACKUP_DIR", "/app/backups"))
 ACTIVE_DATABASE_PROFILE = get_active_database_profile()
@@ -1114,14 +998,6 @@ def human_file_size(size_bytes):
         size /= 1024
 
 
-def safe_int_setting(key, default, minimum=None):
-    try:
-        value = int(setting_value(key, str(default)) or default)
-    except (TypeError, ValueError):
-        value = default
-    if minimum is not None:
-        value = max(minimum, value)
-    return value
 
 
 def backup_settings():
@@ -1195,63 +1071,6 @@ def backup_target_label(settings=None):
         return backup_target_label_raw(target_type)
     return backup_target_label_raw(target_type) + " (vorbereitet)"
 
-def is_secret_setting_key(key):
-    """True für Zugangsdaten, die nie in Export-/Backup-ZIPs landen sollen.
-
-    Wichtig: Passwort-Regeln wie password_min_length sind keine Geheimnisse und bleiben erhalten.
-    """
-    key = (key or "").lower()
-    non_secret_password_settings = {
-        "password_min_length",
-        "password_require_upper",
-        "password_require_lower",
-        "password_require_digit",
-        "password_require_special",
-    }
-    if key in non_secret_password_settings:
-        return False
-
-    exact_secret_keys = {
-        "mail_password",
-        "backup_webdav_password",
-        "dropbox_token",
-        "dropbox_access_token",
-        "dropbox_refresh_token",
-        "onedrive_token",
-        "onedrive_access_token",
-        "onedrive_refresh_token",
-        "google_drive_token",
-        "google_drive_access_token",
-        "google_drive_refresh_token",
-        "paypal_api_key",
-        "paypal_api_secret",
-        "paypal_client_secret",
-        "paypal_access_token",
-    }
-    if key in exact_secret_keys:
-        return True
-
-    secret_fragments = (
-        "_password",
-        "password_",
-        "_secret",
-        "secret_",
-        "_token",
-        "token_",
-        "access_token",
-        "refresh_token",
-        "api_key",
-        "client_secret",
-    )
-    return any(fragment in key for fragment in secret_fragments)
-
-
-def sanitized_app_settings_dict():
-    """App-Einstellungen für Export/Backup ohne geheime Zugangsdaten."""
-    data = {}
-    for row in AppSetting.query.order_by(AppSetting.key).all():
-        data[row.key] = "" if is_secret_setting_key(row.key) else row.value
-    return data
 
 
 def sanitize_sqlite_settings_for_export(db_path):
@@ -2243,32 +2062,6 @@ def username_is_available(username, current_user_id=None):
     return query.first() is None
 
 
-def audit_log(category, action, title, details=None, object_type=None, object_id=None, old_value=None, new_value=None):
-    """Schreibt einen revisionsrelevanten Änderungsvermerk.
-
-    Bewusst nicht für jeden Plus/Minus-Klick bei Strafen, sondern nur für
-    abgeschlossene Aktionen wie Buchungen, Storno, Einstellungen, Mitglieder,
-    Strafarten und Kegelabend-Statuswechsel.
-    """
-    try:
-        user_id = current_user.id if current_user and current_user.is_authenticated else None
-        username = current_user.username if current_user and current_user.is_authenticated else None
-    except Exception:
-        user_id = None
-        username = None
-
-    db.session.add(AuditLog(
-        user_id=user_id,
-        username=username,
-        category=category,
-        action=action,
-        object_type=object_type,
-        object_id=object_id,
-        title=title,
-        details=details,
-        old_value=old_value,
-        new_value=new_value,
-    ))
 
 
 from services.dates import (
@@ -5273,13 +5066,6 @@ def member_penalty_balance(member_id):
     transactions = MemberPenaltyTransaction.query.filter_by(member_id=member_id).all()
     return sum(transaction.amount_cents for transaction in transactions)
 
-def get_app_setting(key, default=None):
-    setting = AppSetting.query.filter_by(key=key).first()
-    if setting is None or setting.value is None:
-        return default
-    return setting.value
-
-
 def get_finance_settings():
     return {
         "capital_tax_enabled": get_app_setting("tax_capital_enabled", "1") == "1",
@@ -7798,31 +7584,6 @@ def monthly_contributions():
         member_count=len(rows),
         previous_batches=previous_batches,
     )
-
-
-_AUDIT_OBJECT_LABELS = {
-    "Member": "Mitglied",
-    "BowlingEvent": "Kegelabend",
-    "PenaltyType": "Strafart",
-    "CashbookEntry": "Kassenbuch-Eintrag",
-    "CashAudit": "Kassenprüfung",
-    "AnnualClosing": "Jahresabschluss",
-    "InterestSetting": "Zinseinstellung",
-    "InterestBooking": "Zinsbuchung",
-    "document": "Dokument",
-    "Document": "Dokument",
-    "Branding": "Vereinslogo",
-    "Backup": "Datensicherung",
-    "Export": "Export",
-    "MonthlyContributionPayment": "Monatsbeitrag",
-}
-
-
-def audit_object_label(object_type, object_id):
-    if not object_type:
-        return None
-    label = _AUDIT_OBJECT_LABELS.get(object_type, object_type)
-    return f"{label} #{object_id}" if object_id else label
 
 
 @app.route("/audit-log")
