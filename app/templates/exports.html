@@ -150,6 +150,37 @@
 
     <section class="modern-card">
         <div class="modern-header">
+            <div class="modern-icon">🎳</div>
+            <div>
+                <h2>Kegelabend</h2>
+                <p>Protokoll eines einzelnen abgeschlossenen Kegelabends zum Ausdrucken – z. B. als Papier-Rückfallebene, falls die App mal nicht erreichbar ist.</p>
+            </div>
+        </div>
+        {% if event_candidates %}
+            <form method="get" action="{{ url_for('exports_download') }}">
+                <input type="hidden" name="type" value="event_protocol">
+                <input type="hidden" name="format" value="pdf">
+                <div class="form-grid">
+                    <label>Kegelabend
+                        <select name="event_id">
+                            {% for candidate in event_candidates %}
+                                <option value="{{ candidate.id }}" {% if loop.first %}selected{% endif %}>{{ candidate.event_date.strftime('%d.%m.%Y') }}</option>
+                            {% endfor %}
+                        </select>
+                    </label>
+                </div>
+                <p class="muted" style="margin:8px 0 0;">Vorausgewählt ist immer der zuletzt abgeschlossene Abend. Nur PDF, zum direkten Ausdrucken.</p>
+                <div class="inline-actions" style="margin-top:12px;">
+                    <button type="submit">Kegelabend-Protokoll erstellen</button>
+                </div>
+            </form>
+        {% else %}
+            <p class="muted">Noch kein abgeschlossener Kegelabend vorhanden.</p>
+        {% endif %}
+    </section>
+
+    <section class="modern-card">
+        <div class="modern-header">
             <div class="modern-icon">📅</div>
             <div>
                 <h2>Jahresabschluss</h2>

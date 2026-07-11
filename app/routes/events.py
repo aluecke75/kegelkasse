@@ -378,6 +378,275 @@ def participant_penalty_breakdown(participant):
     return items
 
 
+def event_export_candidates():
+    """Abgeschlossene Kegelabende für den Protokoll-Export, neueste zuerst.
+
+    Bewusst nur "closed" - ein gerade laufender Abend (open/settlement/lane_cost)
+    oder ein ausgefallener (cancelled) soll hier nie als Vorschlag oder Auswahl
+    auftauchen, siehe Nutzerwunsch "niemals ein grade aktiver".
+    """
+    return BowlingEvent.query.filter_by(status="closed").order_by(
+        BowlingEvent.event_date.desc(), BowlingEvent.id.desc()
+    ).all()
+
+
+def _pdf_check_mark_cmds(x, y, rgb):
+    r, g, b = rgb
+    return [
+        f"{r} {g} {b} RG",
+        "1.4 w",
+        f"{x:.1f} {y + 2.3:.1f} m {x + 2.3:.1f} {y:.1f} l {x + 6.5:.1f} {y + 6.5:.1f} l S",
+        "0 g",
+    ]
+
+
+def _pdf_cross_mark_cmds(x, y, rgb):
+    r, g, b = rgb
+    return [
+        f"{r} {g} {b} RG",
+        "1.4 w",
+        f"{x:.1f} {y:.1f} m {x + 6:.1f} {y + 6.5:.1f} l S",
+        f"{x:.1f} {y + 6.5:.1f} m {x + 6:.1f} {y:.1f} l S",
+        "0 g",
+    ]
+
+
+def build_event_protocol_pdf(event):
+    """Einseitiges (bei Bedarf mehrseitiges) Kegelabend-Protokoll zum Ausdrucken,
+    z. B. als Papier-Rückfallebene falls die App mal nicht erreichbar ist.
+
+    Nur für abgeschlossene Abende gedacht, siehe event_export_candidates().
+    Häkchen/Kreuz werden als kleine Vektor-Linien gezeichnet statt als Unicode-
+    Zeichen, weil die eingebauten PDF-Basisschriften (WinAnsiEncoding/cp1252)
+    keine ✓/✗-Glyphen enthalten.
+    """
+    from services.pdf import _pdf_text_cmd, _pdf_assemble, get_logo_pdf_image
+    from routes.cashbook import account_balance_as_of
+
+    page_w, page_h = 842, 595
+    margin = 40
+    logo_image = get_logo_pdf_image()
+
+    penalty_types = active_penalty_types()
+    status_order = {"present": 0, "guest": 1, "excused": 2, "unexcused": 3}
+    participants = sorted(
+        EventParticipant.query.filter_by(event_id=event.id).all(),
+        key=lambda p: (status_order.get(p.status, 4), participant_display_name(p).lower()),
+    )
+    average_present_cents = event_average_present_penalty_cents(event)
+
+    rows = []
+    total_penalty_cents = 0
+    counts = {"present": 0, "excused": 0, "unexcused": 0, "guest": 0}
+    for participant in participants:
+        counts[participant.status] = counts.get(participant.status, 0) + 1
+        breakdown = participant_penalty_breakdown(participant)
+        cells = []
+        for item in breakdown:
+            own_qty = item["own_quantity"] if item["target_mode"] == "others" else item["quantity"]
+            if item["kind"] == "amount":
+                cells.append(item["amount_euro"] + " €" if item["amount_cents"] else None)
+            else:
+                cells.append(str(own_qty) if own_qty else None)
+        total_cents = participant_penalty_cents(participant, event.event_date, average_present_cents)
+        total_penalty_cents += total_cents
+        rows.append({
+            "name": participant_display_name(participant),
+            "status": participant.status,
+            "cells": cells,
+            "sum_euro": cents_to_euro(total_cents),
+        })
+
+    club_name = setting_value("club_name", "Kegelkasse") or "Kegelkasse"
+    now_text = datetime.now().strftime("%d.%m.%Y %H:%M")
+    cash_after_cents = account_balance_as_of("cash", event.event_date)
+
+    guest_count = counts.get("guest", 0)
+    guest_word = "Gast" if guest_count == 1 else "Gäste"
+    attendance_summary = (
+        f"{counts.get('present', 0)} anwesend · {counts.get('excused', 0)} entschuldigt · "
+        f"{counts.get('unexcused', 0)} unentschuldigt · {guest_count} {guest_word}"
+    )
+
+    name_w, attend_w, sum_w = 130, 55, 70
+    usable = page_w - 2 * margin
+    type_area = usable - name_w - attend_w - sum_w
+    type_width = type_area / max(1, len(penalty_types))
+
+    def type_x(i):
+        return margin + name_w + attend_w + i * type_width
+
+    sum_x = page_w - margin - sum_w
+    meta_col_w = usable / 4
+
+    pages_cmds = []
+    cmds = []
+
+    def draw_page_head():
+        cmds.append("0 g")
+        cmds.append(_pdf_text_cmd(margin, page_h - 26, club_name, 16, "F2"))
+        cmds.append("0.36 0.36 0.30 rg")
+        cmds.append(_pdf_text_cmd(margin, page_h - 40, "KEGELABEND-PROTOKOLL - PAPIERABLAGE", 8, "F1"))
+        cmds.append("0 g")
+
+        if logo_image:
+            display_height = 32
+            display_width = min(110, display_height * (logo_image["width"] / logo_image["height"]))
+            logo_x = page_w - margin - display_width
+            logo_y = page_h - 44
+            cmds.append("q")
+            cmds.append(f"{display_width:.2f} 0 0 {display_height:.2f} {logo_x:.2f} {logo_y:.2f} cm")
+            cmds.append("/Logo Do")
+            cmds.append("Q")
+
+        cmds.append("0.12 0.48 0.23 RG")
+        cmds.append("2 w")
+        cmds.append(f"{margin} {page_h - 52} m {page_w - margin} {page_h - 52} l S")
+        cmds.append("0 g")
+
+        meta_y_label = page_h - 68
+        meta_y_value = page_h - 80
+        meta_row_w = usable / 3
+        meta_items = [
+            ("DATUM", event.event_date.strftime("%d.%m.%Y")),
+            ("AUSGEDRUCKT AM", now_text + " Uhr"),
+            ("STATUS", "Abgeschlossen"),
+        ]
+        for i, (label, value) in enumerate(meta_items):
+            x = margin + i * meta_row_w
+            cmds.append("0.42 0.46 0.40 rg")
+            cmds.append(_pdf_text_cmd(x, meta_y_label, label, 6.5, "F1"))
+            cmds.append("0 g")
+            cmds.append(_pdf_text_cmd(x, meta_y_value, value, 9.5, "F2"))
+
+        cmds.append("0.30 0.34 0.28 rg")
+        cmds.append(_pdf_text_cmd(margin, page_h - 92, "Teilnehmer: " + attendance_summary, 8, "F1"))
+        cmds.append("0 g")
+
+        legend_y = page_h - 108
+        legend_items = [
+            ((0.12, 0.48, 0.23), "check", "anwesend"),
+            ((0.12, 0.48, 0.23), "check", "Gast"),
+            ((0.63, 0.36, 0.0), "cross", "entschuldigt"),
+            ((0.63, 0.15, 0.15), "cross", "unentschuldigt"),
+        ]
+        lx = margin
+        for color, kind, label in legend_items:
+            if kind == "check":
+                cmds.extend(_pdf_check_mark_cmds(lx, legend_y - 1, color))
+            else:
+                cmds.extend(_pdf_cross_mark_cmds(lx, legend_y - 1, color))
+            cmds.append("0.42 0.46 0.40 rg")
+            cmds.append(_pdf_text_cmd(lx + 11, legend_y, label, 7, "F1"))
+            cmds.append("0 g")
+            lx += 11 + len(label) * 4.2 + 16
+
+        header_y = page_h - 128
+        type_col_max_chars = max(6, int((type_width - 6) / 4.3))
+        cmds.append("0.42 0.46 0.40 rg")
+        cmds.append(_pdf_text_cmd(margin + 2, header_y, "TEILNEHMER", 6.5, "F1"))
+        cmds.append(_pdf_text_cmd(margin + name_w + 2, header_y, "ANW.", 6.5, "F1"))
+        for i, penalty_type in enumerate(penalty_types):
+            cmds.append(_pdf_text_cmd(type_x(i) + 2, header_y, penalty_type.name.upper()[:type_col_max_chars], 6.5, "F1"))
+            if penalty_type.kind != "amount":
+                cmds.append(_pdf_text_cmd(type_x(i) + 2, header_y - 8, f"{cents_to_euro(penalty_type.amount_cents)} €/Stk.", 5.5, "F1"))
+        cmds.append(_pdf_text_cmd(sum_x + sum_w - 30, header_y, "SUMME", 6.5, "F1"))
+        cmds.append("0 g")
+
+        cmds.append("0.14 0.16 0.11 RG")
+        cmds.append("1 w")
+        rule_y = header_y - 14
+        cmds.append(f"{margin} {rule_y} m {page_w - margin} {rule_y} l S")
+        return rule_y - 16
+
+    def draw_page_foot():
+        cmds.append("0.55 0.55 0.5 rg")
+        cmds.append(_pdf_text_cmd(margin, 26, "Kegelkasse - Kegelabend-Protokoll", 7, "F1"))
+        cmds.append("0 g")
+
+    y_val = draw_page_head()
+    row_height = 15
+    page_bottom = 140  # Platz für Fußnote/Summenzeile/Unterschriftenzeile auf der letzten Seite reservieren
+
+    for row in rows:
+        if y_val < page_bottom:
+            draw_page_foot()
+            pages_cmds.append(cmds)
+            cmds = []
+            y_val = draw_page_head()
+
+        cmds.append(_pdf_text_cmd(margin + 2, y_val, row["name"][:26], 8, "F1"))
+
+        mark_x = margin + name_w + 18
+        mark_y = y_val - 2
+        if row["status"] in ("present", "guest"):
+            cmds.extend(_pdf_check_mark_cmds(mark_x, mark_y, (0.12, 0.48, 0.23)))
+        elif row["status"] == "excused":
+            cmds.extend(_pdf_cross_mark_cmds(mark_x, mark_y, (0.63, 0.36, 0.0)))
+        else:
+            cmds.extend(_pdf_cross_mark_cmds(mark_x, mark_y, (0.63, 0.15, 0.15)))
+
+        for i, cell in enumerate(row["cells"]):
+            cmds.append(_pdf_text_cmd(type_x(i) + 2, y_val, cell if cell else "-", 8, "F1"))
+
+        sum_text = row["sum_euro"] + " €"
+        cmds.append(_pdf_text_cmd(sum_x + sum_w - 8 - len(sum_text) * 4.4, y_val, sum_text, 8.5, "F2"))
+
+        cmds.append("0.88 0.87 0.82 RG")
+        cmds.append("0.5 w")
+        line_y = y_val - 5
+        cmds.append(f"{margin} {line_y} m {page_w - margin} {line_y} l S")
+        cmds.append("0 g")
+
+        y_val -= row_height
+
+    y_val -= 6
+    cmds.append("0.42 0.46 0.40 rg")
+    footnote_lines = [
+        "Bei Strafarten mit \"alle anderen zahlen\" (z. B. Kranz, Alle Neune) zeigt die Tabelle nur, wer es selbst ausgelöst hat;",
+        "die Spalte \"Summe\" enthält bereits den korrekt verrechneten Endbetrag inkl. Fehlgeld/Gastbeitrag/Rundenanteil.",
+    ]
+    for line in footnote_lines:
+        cmds.append(_pdf_text_cmd(margin, y_val, line, 7, "F1"))
+        y_val -= 10
+    cmds.append("0 g")
+    y_val -= 8
+
+    summary_items = [
+        ("BAHNKOSTEN DIESEN ABEND", f"{event.lane_cost_euro()} €"),
+        ("STRAFEN & GEBÜHREN GESAMT", f"{cents_to_euro(total_penalty_cents)} €"),
+        ("BARKASSE NACH DIESEM ABEND", f"{cents_to_euro(cash_after_cents)} €"),
+        ("TEILNEHMER GESAMT", str(len(rows))),
+    ]
+    cmds.append("0.14 0.16 0.11 RG")
+    cmds.append("1 w")
+    cmds.append(f"{margin} {y_val} m {page_w - margin} {y_val} l S")
+    y_val -= 16
+    for i, (label, value) in enumerate(summary_items):
+        x = margin + i * meta_col_w
+        cmds.append("0.42 0.46 0.40 rg")
+        cmds.append(_pdf_text_cmd(x, y_val, label, 6.5, "F1"))
+        cmds.append("0.10 0.35 0.18 rg" if i < 3 else "0 g")
+        cmds.append(_pdf_text_cmd(x, y_val - 13, value, 10, "F2"))
+        cmds.append("0 g")
+    y_val -= 34
+
+    sign_col_w = 220
+    cmds.append("0.6 0.6 0.55 RG")
+    cmds.append("0.7 w")
+    cmds.append(f"{margin} {y_val} m {margin + sign_col_w} {y_val} l S")
+    cmds.append(f"{margin + sign_col_w + 30} {y_val} m {margin + 2 * sign_col_w + 30} {y_val} l S")
+    cmds.append("0.42 0.46 0.40 rg")
+    cmds.append(_pdf_text_cmd(margin, y_val - 10, "Kegelwart", 7, "F1"))
+    cmds.append(_pdf_text_cmd(margin + sign_col_w + 30, y_val - 10, "Datum, Unterschrift", 7, "F1"))
+    cmds.append("0 g")
+
+    draw_page_foot()
+    pages_cmds.append(cmds)
+
+    return _pdf_assemble(pages_cmds, page_width=page_w, page_height=page_h, logo_image=logo_image)
+
+
 def current_member_for_user():
     if not current_user.is_authenticated:
         return None

@@ -17,6 +17,15 @@ def account_balance(account):
     return sum(transaction.amount_cents for transaction in transactions)
 
 
+def account_balance_as_of(account, date):
+    """Historischer Kontostand: Summe aller Buchungen bis einschließlich diesem Datum."""
+    total = db.session.query(db.func.sum(AccountTransaction.amount_cents)).filter(
+        AccountTransaction.account == account,
+        AccountTransaction.booking_date <= date,
+    ).scalar()
+    return total or 0
+
+
 def cashbook_export_rows(year=None, account="all"):
     query = CashbookEntry.query.filter(CashbookEntry.is_void == False)  # noqa: E712
     if year:

@@ -618,10 +618,13 @@ def reports():
 @login_required
 @role_required("admin", "cashier", "auditor")
 def exports_page():
+    from routes.events import event_export_candidates
+
     return render_template(
         "exports.html",
         years=export_year_options(),
         current_year=datetime.now().year,
+        event_candidates=event_export_candidates(),
     )
 
 
@@ -630,12 +633,39 @@ def exports_page():
 @role_required("admin", "cashier", "auditor")
 def exports_download():
     from app import build_annual_report_pdf, annual_report_export_row
+    from routes.events import build_event_protocol_pdf
 
     export_type = request.args.get("type", "cashbook")
     fmt = request.args.get("format", "excel")
     year = export_filter_year()
     account = request.args.get("account", "all")
     member_scope = request.args.get("member_scope", "active")
+
+    if export_type == "event_protocol":
+        try:
+            event_id = int(request.args.get("event_id", ""))
+        except (TypeError, ValueError):
+            event_id = None
+        event = BowlingEvent.query.filter_by(id=event_id, status="closed").first() if event_id else None
+        if not event:
+            flash("Bitte einen abgeschlossenen Kegelabend auswählen.", "danger")
+            return redirect(url_for("exports_page"))
+
+        title = f"Kegelabend-Protokoll {event.event_date.strftime('%d.%m.%Y')}"
+        audit_log(
+            "system",
+            "export_created",
+            f"Export erstellt: {title}",
+            details=f"Bereich: {title}\nFormat: pdf\nKegelabend: #{event.id}",
+            object_type="Export",
+            new_value=title,
+        )
+        db.session.commit()
+        return Response(
+            build_event_protocol_pdf(event),
+            mimetype="application/pdf",
+            headers={"Content-Disposition": f"attachment; filename={export_filename(f'kegelabend_protokoll_{event.event_date.isoformat()}', 'pdf')}"},
+        )
 
     if export_type == "annual_report":
         report_year = year or (datetime.now().year - 1)

@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.99.8
+
+- Auswertungen → Export: neue Kachel "Kegelabend" für ein druckbares Protokoll eines einzelnen abgeschlossenen Kegelabends (Querformat-PDF) - als Papier-Rückfallebene, falls die App mal nicht erreichbar ist. Vorausgewählt ist immer der zuletzt abgeschlossene Abend, ein gerade laufender oder ausgefallener Abend steht nie zur Auswahl. Enthält Teilnehmerliste mit Anwesenheit, Strafen je Strafart, korrekt verrechnete Endsumme je Person (inkl. Fehlgeld/Gastbeitrag/Rundenanteil), Bahnkosten, Strafensumme, tatsächlichen Barkassenstand direkt nach diesem Abend, Vereinslogo und Unterschriftenzeile.
+
 ## v0.99.7
 
 - Datensicherung/Cloud-Ziele (Dropbox, Google Drive, OneDrive): App-Key/Client-ID und Secret gingen bisher verloren, wenn man direkt auf "Verbinden" klickte, ohne vorher extra auf "Speichern" zu klicken - die Zugangsdaten wurden nie abgeschickt. "Verbinden" speichert jetzt automatisch mit. Zugangsdaten bleiben außerdem jetzt auch nach einem Fehler erhalten und werden nicht mehr blind geleert.
