@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.99.7
+
+- Datensicherung/Cloud-Ziele (Dropbox, Google Drive, OneDrive): App-Key/Client-ID und Secret gingen bisher verloren, wenn man direkt auf "Verbinden" klickte, ohne vorher extra auf "Speichern" zu klicken - die Zugangsdaten wurden nie abgeschickt. "Verbinden" speichert jetzt automatisch mit. Zugangsdaten bleiben außerdem jetzt auch nach einem Fehler erhalten und werden nicht mehr blind geleert.
+- Alle Zugangsdaten-Felder bei der Datensicherung (WebDAV-Passwort, Dropbox-/Google-/OneDrive-Secret) zeigen den gespeicherten Wert jetzt mit einem 👁-Symbol an, mit dem man ihn bei Bedarf im Klartext einblenden kann, statt ihn nur "gespeichert, unsichtbar" anzuzeigen.
+
 ## v0.99.6
 
 - Kritischer Fehler behoben: Administration, Kassenbuch, Zinsen, Monatsbeiträge und weitere Bereiche konnten im laufenden Betrieb einen "Internal Server Error" werfen. Ursache war ein technisches Detail aus der Code-Struktur-Aufteilung (v0.99.3): der Programmstart lud app.py unter einem anderen internen Namen, sodass es beim ersten Aufruf einer betroffenen Seite nach dem Serverstart intern doppelt geladen wurde. Jetzt wird die App über einen sauberen Startpunkt geladen, der Fehler kann nicht mehr auftreten.

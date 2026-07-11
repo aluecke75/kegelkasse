@@ -78,17 +78,17 @@ def backup_settings():
         "extra_target_path": setting_value("backup_extra_target_path", ""),
         "webdav_url": setting_value("backup_webdav_url", ""),
         "webdav_username": setting_value("backup_webdav_username", ""),
-        "webdav_password_set": bool(setting_value("backup_webdav_password", "")),
+        "webdav_password": setting_value("backup_webdav_password", ""),
         "dropbox_app_key": setting_value("backup_dropbox_app_key", ""),
-        "dropbox_app_secret_set": bool(setting_value("backup_dropbox_app_secret", "")),
+        "dropbox_app_secret": setting_value("backup_dropbox_app_secret", ""),
         "dropbox_connected": bool(setting_value("dropbox_refresh_token", "")),
         "dropbox_account_label": setting_value("dropbox_account_label", ""),
         "google_client_id": setting_value("backup_google_client_id", ""),
-        "google_client_secret_set": bool(setting_value("backup_google_client_secret", "")),
+        "google_client_secret": setting_value("backup_google_client_secret", ""),
         "google_drive_connected": bool(setting_value("google_drive_refresh_token", "")),
         "google_drive_account_label": setting_value("google_drive_account_label", ""),
         "onedrive_client_id": setting_value("backup_onedrive_client_id", ""),
-        "onedrive_client_secret_set": bool(setting_value("backup_onedrive_client_secret", "")),
+        "onedrive_client_secret": setting_value("backup_onedrive_client_secret", ""),
         "onedrive_connected": bool(setting_value("onedrive_refresh_token", "")),
         "onedrive_account_label": setting_value("onedrive_account_label", ""),
         "last_auto": setting_value("backup_last_auto", ""),
@@ -1224,6 +1224,50 @@ def onedrive_oauth_disconnect():
     return redirect(url_for("backups_page"))
 
 
+def apply_backup_settings_from_form():
+    """Speichert das Sicherungs-Einstellungsformular. Wird sowohl vom reinen
+    "Speichern" als auch vom kombinierten "Speichern + Verbinden" (Dropbox/
+    Google Drive/OneDrive) genutzt, damit beim Verbinden nichts verloren geht,
+    was gerade erst eingetragen wurde."""
+    old_summary = f"Aktiv: {audit_value(setting_value('backup_enabled', '0'))}; Intervall: {audit_value(setting_value('backup_interval', 'daily'))}; Uhrzeit: {audit_value(setting_value('backup_time', '02:00'))}; Aufbewahrung: {audit_value(setting_value('backup_keep_days', '30'))} Tage; Generationen: {audit_value(setting_value('backup_keep_count', '20'))}; Ziel: {audit_value(backup_target_label())}"
+    set_setting_value("backup_enabled", "1" if request.form.get("backup_enabled") else "0")
+    set_setting_value("backup_interval", request.form.get("backup_interval", "daily"))
+    set_setting_value("backup_time", request.form.get("backup_time", "02:00") or "02:00")
+    set_setting_value("backup_keep_days", request.form.get("backup_keep_days", "30") or "30")
+    set_setting_value("backup_keep_count", request.form.get("backup_keep_count", "20") or "20")
+    set_setting_value("backup_include_documents", "1" if request.form.get("backup_include_documents") else "0")
+    set_setting_value("backup_extra_target_enabled", "1" if request.form.get("backup_extra_target_enabled") else "0")
+    target_type = request.form.get("backup_target_type", "webdav")
+    if target_type not in ("webdav", "dropbox", "onedrive", "google_drive"):
+        target_type = "webdav"
+    set_setting_value("backup_target_type", target_type)
+    set_setting_value("backup_webdav_url", request.form.get("backup_webdav_url", "").strip())
+    set_setting_value("backup_webdav_username", request.form.get("backup_webdav_username", "").strip())
+    set_setting_value("backup_webdav_password", request.form.get("backup_webdav_password", ""))
+
+    set_setting_value("backup_dropbox_app_key", request.form.get("backup_dropbox_app_key", "").strip())
+    set_setting_value("backup_dropbox_app_secret", request.form.get("backup_dropbox_app_secret", ""))
+
+    set_setting_value("backup_google_client_id", request.form.get("backup_google_client_id", "").strip())
+    set_setting_value("backup_google_client_secret", request.form.get("backup_google_client_secret", ""))
+
+    set_setting_value("backup_onedrive_client_id", request.form.get("backup_onedrive_client_id", "").strip())
+    set_setting_value("backup_onedrive_client_secret", request.form.get("backup_onedrive_client_secret", ""))
+
+    new_summary = f"Aktiv: {audit_value(setting_value('backup_enabled', '0'))}; Intervall: {audit_value(setting_value('backup_interval', 'daily'))}; Uhrzeit: {audit_value(setting_value('backup_time', '02:00'))}; Aufbewahrung: {audit_value(setting_value('backup_keep_days', '30'))} Tage; Generationen: {audit_value(setting_value('backup_keep_count', '20'))}; Ziel: {audit_value(backup_target_label())}"
+    audit_log(
+        "Datensicherung",
+        "backup_settings_updated",
+        "Sicherungseinstellungen geändert",
+        details="Einstellungen für automatische Sicherungen wurden aktualisiert.",
+        object_type="AppSetting",
+        old_value=old_summary,
+        new_value=new_summary,
+    )
+    db.session.commit()
+    cleanup_old_backups()
+
+
 @app.route("/backups", methods=["GET", "POST"])
 @login_required
 @role_required("admin")
@@ -1341,54 +1385,32 @@ def backups_page():
                 flash("Vereins-Import wurde verworfen.", "info")
 
             elif action == "backup_settings":
-                old_summary = f"Aktiv: {audit_value(setting_value('backup_enabled', '0'))}; Intervall: {audit_value(setting_value('backup_interval', 'daily'))}; Uhrzeit: {audit_value(setting_value('backup_time', '02:00'))}; Aufbewahrung: {audit_value(setting_value('backup_keep_days', '30'))} Tage; Generationen: {audit_value(setting_value('backup_keep_count', '20'))}; Ziel: {audit_value(backup_target_label())}"
-                set_setting_value("backup_enabled", "1" if request.form.get("backup_enabled") else "0")
-                set_setting_value("backup_interval", request.form.get("backup_interval", "daily"))
-                set_setting_value("backup_time", request.form.get("backup_time", "02:00") or "02:00")
-                set_setting_value("backup_keep_days", request.form.get("backup_keep_days", "30") or "30")
-                set_setting_value("backup_keep_count", request.form.get("backup_keep_count", "20") or "20")
-                set_setting_value("backup_include_documents", "1" if request.form.get("backup_include_documents") else "0")
-                set_setting_value("backup_extra_target_enabled", "1" if request.form.get("backup_extra_target_enabled") else "0")
-                target_type = request.form.get("backup_target_type", "webdav")
-                if target_type not in ("webdav", "dropbox", "onedrive", "google_drive"):
-                    target_type = "webdav"
-                set_setting_value("backup_target_type", target_type)
-                set_setting_value("backup_webdav_url", request.form.get("backup_webdav_url", "").strip())
-                set_setting_value("backup_webdav_username", request.form.get("backup_webdav_username", "").strip())
-                webdav_password = request.form.get("backup_webdav_password", "")
-                if webdav_password:
-                    set_setting_value("backup_webdav_password", webdav_password)
-                if request.form.get("backup_webdav_password_clear"):
-                    set_setting_value("backup_webdav_password", "")
-
-                set_setting_value("backup_dropbox_app_key", request.form.get("backup_dropbox_app_key", "").strip())
-                dropbox_secret = request.form.get("backup_dropbox_app_secret", "")
-                if dropbox_secret:
-                    set_setting_value("backup_dropbox_app_secret", dropbox_secret)
-
-                set_setting_value("backup_google_client_id", request.form.get("backup_google_client_id", "").strip())
-                google_secret = request.form.get("backup_google_client_secret", "")
-                if google_secret:
-                    set_setting_value("backup_google_client_secret", google_secret)
-
-                set_setting_value("backup_onedrive_client_id", request.form.get("backup_onedrive_client_id", "").strip())
-                onedrive_secret = request.form.get("backup_onedrive_client_secret", "")
-                if onedrive_secret:
-                    set_setting_value("backup_onedrive_client_secret", onedrive_secret)
-
-                new_summary = f"Aktiv: {audit_value(setting_value('backup_enabled', '0'))}; Intervall: {audit_value(setting_value('backup_interval', 'daily'))}; Uhrzeit: {audit_value(setting_value('backup_time', '02:00'))}; Aufbewahrung: {audit_value(setting_value('backup_keep_days', '30'))} Tage; Generationen: {audit_value(setting_value('backup_keep_count', '20'))}; Ziel: {audit_value(backup_target_label())}"
-                audit_log(
-                    "Datensicherung",
-                    "backup_settings_updated",
-                    "Sicherungseinstellungen geändert",
-                    details="Einstellungen für automatische Sicherungen wurden aktualisiert.",
-                    object_type="AppSetting",
-                    old_value=old_summary,
-                    new_value=new_summary,
-                )
-                db.session.commit()
-                cleanup_old_backups()
+                apply_backup_settings_from_form()
                 flash("Sicherungseinstellungen wurden gespeichert.", "success")
+
+            elif action == "backup_settings_connect_dropbox":
+                apply_backup_settings_from_form()
+                try:
+                    auth_url = dropbox_authorize_url(url_for("dropbox_oauth_callback", _external=True))
+                    return redirect(auth_url)
+                except ValueError as exc:
+                    flash(str(exc), "danger")
+
+            elif action == "backup_settings_connect_google_drive":
+                apply_backup_settings_from_form()
+                try:
+                    auth_url = google_drive_authorize_url(url_for("google_drive_oauth_callback", _external=True))
+                    return redirect(auth_url)
+                except ValueError as exc:
+                    flash(str(exc), "danger")
+
+            elif action == "backup_settings_connect_onedrive":
+                apply_backup_settings_from_form()
+                try:
+                    auth_url = onedrive_authorize_url(url_for("onedrive_oauth_callback", _external=True))
+                    return redirect(auth_url)
+                except ValueError as exc:
+                    flash(str(exc), "danger")
 
             elif action == "test_backup_target":
                 test_file = backup_dir() / "kegelkasse_backup_test.txt"
