@@ -860,6 +860,115 @@
             </div>
         </details>
 
+        <details class="backup-panel" data-remember-key="backups-encryption">
+            <summary>🔒 Verschlüsselung für Cloud-Sicherungen</summary>
+            <div class="backup-panel-body">
+                <p class="backup-card-sub">Schützt nur die Kopie, die an das zusätzliche Backup-Ziel oben hochgeladen wird. Die lokale Sicherung im festen Backup-Ordner bleibt immer unverschlüsselt und sofort wiederherstellbar - so bist du auch abgesichert, falls Schlüssel oder Passwort verloren gehen.</p>
+
+                <form method="post">
+                    <input type="hidden" name="form_action" value="backup_encryption_set_mode">
+
+                    <div class="backup-form-grid">
+                        <label class="checkbox-row">
+                            <input type="radio" name="backup_encryption_mode" value="none" {% if settings.encryption_mode == "none" %}checked{% endif %}>
+                            Keine Verschlüsselung
+                        </label>
+                        <label class="checkbox-row">
+                            <input type="radio" name="backup_encryption_mode" value="keypair" {% if settings.encryption_mode == "keypair" %}checked{% endif %}>
+                            Schlüsselpaar (kein Passwort nötig)
+                        </label>
+                        <label class="checkbox-row">
+                            <input type="radio" name="backup_encryption_mode" value="password" {% if settings.encryption_mode == "password" %}checked{% endif %}>
+                            Passwort
+                        </label>
+                    </div>
+
+                    <div id="encryptionFieldsKeypair" class="backup-target-fields {% if settings.encryption_mode == 'keypair' %}active{% endif %}">
+                        {% if settings.encryption_public_key_fingerprint %}
+                            <div class="success-box" style="grid-column:1 / -1;">
+                                <strong>✅</strong>
+                                <div>
+                                    Schlüsselpaar aktiv, erzeugt am {{ settings.encryption_public_key_created_at }}.<br>
+                                    Fingerabdruck: <code>{{ settings.encryption_public_key_fingerprint }}</code>
+                                </div>
+                            </div>
+                        {% else %}
+                            <div class="info-box" style="grid-column:1 / -1;">
+                                <strong>ℹ️</strong>
+                                <div>Noch kein Schlüsselpaar erzeugt. Ohne Schlüsselpaar kann dieser Modus nicht aktiviert werden.</div>
+                            </div>
+                        {% endif %}
+                    </div>
+
+                    <div id="encryptionFieldsPassword" class="backup-target-fields {% if settings.encryption_mode == 'password' %}active{% endif %}">
+                        <label style="grid-column:1 / -1;">
+                            Passwort
+                            <div class="secret-field">
+                                <input type="password" id="encryptionPasswordInput" name="backup_encryption_password" value="{{ settings.encryption_password }}" autocomplete="new-password" placeholder="Passwort eingeben">
+                                <button type="button" class="secret-toggle" data-target="encryptionPasswordInput" title="Anzeigen/Verbergen">👁</button>
+                            </div>
+                        </label>
+                    </div>
+
+                    <p class="inline-actions" style="margin-top:12px;">
+                        <button class="btn-primary" type="submit">Verschlüsselung speichern</button>
+                    </p>
+                </form>
+
+                <hr style="margin:20px 0; border:none; border-top:1px solid #e5e7eb;">
+
+                <h2>🔑 Schlüsselpaar erzeugen</h2>
+                <p class="muted">
+                    Erzeugt ein neues Schlüsselpaar. Der <strong>private Schlüssel wird sofort als Datei heruntergeladen und nirgends gespeichert</strong> -
+                    diese Datei jetzt sicher aufbewahren (z. B. Passwort-Manager, USB-Stick). Ohne sie können damit verschlüsselte Cloud-Sicherungen
+                    nicht mehr entschlüsselt werden, und es gibt keinen Weg, sie erneut herunterzuladen.
+                    {% if settings.encryption_public_key_fingerprint %}
+                        <br><strong>Achtung:</strong> ein neues Schlüsselpaar macht alle bisher damit verschlüsselten Cloud-Sicherungen unlesbar.
+                    {% endif %}
+                </p>
+                <form method="post" onsubmit="return confirm('{% if settings.encryption_public_key_fingerprint %}Achtung: bisherige verschlüsselte Cloud-Sicherungen werden damit unlesbar. {% endif %}Neues Schlüsselpaar jetzt erzeugen und privaten Schlüssel herunterladen?');">
+                    <input type="hidden" name="form_action" value="backup_encryption_generate_keypair">
+                    <button class="btn-secondary" type="submit">{{ "Neues Schlüsselpaar erzeugen" if settings.encryption_public_key_fingerprint else "Schlüsselpaar erzeugen" }}</button>
+                </form>
+            </div>
+        </details>
+
+        <details class="backup-panel" data-remember-key="backups-encryption-restore">
+            <summary>🔓 Verschlüsselte Cloud-Sicherung wiederherstellen</summary>
+            <div class="backup-panel-body">
+                <p class="backup-card-sub">Für Sicherungen, die aus Dropbox/WebDAV/Google Drive/OneDrive heruntergeladen wurden und mit Schlüsselpaar oder Passwort verschlüsselt sind (Dateiendung <code>.enc</code>).</p>
+
+                <div class="success-box warn-box">
+                    <strong>⚠</strong>
+                    <div><strong>Achtung:</strong> Dabei wird die aktuelle Datenbank ersetzt. Vorher wird automatisch eine Sicherheitssicherung erstellt.</div>
+                </div>
+
+                <form method="post" enctype="multipart/form-data" class="settings-form">
+                    <input type="hidden" name="form_action" value="restore_encrypted_backup">
+                    <label>
+                        Verschlüsselte Sicherungsdatei (.enc)
+                        <input type="file" name="encrypted_backup_upload" accept=".enc" required>
+                    </label>
+                    <label>
+                        Private Schlüsseldatei (nur bei Schlüsselpaar-Verschlüsselung)
+                        <input type="file" name="encrypted_backup_private_key" accept=".pem">
+                    </label>
+                    <label>
+                        Passwort (nur bei Passwort-Verschlüsselung)
+                        <div class="secret-field">
+                            <input type="password" id="restoreEncryptionPasswordInput" name="encrypted_backup_password" autocomplete="off">
+                            <button type="button" class="secret-toggle" data-target="restoreEncryptionPasswordInput" title="Anzeigen/Verbergen">👁</button>
+                        </div>
+                    </label>
+                    <label>
+                        Zur Bestätigung "WIEDERHERSTELLEN" eingeben
+                        <input type="text" name="confirm_restore_encrypted" autocomplete="off">
+                    </label>
+                    <button class="btn-danger" type="submit" onclick="return confirm('Wirklich mit dieser Sicherung überschreiben?');">Entschlüsseln und wiederherstellen</button>
+                </form>
+            </div>
+        </details>
+
         <details class="backup-panel" data-remember-key="backups-list">
             <summary>📦 Vorhandene Sicherungen</summary>
             <div class="backup-panel-body">
@@ -1027,6 +1136,25 @@
             btn.textContent = hidden ? '🙈' : '👁';
         });
     });
+})();
+</script>
+
+<script>
+(function () {
+    const radios = document.querySelectorAll('input[name="backup_encryption_mode"]');
+    const keypairFields = document.getElementById('encryptionFieldsKeypair');
+    const passwordFields = document.getElementById('encryptionFieldsPassword');
+    if (!radios.length) return;
+
+    function refreshEncryptionUi() {
+        const selected = document.querySelector('input[name="backup_encryption_mode"]:checked');
+        const mode = selected ? selected.value : 'none';
+        if (keypairFields) keypairFields.classList.toggle('active', mode === 'keypair');
+        if (passwordFields) passwordFields.classList.toggle('active', mode === 'password');
+    }
+
+    radios.forEach(function (radio) { radio.addEventListener('change', refreshEncryptionUi); });
+    refreshEncryptionUi();
 })();
 </script>
 

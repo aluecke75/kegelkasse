@@ -97,7 +97,11 @@ class AppSetting(db.Model):
 
     id = db.Column(db.Integer, primary_key=True)
     key = db.Column(db.String(80), unique=True, nullable=False)
-    value = db.Column(db.String(255), nullable=True)
+    # Text statt String(255): manche Werte (z. B. PEM-öffentliche Schlüssel für
+    # die Backup-Verschlüsselung) sind länger als 255 Zeichen. SQLite erzwingt
+    # die Länge ohnehin nicht (Typ-Affinität statt harter Prüfung), aber die
+    # Deklaration soll auch für eine spätere MariaDB/PostgreSQL-Migration korrekt sein.
+    value = db.Column(db.Text, nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 

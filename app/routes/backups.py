@@ -13,7 +13,7 @@ import zipfile
 from datetime import datetime, timedelta
 from pathlib import Path
 
-from flask import request, flash, redirect, url_for, render_template, send_file, after_this_request
+from flask import request, flash, redirect, url_for, render_template, send_file, after_this_request, Response
 from flask_login import login_required, current_user
 from werkzeug.utils import secure_filename
 
@@ -95,7 +95,16 @@ def backup_settings():
         "last_result": setting_value("backup_last_result", ""),
         "last_result_failed": "fehlgeschlagen" in (setting_value("backup_last_result", "") or "").lower(),
         "target_label": backup_target_label_raw(target_type),
+        "encryption_mode": setting_value("backup_encryption_mode", "none"),
+        "encryption_public_key": setting_value("backup_encryption_public_key", ""),
+        "encryption_public_key_created_at": setting_value("backup_encryption_public_key_created_at", ""),
+        "encryption_password": setting_value("backup_encryption_password", ""),
     }
+    if result["encryption_public_key"]:
+        from services.backup_encryption import public_key_fingerprint
+        result["encryption_public_key_fingerprint"] = public_key_fingerprint(result["encryption_public_key"])
+    else:
+        result["encryption_public_key_fingerprint"] = ""
 
     result["extra_target_connected"] = (
         result["target_type"] == "webdav" and bool(result["webdav_url"])
@@ -541,17 +550,45 @@ def copy_backup_to_extra_target(source_path):
     if not settings.get("extra_target_enabled"):
         return None
 
-    target_type = settings.get("target_type")
-    if target_type == "webdav":
-        return webdav_upload_file(source_path)
-    if target_type == "dropbox":
-        return dropbox_upload_file(source_path)
-    if target_type == "google_drive":
-        return google_drive_upload_file(source_path)
-    if target_type == "onedrive":
-        return onedrive_upload_file(source_path)
+    upload_path = source_path
+    encrypted_temp_path = None
+    encryption_mode = settings.get("encryption_mode", "none")
+    if encryption_mode != "none":
+        from services.backup_encryption import encrypt_for_keypair, encrypt_for_password
 
-    raise ValueError(f"Das Backup-Ziel '{backup_target_label_raw(target_type)}' ist noch nicht angebunden.")
+        data = source_path.read_bytes()
+        if encryption_mode == "keypair":
+            public_key = settings.get("encryption_public_key")
+            if not public_key:
+                raise ValueError("Verschlüsselung ist auf 'Schlüsselpaar' eingestellt, aber es wurde noch kein Schlüsselpaar erzeugt.")
+            encrypted = encrypt_for_keypair(data, public_key)
+        elif encryption_mode == "password":
+            password = setting_value("backup_encryption_password", "")
+            if not password:
+                raise ValueError("Verschlüsselung ist auf 'Passwort' eingestellt, aber es wurde noch kein Passwort vergeben.")
+            encrypted = encrypt_for_password(data, password)
+        else:
+            raise ValueError(f"Unbekannter Verschlüsselungsmodus: {encryption_mode}")
+
+        encrypted_temp_path = backup_dir() / f"{source_path.name}.enc"
+        encrypted_temp_path.write_bytes(encrypted)
+        upload_path = encrypted_temp_path
+
+    try:
+        target_type = settings.get("target_type")
+        if target_type == "webdav":
+            return webdav_upload_file(upload_path)
+        if target_type == "dropbox":
+            return dropbox_upload_file(upload_path)
+        if target_type == "google_drive":
+            return google_drive_upload_file(upload_path)
+        if target_type == "onedrive":
+            return onedrive_upload_file(upload_path)
+
+        raise ValueError(f"Das Backup-Ziel '{backup_target_label_raw(target_type)}' ist noch nicht angebunden.")
+    finally:
+        if encrypted_temp_path is not None:
+            encrypted_temp_path.unlink(missing_ok=True)
 
 
 def club_import_dir():
@@ -1411,6 +1448,102 @@ def backups_page():
                     return redirect(auth_url)
                 except ValueError as exc:
                     flash(str(exc), "danger")
+
+            elif action == "backup_encryption_set_mode":
+                new_mode = request.form.get("backup_encryption_mode", "none")
+                if new_mode not in ("none", "keypair", "password"):
+                    new_mode = "none"
+                old_mode = setting_value("backup_encryption_mode", "none")
+
+                if new_mode == "password":
+                    new_password = request.form.get("backup_encryption_password", "")
+                    if new_password:
+                        set_setting_value("backup_encryption_password", new_password)
+                    elif not setting_value("backup_encryption_password", ""):
+                        flash("Bitte ein Passwort für die Verschlüsselung vergeben.", "danger")
+                        return redirect(url_for(redirect_endpoint))
+
+                if new_mode == "keypair" and not setting_value("backup_encryption_public_key", ""):
+                    flash("Bitte zuerst ein Schlüsselpaar erzeugen, bevor der Schlüsselpaar-Modus aktiviert wird.", "danger")
+                    return redirect(url_for(redirect_endpoint))
+
+                set_setting_value("backup_encryption_mode", new_mode)
+                audit_log(
+                    "Datensicherung",
+                    "backup_encryption_mode_changed",
+                    "Verschlüsselung für Cloud-Sicherungen geändert",
+                    object_type="AppSetting",
+                    old_value=old_mode,
+                    new_value=new_mode,
+                )
+                db.session.commit()
+                flash("Verschlüsselungseinstellung wurde gespeichert.", "success")
+
+            elif action == "backup_encryption_generate_keypair":
+                from services.backup_encryption import generate_keypair
+
+                private_pem, public_pem = generate_keypair()
+                set_setting_value("backup_encryption_public_key", public_pem.decode("utf-8"))
+                set_setting_value("backup_encryption_public_key_created_at", datetime.now().strftime("%d.%m.%Y %H:%M"))
+                audit_log(
+                    "Datensicherung",
+                    "backup_encryption_keypair_generated",
+                    "Neues Schlüsselpaar für Cloud-Sicherungen erzeugt",
+                    details="Der private Schlüssel wurde nur zum Download angeboten, nicht gespeichert.",
+                    object_type="AppSetting",
+                )
+                db.session.commit()
+
+                @after_this_request
+                def _flash_after(response):
+                    flash("Neues Schlüsselpaar erzeugt. Die gerade heruntergeladene Datei ist die einzige Kopie des privaten Schlüssels - jetzt sicher aufbewahren.", "success")
+                    return response
+
+                return Response(
+                    private_pem,
+                    mimetype="application/x-pem-file",
+                    headers={"Content-Disposition": "attachment; filename=kegelkasse_backup_privater_schluessel.pem"},
+                )
+
+            elif action == "restore_encrypted_backup":
+                confirm = request.form.get("confirm_restore_encrypted", "").strip().upper()
+                if confirm != "WIEDERHERSTELLEN":
+                    flash("Bitte zur Sicherheit WIEDERHERSTELLEN eingeben.", "danger")
+                    return redirect(url_for(redirect_endpoint))
+
+                from services.backup_encryption import decrypt_backup
+
+                uploaded = request.files.get("encrypted_backup_upload")
+                if not uploaded or not uploaded.filename:
+                    flash("Bitte eine verschlüsselte Sicherungsdatei (.enc) auswählen.", "danger")
+                    return redirect(url_for(redirect_endpoint))
+
+                envelope = uploaded.stream.read()
+                private_key_file = request.files.get("encrypted_backup_private_key")
+                private_pem = private_key_file.stream.read() if private_key_file and private_key_file.filename else None
+                password = request.form.get("encrypted_backup_password", "") or None
+
+                decrypted = decrypt_backup(envelope, private_pem=private_pem, password=password)
+
+                temp_name = f"kegelkasse_backup_decrypted_{datetime.now().strftime('%Y%m%d_%H%M%S')}.zip"
+                temp_path = backup_dir() / temp_name
+                temp_path.write_bytes(decrypted)
+                try:
+                    check_summary = verify_backup_file(temp_path)
+                    restore_before = restore_database_from_backup(temp_path)
+                    audit_log(
+                        "Datensicherung",
+                        "encrypted_backup_restored",
+                        "Verschlüsselte Cloud-Sicherung wiederhergestellt",
+                        details=f"Geprüft: {check_summary}. Vorher wurde automatisch eine Sicherung erstellt: {restore_before.name}",
+                        object_type="Backup",
+                        old_value=restore_before.name,
+                        new_value=uploaded.filename,
+                    )
+                    db.session.commit()
+                    flash("Verschlüsselte Sicherung wurde entschlüsselt und wiederhergestellt. Bitte Anwendung neu laden.", "success")
+                finally:
+                    temp_path.unlink(missing_ok=True)
 
             elif action == "test_backup_target":
                 test_file = backup_dir() / "kegelkasse_backup_test.txt"

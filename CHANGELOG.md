@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.99.10
+
+- Datensicherung: Verschlüsselung für das zusätzliche Cloud-Ziel (Dropbox/WebDAV/Google Drive/OneDrive), auf Nutzerwunsch mit zwei wählbaren Methoden (Administration → Datensicherung → "Verschlüsselung für Cloud-Sicherungen"):
+  - **Schlüsselpaar**: kein Passwort nötig. Der private Schlüssel wird beim Erzeugen einmalig zum Download angeboten und nirgends gespeichert; automatische Sicherungen laufen danach ganz ohne weitere Eingabe verschlüsselt weiter.
+  - **Passwort**: klassisches, auf dem Server hinterlegtes Passwort.
+  - Die **lokale** Sicherung bleibt in beiden Fällen bewusst unverschlüsselt und sofort wiederherstellbar wie bisher - nur die Kopie, die an das externe Ziel hochgeladen wird, ist geschützt. Verliert man Schlüssel oder Passwort, bleiben die lokalen Sicherungen trotzdem uneingeschränkt nutzbar.
+  - Neuer Bereich "Verschlüsselte Cloud-Sicherung wiederherstellen" zum Hochladen einer aus der Cloud heruntergeladenen `.enc`-Datei samt privater Schlüsseldatei bzw. Passwort.
+
 ## v0.99.9
 
 Aus einer kompletten Code-Durchsicht der heutigen Session gefunden und behoben:
