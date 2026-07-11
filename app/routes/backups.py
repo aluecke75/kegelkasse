@@ -1442,6 +1442,32 @@ def backups_page():
                     db.session.commit()
                     flash("Sicherung wurde gelöscht.", "success")
 
+            elif action == "bulk_delete_backups":
+                selected_names = [secure_filename(name) for name in request.form.getlist("selected_files") if name]
+                deleted_names = []
+                skipped_names = []
+                for selected_name in selected_names:
+                    path = backup_dir() / selected_name
+                    if not selected_name or not path.exists() or path.parent != backup_dir():
+                        skipped_names.append(selected_name)
+                        continue
+                    path.unlink()
+                    deleted_names.append(selected_name)
+
+                if deleted_names:
+                    audit_log(
+                        "Datensicherung",
+                        "backup_bulk_deleted",
+                        f"{len(deleted_names)} Sicherung(en) gelöscht",
+                        details="Gelöscht: " + ", ".join(deleted_names) + (f"; nicht gefunden: {', '.join(skipped_names)}" if skipped_names else ""),
+                        object_type="Backup",
+                        old_value=", ".join(deleted_names),
+                    )
+                    db.session.commit()
+                    flash(f"{len(deleted_names)} Sicherung(en) wurden gelöscht.", "success")
+                else:
+                    flash("Es wurde keine Sicherung zum Löschen ausgewählt.", "warning")
+
             elif action == "check_backup":
                 path = backup_dir() / filename
                 check_summary = verify_backup_file(path)

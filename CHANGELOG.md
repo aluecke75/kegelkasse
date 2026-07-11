@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.99.4
+
+- Bahnkosten-Eingabefeld: der vorgeschlagene Wert wird jetzt beim ersten Reinklicken automatisch geleert, statt manuell markiert/gelöscht werden zu müssen
+- Kegelabend-Abschluss: die Bestätigungsseite "Kegelabend abgeschlossen" nach dem Erfassen der Bahnkosten kann jetzt in den Admin-Einstellungen ein-/ausgeschaltet werden (Administration → Kegelabend-Ablauf); standardmäßig aus, man landet direkt wieder bei der Kegelabend-Übersicht
+- Datensicherung: bei "Vorhandene Sicherungen" können jetzt mehrere Sicherungen ausgewählt und gemeinsam gelöscht werden
+
 ## v0.99.3
 
 - Internes Aufräumen: app.py (früher ~9100 Zeilen) in über 20 kleinere, nach Fachbereich benannte Dateien aufgeteilt (services/ für Hilfsfunktionen, routes/ für die einzelnen Programmbereiche wie Kegelabende, Kassenbuch, Zinsen, Jahresabschluss, Datensicherung, Berichte). Keine sichtbaren Änderungen für Nutzer - jeder Schritt wurde einzeln gegen die laufende Vereinsdatenbank getestet (alle Seiten, zusätzlich vollständige End-to-End-Tests für Kegelabend-Ablauf, Kassenbuch, Zinsen, Backups, Vereins-Export).

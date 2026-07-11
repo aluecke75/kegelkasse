@@ -432,5 +432,20 @@ Nicht löschen – ggf. für spätere Entwicklungsarbeiten wieder aktivieren.
     });
 })();
 </script>
+
+<script>
+(function () {
+    // Felder mit vorausgefülltem Vorschlagswert (z. B. Bahnkosten): beim ersten
+    // Reinklicken den Vorschlag löschen, damit man nicht erst manuell markieren/
+    // löschen muss. Nur beim allerersten Fokus, damit normales Editieren danach
+    // nicht jedes Mal den Wert leert.
+    document.querySelectorAll(".clear-on-first-focus").forEach(function (field) {
+        field.addEventListener("focus", function handler() {
+            field.value = "";
+            field.removeEventListener("focus", handler);
+        }, { once: true });
+    });
+})();
+</script>
 </body>
 </html>

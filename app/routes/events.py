@@ -1118,7 +1118,9 @@ def event_detail(event_id):
             release_event_lock(event)
             db.session.commit()
             flash(f"Kegelabend wurde abgeschlossen. Barkasse jetzt: {cents_to_euro(account_balance('cash'))} €", "success")
-            return redirect(url_for("event_detail", event_id=event.id))
+            if setting_value("event_closed_confirmation_enabled", "0") == "1":
+                return redirect(url_for("event_detail", event_id=event.id))
+            return redirect(url_for("events"))
 
     participants = EventParticipant.query.filter_by(event_id=event.id).all()
     penalty_types = active_penalty_types()

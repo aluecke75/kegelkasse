@@ -105,6 +105,23 @@ def admin_area():
             flash("Dashboard-Einstellungen wurden gespeichert.", "success")
             return redirect(url_for("admin_area"))
 
+        if form_action == "event_settings":
+            old_value = setting_value("event_closed_confirmation_enabled", "0")
+            new_value = "1" if request.form.get("event_closed_confirmation_enabled") else "0"
+            set_setting_value("event_closed_confirmation_enabled", new_value)
+            audit_log(
+                "settings",
+                "event_settings_updated",
+                "Kegelabend-Ablauf-Einstellungen geändert",
+                details="Abschluss-Bestätigungsseite nach Bahnkosten-Erfassung.",
+                object_type="AppSetting",
+                old_value="an" if old_value == "1" else "aus",
+                new_value="an" if new_value == "1" else "aus",
+            )
+            db.session.commit()
+            flash("Einstellungen wurden gespeichert.", "success")
+            return redirect(url_for("admin_area"))
+
         if form_action == "logo_upload":
             file = request.files.get("logo_file")
             if not file or not file.filename:
@@ -329,6 +346,7 @@ def admin_area():
         logo_filename=logo_path.name if logo_path else None,
         dashboard_card_definitions=DASHBOARD_CARD_DEFINITIONS,
         dashboard_cards=dashboard_card_visibility(),
+        event_closed_confirmation_enabled=setting_value("event_closed_confirmation_enabled", "0") == "1",
     )
 
 

@@ -321,6 +321,25 @@
             </div>
         </div>
     </details>
+
+    <details class="admin-section" data-remember-key="admin-event-flow">
+        <summary>🎳 Kegelabend-Ablauf</summary>
+        <p class="admin-section-intro">Steuert, was nach dem endgültigen Abschließen eines Kegelabends passiert.</p>
+        <div class="admin-section-body">
+            <div class="modern-card">
+                <h2>🎳 Abschluss-Bestätigungsseite</h2>
+                <form method="post" class="settings-form">
+                    <input type="hidden" name="form_action" value="event_settings">
+                    <label class="checkbox-row">
+                        <input type="checkbox" name="event_closed_confirmation_enabled" value="1" {% if event_closed_confirmation_enabled %}checked{% endif %}>
+                        Nach dem Abschließen der Bahnkosten die Bestätigungsseite "Kegelabend abgeschlossen" anzeigen
+                    </label>
+                    <p class="admin-section-intro">Wenn deaktiviert, geht es nach dem Abschließen direkt zurück zur Kegelabend-Übersicht.</p>
+                    <button type="submit">Speichern</button>
+                </form>
+            </div>
+        </div>
+    </details>
 </div>
 
 <style>

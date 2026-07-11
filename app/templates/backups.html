@@ -359,6 +359,25 @@
 
 .backup-file-title {
     min-width: 0;
+    flex: 1;
+}
+
+.backup-file-select {
+    flex: 0 0 auto;
+    padding-top: 2px;
+}
+
+.backup-bulk-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin-bottom: 14px;
+    padding: 10px 12px;
+    border: 1px solid #e5e7eb;
+    border-radius: 12px;
+    background: #fafafa;
 }
 
 .backup-file-title strong {
@@ -816,10 +835,25 @@
                 <p class="backup-card-sub">Vorhandene Sicherungen prüfen, herunterladen, löschen oder bewusst wiederherstellen.</p>
 
                 {% if files %}
+                    <form id="bulkDeleteBackupsForm" method="post" onsubmit="return confirmBulkDeleteBackups();">
+                        <input type="hidden" name="form_action" value="bulk_delete_backups">
+                    </form>
+
+                    <div class="backup-bulk-bar">
+                        <label class="checkbox-row">
+                            <input type="checkbox" id="backupSelectAll">
+                            Alle auswählen
+                        </label>
+                        <button class="btn-danger" type="submit" form="bulkDeleteBackupsForm" id="backupBulkDeleteButton" disabled>🗑 Ausgewählte löschen (<span id="backupSelectedCount">0</span>)</button>
+                    </div>
+
                     <div class="backup-list">
                         {% for file in files %}
                             <article class="backup-file-card">
                                 <div class="backup-file-head">
+                                    <label class="checkbox-row backup-file-select">
+                                        <input type="checkbox" class="backup-select-checkbox" name="selected_files" value="{{ file.name }}" form="bulkDeleteBackupsForm">
+                                    </label>
                                     <div class="backup-file-title">
                                         <strong>{{ file.name }}</strong>
                                         <div class="backup-file-meta">
@@ -910,6 +944,44 @@
     if (enabled) enabled.addEventListener('change', refreshBackupTargetUi);
     if (type) type.addEventListener('change', refreshBackupTargetUi);
     refreshBackupTargetUi();
+})();
+</script>
+
+<script>
+(function () {
+    const selectAll = document.getElementById('backupSelectAll');
+    const checkboxes = Array.prototype.slice.call(document.querySelectorAll('.backup-select-checkbox'));
+    const deleteButton = document.getElementById('backupBulkDeleteButton');
+    const countLabel = document.getElementById('backupSelectedCount');
+    if (!checkboxes.length) return;
+
+    function refresh() {
+        const selected = checkboxes.filter(function (box) { return box.checked; });
+        if (countLabel) countLabel.textContent = selected.length;
+        if (deleteButton) deleteButton.disabled = selected.length === 0;
+        if (selectAll) {
+            selectAll.checked = selected.length === checkboxes.length;
+            selectAll.indeterminate = selected.length > 0 && selected.length < checkboxes.length;
+        }
+    }
+
+    checkboxes.forEach(function (box) {
+        box.addEventListener('change', refresh);
+    });
+    if (selectAll) {
+        selectAll.addEventListener('change', function () {
+            checkboxes.forEach(function (box) { box.checked = selectAll.checked; });
+            refresh();
+        });
+    }
+
+    window.confirmBulkDeleteBackups = function () {
+        const selected = checkboxes.filter(function (box) { return box.checked; });
+        if (!selected.length) return false;
+        return confirm(selected.length + ' ausgewählte Sicherung(en) wirklich löschen?');
+    };
+
+    refresh();
 })();
 </script>
 
