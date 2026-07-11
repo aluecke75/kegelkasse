@@ -27,6 +27,7 @@
         .brand { display:flex; align-items:center; gap:0.55rem; font-weight:800; letter-spacing:0.01em; }
         .brand-badge { width:32px; height:32px; border-radius:10px; display:flex; align-items:center; justify-content:center; background:#1f7a3a; color:white; text-decoration:none; }
         .brand-badge:hover { filter:brightness(1.08); transform:translateY(-1px); }
+        .brand-logo-header { height:32px; width:auto; max-width:120px; border-radius:6px; }
         .brand-version { font-size:0.72rem; font-weight:700; color:#b8d7c1; background:rgba(255,255,255,0.10); border:1px solid rgba(255,255,255,0.12); border-radius:999px; padding:3px 7px; white-space:nowrap; }
         .database-selector { position:relative; display:inline-flex; align-items:center; }
         .database-badge { display:inline-flex; align-items:center; gap:6px; border-radius:999px; padding:5px 10px; border:1px solid rgba(255,255,255,.16); font-size:.78rem; font-weight:800; white-space:nowrap; cursor:pointer; }
@@ -199,6 +200,9 @@ border-left:6px solid #22c55e;
                 <a class="brand-badge" href="{{ url_for('test_database_page') }}" title="Test-Datenbank-Auswahl">🎳</a>
             {% else %}
                 <span class="brand-badge" title="Kegelkasse">🎳</span>
+            {% endif %}
+            {% if has_logo and logo_display_mode in ("header", "header_and_login") %}
+                <img src="{{ url_for('branding_logo') }}?v={{ logo_filename }}" alt="Vereinslogo" class="brand-logo-header">
             {% endif %}
 
             <span>Kegelkasse</span>

@@ -190,6 +190,24 @@ def admin_area():
                 flash("Vereinslogo wurde entfernt.", "success")
             return redirect(url_for("admin_area"))
 
+        if form_action == "logo_display_settings":
+            new_mode = request.form.get("logo_display_mode", "none")
+            if new_mode not in ("none", "header", "header_and_login"):
+                new_mode = "none"
+            old_mode = setting_value("logo_display_mode", "none")
+            set_setting_value("logo_display_mode", new_mode)
+            audit_log(
+                "settings",
+                "logo_display_settings_updated",
+                "Logo-Anzeige geändert",
+                object_type="AppSetting",
+                old_value=old_mode,
+                new_value=new_mode,
+            )
+            db.session.commit()
+            flash("Einstellungen wurden gespeichert.", "success")
+            return redirect(url_for("admin_area"))
+
         if form_action == "create_system_user":
             username = clean_username(request.form.get("new_username", ""))
             email = request.form.get("new_email", "").strip() or None

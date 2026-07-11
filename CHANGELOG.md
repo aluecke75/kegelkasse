@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.99.5
+
+- Vereinslogo: Admin kann jetzt einstellen, ob das hochgeladene Logo (zusätzlich zu PDF-Exporten) auch in der App angezeigt wird - aus, in der Kopfzeile auf allen Seiten, oder in der Kopfzeile und groß auf der Anmeldeseite (Administration → Vereinslogo). Standardmäßig aus, keine Änderung am bisherigen Verhalten ohne Admin-Aktion.
+
 ## v0.99.4
 
 - Bahnkosten-Eingabefeld: der vorgeschlagene Wert wird jetzt beim ersten Reinklicken automatisch geleert, statt manuell markiert/gelöscht werden zu müssen

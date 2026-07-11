@@ -1,6 +1,11 @@
 {% extends "base.html" %}
 {% block content %}
 <div class="auth-wrap">
+    {% if has_logo and logo_display_mode == "header_and_login" %}
+        <div class="auth-logo">
+            <img src="{{ url_for('branding_logo') }}?v={{ logo_filename }}" alt="Vereinslogo">
+        </div>
+    {% endif %}
     <div class="modern-card auth-card">
         <div class="modern-header" style="margin-bottom:12px;">
             <div class="modern-icon">🎳</div>
@@ -38,6 +43,8 @@
 <style>
 .auth-wrap { min-height:55vh; display:grid; grid-template-columns: minmax(280px, 460px); gap:16px; align-items:start; justify-content:center; }
 .auth-card { width:100%; }
+.auth-logo { text-align:center; margin-bottom:4px; }
+.auth-logo img { max-height:110px; max-width:260px; }
 .auth-form { display:grid; gap:10px; }
 .auth-form button { width:100%; max-width:none; }
 .badge-warning { display:inline-block; margin-left:8px; padding:3px 8px; border-radius:999px; background:#fff7ed; border:1px solid #fed7aa; color:#9a3412; font-size:.78rem; font-weight:800; }

@@ -266,7 +266,7 @@
 
     <details class="admin-section" data-remember-key="admin-logo">
         <summary>🖼️ Vereinslogo</summary>
-        <p class="admin-section-intro">Eigenes Logo für PDF-Exporte (Kopfzeile). Wird nur lokal gespeichert, nicht an Dritte übertragen.</p>
+        <p class="admin-section-intro">Eigenes Logo für PDF-Exporte und optional für die App selbst. Wird nur lokal gespeichert, nicht an Dritte übertragen.</p>
         <div class="admin-section-body">
             <div class="modern-card">
                 <h2>🖼️ Vereinslogo</h2>
@@ -295,6 +295,27 @@
                         <input type="file" name="logo_file" accept=".png,.jpg,.jpeg" required>
                     </label>
                     <button type="submit">{{ "Logo ersetzen" if has_logo else "Logo hochladen" }}</button>
+                </form>
+
+                <hr style="margin:20px 0; border:none; border-top:1px solid #e5e7eb;">
+
+                <h2>📍 Wo soll das Logo erscheinen?</h2>
+                <p class="muted">In PDF-Exporten erscheint das Logo immer automatisch. Zusätzlich kann es hier auch in der App selbst angezeigt werden.</p>
+                <form method="post" class="settings-form">
+                    <input type="hidden" name="form_action" value="logo_display_settings">
+                    <label class="checkbox-row">
+                        <input type="radio" name="logo_display_mode" value="none" {% if logo_display_mode == "none" %}checked{% endif %}>
+                        Nirgends zusätzlich (nur in PDF-Exporten, wie bisher)
+                    </label>
+                    <label class="checkbox-row">
+                        <input type="radio" name="logo_display_mode" value="header" {% if logo_display_mode == "header" %}checked{% endif %}>
+                        In der Kopfzeile, auf allen Seiten
+                    </label>
+                    <label class="checkbox-row">
+                        <input type="radio" name="logo_display_mode" value="header_and_login" {% if logo_display_mode == "header_and_login" %}checked{% endif %}>
+                        In der Kopfzeile und groß auf der Anmeldeseite
+                    </label>
+                    <button type="submit">Speichern</button>
                 </form>
             </div>
         </div>

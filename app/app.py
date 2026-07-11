@@ -118,6 +118,16 @@ def inject_database_test_mode():
     }
 
 @app.context_processor
+def inject_branding():
+    logo_path = branding_logo_path()
+    return {
+        "has_logo": logo_path is not None,
+        "logo_filename": logo_path.name if logo_path else None,
+        "logo_display_mode": setting_value("logo_display_mode", "none"),
+    }
+
+
+@app.context_processor
 def inject_active_event_navigation():
     try:
         active_event_nav = (
