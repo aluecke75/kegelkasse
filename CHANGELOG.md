@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.99.11
+
+- Internes: dauerhaftes Testskript `app/tests/run_checks.py` ins Repo aufgenommen (per `docker exec kegelkasse python3 tests/run_checks.py` ausführbar). Prüft neben allen wichtigen Seiten (GET) jetzt auch die wichtigsten schreibenden Abläufe (Konto bearbeiten, Passwort vergessen, Admin-Einstellung ändern, Sicherung erstellen/prüfen/löschen, Kegelabend anlegen/absagen) mit echter Zustandsänderung und räumt sich danach selbst wieder auf. Keine sichtbaren Änderungen für Nutzer - reine Absicherung gegen künftige Regressionen wie den audit_log-Fund in v0.99.9, den ein reiner GET-Test nie gefunden hätte.
+
 ## v0.99.10
 
 - Datensicherung: Verschlüsselung für das zusätzliche Cloud-Ziel (Dropbox/WebDAV/Google Drive/OneDrive), auf Nutzerwunsch mit zwei wählbaren Methoden (Administration → Datensicherung → "Verschlüsselung für Cloud-Sicherungen"):
