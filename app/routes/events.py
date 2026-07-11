@@ -610,7 +610,7 @@ def my_event_data():
 @app.route("/my-stats")
 @login_required
 def my_stats():
-    from app import member_active_years, build_player_overview_rows
+    from routes.reports import member_active_years, build_player_overview_rows
 
     member = current_member_for_user()
     if not member:
