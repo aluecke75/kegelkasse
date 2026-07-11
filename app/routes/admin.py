@@ -351,7 +351,6 @@ def admin_area():
         return redirect(url_for("admin_area"))
 
     users = User.query.order_by(User.username).all()
-    logo_path = branding_logo_path()
     return render_template(
         "admin.html",
         users=users,
@@ -360,8 +359,6 @@ def admin_area():
         reset_tokens=active_password_reset_tokens(),
         mail_settings=mail_settings(),
         mail_settings_summary=mail_settings_summary(),
-        has_logo=logo_path is not None,
-        logo_filename=logo_path.name if logo_path else None,
         dashboard_card_definitions=DASHBOARD_CARD_DEFINITIONS,
         dashboard_cards=dashboard_card_visibility(),
         event_closed_confirmation_enabled=setting_value("event_closed_confirmation_enabled", "0") == "1",

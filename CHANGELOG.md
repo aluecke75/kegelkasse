@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.99.9
+
+Aus einer kompletten Code-Durchsicht der heutigen Session gefunden und behoben:
+
+- Kritischer Fehler behoben: Eigenes Konto bearbeiten (Benutzername/E-Mail/Passwort ändern), "Passwort vergessen" und die Ersteinrichtung (/setup) warfen einen Internal Server Error, sobald tatsächlich eine Änderung gespeichert wurde - eine beim Aufteilen von app.py vergessene Import-Zeile fürs Revisionsprotokoll. Betraf nur diese drei Bereiche, alle anderen Seiten waren nicht betroffen.
+- Jahresabschluss-Einträge im Revisionsprotokoll und Export zeigten Notiz, Bestätigt-von und Bestätigt-am nicht mehr an (beim Aufteilen von app.py versehentlich weggefallen) - wieder ergänzt.
+- Kleine Aufräumarbeiten ohne sichtbare Auswirkung: doppelte Logo-Statusabfrage im Adminbereich entfernt, und "python app.py" direkt starten (falsche Startmethode, die zum in v0.99.6 behobenen Absturz-Bug zurückführen würde) bricht jetzt mit einer klaren Fehlermeldung ab statt einen kaputten Server zu starten.
+
 ## v0.99.8
 
 - Auswertungen → Export: neue Kachel "Kegelabend" für ein druckbares Protokoll eines einzelnen abgeschlossenen Kegelabends (Querformat-PDF) - als Papier-Rückfallebene, falls die App mal nicht erreichbar ist. Vorausgewählt ist immer der zuletzt abgeschlossene Abend, ein gerade laufender oder ausgefallener Abend steht nie zur Auswahl. Enthält Teilnehmerliste mit Anwesenheit, Strafen je Strafart, korrekt verrechnete Endsumme je Person (inkl. Fehlgeld/Gastbeitrag/Rundenanteil), Bahnkosten, Strafensumme, tatsächlichen Barkassenstand direkt nach diesem Abend, Vereinslogo und Unterschriftenzeile.

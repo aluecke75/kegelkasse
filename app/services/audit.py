@@ -126,6 +126,10 @@ def annual_closing_snapshot(closing):
         "Kegelabende ausgefallen": closing.cancelled_event_count,
         "Kegelabende offen": closing.open_event_count,
         "Letzte Kassenprüfung": closing.last_cash_audit.audit_date.isoformat() if closing.last_cash_audit and closing.last_cash_audit.audit_date else "-",
+        "Notiz": closing.note or "",
+        "Bestätigt von": closing.confirmed_by_user.username if getattr(closing, "confirmed_by_user", None) else "",
+        "Bestätigt am": closing.confirmed_at.isoformat() if getattr(closing, "confirmed_at", None) else "",
+        "Prüfernotiz": getattr(closing, "auditor_note", None) or "",
     }
 
 

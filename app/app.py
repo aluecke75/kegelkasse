@@ -235,6 +235,7 @@ from services.settings import (
     sanitized_app_settings_dict,
     get_app_setting,
 )
+from services.audit import audit_log, audit_value
 
 BACKUP_DIR = Path(os.getenv("BACKUP_DIR", "/app/backups"))
 ACTIVE_DATABASE_PROFILE = get_active_database_profile()
@@ -1232,4 +1233,14 @@ with app.app_context():
 
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000)
+    # Bewusst kein app.run() hier: direktes "python app.py" würde app.py unter
+    # dem Modulnamen __main__ statt "app" laden. Jeder spätere "from app import
+    # X" innerhalb eines Request-Handlers (Standardmuster in den routes/*.py-
+    # Dateien) würde app.py dann beim ersten Aufruf ein zweites Mal komplett
+    # neu ausführen und abstürzen (siehe v0.99.6-Bugfix). Start immer über
+    # run.py, das app.py sauber als Modul importiert.
+    raise SystemExit(
+        "Bitte nicht 'python app.py' direkt starten - das reproduziert einen "
+        "bereits behobenen Absturz-Bug. Stattdessen 'python run.py' verwenden "
+        "(im Docker-Image bereits als Standard-Kommando eingerichtet)."
+    )
