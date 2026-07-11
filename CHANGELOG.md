@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.99.6
+
+- Kritischer Fehler behoben: Administration, Kassenbuch, Zinsen, Monatsbeiträge und weitere Bereiche konnten im laufenden Betrieb einen "Internal Server Error" werfen. Ursache war ein technisches Detail aus der Code-Struktur-Aufteilung (v0.99.3): der Programmstart lud app.py unter einem anderen internen Namen, sodass es beim ersten Aufruf einer betroffenen Seite nach dem Serverstart intern doppelt geladen wurde. Jetzt wird die App über einen sauberen Startpunkt geladen, der Fehler kann nicht mehr auftreten.
+
 ## v0.99.5
 
 - Vereinslogo: Admin kann jetzt einstellen, ob das hochgeladene Logo (zusätzlich zu PDF-Exporten) auch in der App angezeigt wird - aus, in der Kopfzeile auf allen Seiten, oder in der Kopfzeile und groß auf der Anmeldeseite (Administration → Vereinslogo). Standardmäßig aus, keine Änderung am bisherigen Verhalten ohne Admin-Aktion.
