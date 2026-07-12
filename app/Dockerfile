@@ -1,11 +1,11 @@
+# syntax=docker/dockerfile:1
 FROM python:3.12-slim AS deps
 
-# DeveloperKit liegt in einem privaten GitHub-Repo. GITHUB_TOKEN wird nur in
-# dieser Build-Stage verwendet, um es zu installieren, und landet dadurch
-# nicht im finalen Image (siehe FROM weiter unten, das nur das fertige venv
-# kopiert, nicht diese Stage). Gleiches Muster wie beim KleinvermieterLotse.
-ARG GITHUB_TOKEN
-ARG DEVELOPERKIT_VERSION=v0.1.9
+# DeveloperKit liegt in einem privaten GitHub-Repo. Der Token wird per
+# BuildKit-Secret eingebunden (--secret id=gh_token beim Build), landet
+# dadurch weder im Image noch in der Build-Historie eines Layers - anders
+# als ein ARG, das dauerhaft in den Layer-Metadaten sichtbar bliebe.
+ARG DEVELOPERKIT_VERSION=v0.1.10
 
 WORKDIR /build
 
@@ -19,7 +19,8 @@ ENV PATH="/opt/venv/bin:$PATH"
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-RUN pip install --no-cache-dir "git+https://${GITHUB_TOKEN}@github.com/aluecke75/DeveloperKit.git@${DEVELOPERKIT_VERSION}#egg=developerkit"
+RUN --mount=type=secret,id=gh_token \
+    pip install --no-cache-dir "git+https://$(cat /run/secrets/gh_token)@github.com/aluecke75/DeveloperKit.git@${DEVELOPERKIT_VERSION}#egg=developerkit"
 
 
 FROM python:3.12-slim

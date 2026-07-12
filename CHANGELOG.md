@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.99.14
+
+- Beim Deploy von v0.99.13 gegen die echte Vereinsdatenbank gefunden: die bereits vorhandenen 9 Sicherungen (im alten Dateinamensformat) tauchten nach der Umstellung in der neuen Backup-Übersicht nicht mehr auf - über den Dateipfad wären sie zwar weiterhin wiederherstellbar gewesen, aber unsichtbar. Behoben in DeveloperKit v0.1.10 (`DEVELOPERKIT_VERSION` entsprechend angehoben).
+
 ## v0.99.13
 
 - **Datensicherung auf das gemeinsame DeveloperKit-Backup-Modul umgestellt.** Die allgemeine Datensicherung (lokale Sicherungen, automatische Zeitplanung, Cloud-Ziele, Verschlüsselung) läuft jetzt über dasselbe, auch von KleinvermieterLotse genutzte Modul statt über eigenständigen Kegelkasse-Code - neu erreichbar unter Administration → Datensicherung (`/verwaltung/backups`, vorher `/backups`). Bestehende Backup-Einstellungen (Zeitplan, Cloud-Zugangsdaten, Verschlüsselung) wurden automatisch übernommen, bereits vorhandene Sicherungs-ZIPs im alten Format bleiben lesbar und wiederherstellbar - kein Datenverlust-Risiko beim Umstieg.

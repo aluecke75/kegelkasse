@@ -8,8 +8,9 @@ services:
       context: ./app
       dockerfile: Dockerfile
       args:
-        GITHUB_TOKEN: ${GITHUB_TOKEN}
-        DEVELOPERKIT_VERSION: ${DEVELOPERKIT_VERSION:-v0.1.9}
+        DEVELOPERKIT_VERSION: ${DEVELOPERKIT_VERSION:-v0.1.10}
+      secrets:
+        - gh_token
 
     init: true
 
@@ -47,3 +48,7 @@ services:
       timeout: 10s
       retries: 3
       start_period: 30s
+
+secrets:
+  gh_token:
+    environment: GITHUB_TOKEN
