@@ -1,6 +1,6 @@
 # Roadmap
 
-Stand: 2026-07-09. Aktueller Gesamtstatus: siehe [PROJECT_STATUS.md](PROJECT_STATUS.md).
+Stand: 2026-07-12. Aktueller Gesamtstatus: siehe [PROJECT_STATUS.md](PROJECT_STATUS.md).
 
 ## Priorisierte offene Arbeiten (Vereinsversion)
 
@@ -49,20 +49,22 @@ Stand: 2026-07-09. Aktueller Gesamtstatus: siehe [PROJECT_STATUS.md](PROJECT_STA
 9. **Dokumentenverwaltung** — ✅ bereits vollständig, am 2026-07-09 geprüft und bestätigt
    - Upload (Titel, Kategorie, Datum, Beschreibung), Verknüpfung mit Kegelabend oder Kassenbuch-Eintrag, Vorschau (bild-/PDF-/textbasiert je nach Typ), Download, Archivieren/Wiederherstellen, Suche/Filter — alles mit echten Daten getestet (18 vorhandene Dokumente)
 
-10. **Backup-Modul** — ✅ abgeschlossen (2026-07-09)
+10. **Backup-Modul** — ✅ abgeschlossen (2026-07-09), seither weiter ausgebaut
     - "Backup jetzt", Wiederherstellung (mit automatischer Sicherheitskopie vorher + Bestätigungscode) und Zeitplanung (täglich/wöchentlich/monatlich mit Aufbewahrungsregeln) waren bereits vollständig
-    - Externe Ziele: WebDAV/Nextcloud war schon fertig (deckt auch NAS-Systeme ab, z. B. Synology). Neu: Dropbox, Google Drive und OneDrive per OAuth2 angebunden (App-Key/Secret bzw. Client-ID/Secret durch Admin selbst hinterlegbar, Verbinden/Trennen per Klick, automatischer Token-Refresh). Echter Verbindungstest steht noch aus, bis reale Zugangsdaten (eigene App bei Dropbox/Google/Microsoft) hinterlegt werden.
+    - Externe Ziele: WebDAV/Nextcloud war schon fertig (deckt auch NAS-Systeme ab, z. B. Synology). Dropbox, Google Drive und OneDrive per OAuth2 angebunden (App-Key/Secret bzw. Client-ID/Secret durch Admin selbst hinterlegbar, Verbinden/Trennen per Klick, automatischer Token-Refresh) — "Verbinden" speichert seit v0.99.7 automatisch mit, vorher gingen unsaved Zugangsdaten dabei verloren. Echter Verbindungstest mit realen Dropbox/Google/Microsoft-Zugangsdaten steht weiterhin aus (der Upload-Pfad selbst wurde in v0.99.10 aber ausführlich gegen einen lokalen Test-Server verifiziert).
+    - **Neu (v0.99.10):** Verschlüsselung der Cloud-Backup-Kopie, Admin wählt zwischen Schlüsselpaar (kein Passwort nötig) oder Passwort. Lokale Sicherungen bleiben bewusst unverschlüsselt.
+    - **Neu (v0.99.8):** druckbares Kegelabend-Protokoll (PDF) als Papier-Rückfallebene für einen einzelnen abgeschlossenen Abend.
 
-11. **Öffentliche Version** (nach Vereinsversion)
-    - Einrichtungsassistent
-    - Branding (Logo, Farben)
-    - E-Mail-Konfiguration (SMTP)
-    - Admin ohne Vereinsmitgliedschaft
-    - Import-/Export-Assistent
-    - Testmodus mit Demo-Datenbank
-    - Cloud-Backups
-    - Rechteverwaltung
-    - Dokumentation
+11. **Öffentliche Version** (nach Vereinsversion) — mehrere Bausteine existieren durch die Vereinsversion inzwischen bereits, verbleibender Aufwand dadurch kleiner als die Liste suggeriert:
+    - Einrichtungsassistent — ✅ existiert bereits (`/setup`), noch nicht für Mehrmandantenbetrieb gedacht
+    - Branding (Logo, Farben) — ✅ Logo-Upload + admin-konfigurierbare Anzeige existieren bereits (v0.99.5); Farben noch offen
+    - E-Mail-Konfiguration (SMTP) — ✅ existiert bereits (Administration → SMTP-Einstellungen)
+    - Admin ohne Vereinsmitgliedschaft — noch offen
+    - Import-/Export-Assistent — Vereins-Export/-Import existiert bereits, "Assistent"-Charakter (mehrstufig geführt) noch offen
+    - Testmodus mit Demo-Datenbank — ✅ existiert bereits (Test-Datenbank-Umschalter)
+    - Cloud-Backups — ✅ existiert bereits, seit v0.99.10 sogar mit optionaler Verschlüsselung
+    - Rechteverwaltung — Rollenmodell existiert, Mehrmandanten-/Fremdadmin-Aspekt noch offen
+    - Dokumentation — noch offen
 
 Siehe auch [PUBLIC_RELEASE_TODO.md](../PUBLIC_RELEASE_TODO.md) für die "Muss vor 1.0"-Kurzliste.
 

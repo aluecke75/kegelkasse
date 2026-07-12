@@ -1,6 +1,6 @@
 # Projektstatus
 
-Stand: 2026-07-09
+Stand: 2026-07-12
 
 ## Überblick
 
@@ -44,6 +44,14 @@ Kegelkasse ist von einer einfachen Vereinskasse zu einer vollständigen Vereinsv
 
 ## Versionsstand
 
-**Vereinsversion: ca. 97–98 %.** Kernfunktionen praktisch vollständig. Fokus liegt jetzt auf Feinschliff, Tests, Stabilität und Komfortfunktionen.
+**Vereinsversion: inhaltlich fertig (aktuell v0.99.11).** Von den 11 priorisierten Restarbeiten aus der Roadmap sind 10 vollständig abgeschlossen, nur ein kleinerer Punkt beim Revisionsprotokoll ist noch offen (siehe [ROADMAP.md](ROADMAP.md)).
 
-Details zu den priorisierten Restarbeiten: siehe [ROADMAP.md](ROADMAP.md).
+Seit dem letzten Stand (2026-07-09) kam vor allem hinzu:
+
+- **Code-Struktur grundlegend überarbeitet:** `app.py` war auf ~9100 Zeilen angewachsen und wurde vollständig in `services/` (reine Hilfsfunktionen) und `routes/` (Routen je Fachbereich) aufgeteilt — bewusst ohne Flask-Blueprints, damit alle Endpoint-Namen/`url_for()`-Aufrufe unverändert bleiben.
+- **Verschlüsselung für Cloud-Backup-Kopien:** neu, mit zwei wählbaren Methoden (Schlüsselpaar ohne Passwort, oder klassisches Passwort) — nur die Kopie am externen Backup-Ziel wird verschlüsselt, lokale Sicherungen bleiben unverändert sofort wiederherstellbar. Erste echte Abhängigkeit über den Flask-Stack hinaus (`cryptography`).
+- **Kegelabend-Protokoll als PDF:** druckbares Querformat-Dokument für einen einzelnen abgeschlossenen Kegelabend, als Papier-Rückfallebene falls die App mal nicht erreichbar ist.
+- Diverse Bugfixes (u. a. zwei kritische Abstürze, die erst durch systematische Code-Durchsicht bzw. echte Schreib-Tests gefunden wurden) und kleinere UX-Verbesserungen (Vereinslogo admin-konfigurierbar anzeigbar, Backup-Sammellöschen, Dropbox/Google Drive/OneDrive-Verbindung repariert).
+- **Dauerhaftes Testskript** (`app/tests/run_checks.py`) ins Repo aufgenommen, das neben allen wichtigen Seiten auch die wichtigsten schreibenden Abläufe mit echter Zustandsänderung prüft.
+
+Details zu allen Versionen: siehe [CHANGELOG.md](../CHANGELOG.md).
