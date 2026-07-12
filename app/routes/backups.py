@@ -1092,17 +1092,13 @@ def maybe_create_scheduled_backup():
             due = (now.year, now.month) != (last_date.year, last_date.month)
 
         if due:
-            backup = create_database_backup(kind="auto")
+            # Bewusst kein audit_log() für den Routine-Erfolgsfall - die Sicherung
+            # selbst ist in der Sicherungsliste sichtbar, ein täglicher/wöchentlicher
+            # Revisionsprotokoll-Eintrag dafür wäre die größte Rausch-Quelle im
+            # Protokoll ohne echten zusätzlichen Beweiswert.
+            create_database_backup(kind="auto")
             set_setting_value("backup_last_auto", now.isoformat(timespec="seconds"))
             cleanup_old_backups()
-            audit_log(
-                "Datensicherung",
-                "auto_backup_created",
-                "Automatische Sicherung erstellt",
-                details=f"Automatische Sicherung erstellt: {backup.name}",
-                object_type="Backup",
-                new_value=backup.name,
-            )
             db.session.commit()
     except Exception:
         db.session.rollback()

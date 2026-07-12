@@ -46,6 +46,34 @@
     </form>
 </div>
 
+{% if current_user.role == "admin" %}
+<details class="modern-card" data-remember-key="audit-log-cleanup">
+    <summary>🧹 Revisionsprotokoll bereinigen</summary>
+    <div style="margin-top:14px;">
+        <p class="muted">
+            Betrifft nur operative Kategorien ({{ retention_eligible_categories | join(", ") }}).
+            Finanziell/rechtlich relevante Einträge (Finanzen, Kegelabende, Mitglieder, Einstellungen, Strafarten,
+            Jahresabschluss, Dokumente, Zinsen) bleiben von der Frist immer unberührt.
+        </p>
+        <form method="post" class="settings-form">
+            <input type="hidden" name="form_action" value="audit_log_retention_settings">
+            <label>
+                Aufbewahrungsfrist
+                <select name="audit_log_retention_days">
+                    <option value="0" {% if retention_days == 0 %}selected{% endif %}>Nie automatisch löschen</option>
+                    <option value="90" {% if retention_days == 90 %}selected{% endif %}>90 Tage</option>
+                    <option value="180" {% if retention_days == 180 %}selected{% endif %}>180 Tage</option>
+                    <option value="365" {% if retention_days == 365 %}selected{% endif %}>1 Jahr</option>
+                    <option value="730" {% if retention_days == 730 %}selected{% endif %}>2 Jahre</option>
+                    <option value="1825" {% if retention_days == 1825 %}selected{% endif %}>5 Jahre</option>
+                </select>
+            </label>
+            <button type="submit">Speichern</button>
+        </form>
+    </div>
+</details>
+{% endif %}
+
 {% if object_filter_label %}
 <div class="info-box">
     <div>🔎</div>
@@ -64,9 +92,27 @@
         </div>
     </div>
 
+    {% if current_user.role == "admin" and entries %}
+        <form id="auditBulkDeleteForm" method="post" onsubmit="return confirmAuditBulkDelete();">
+            <input type="hidden" name="form_action" value="audit_log_delete_entries">
+        </form>
+        <div class="audit-bulk-bar">
+            <label class="checkbox-row">
+                <input type="checkbox" id="auditSelectAll">
+                Alle auswählen
+            </label>
+            <button class="btn-danger" type="submit" form="auditBulkDeleteForm" id="auditBulkDeleteButton" disabled>🗑 Ausgewählte löschen (<span id="auditSelectedCount">0</span>)</button>
+        </div>
+    {% endif %}
+
     <div class="audit-list">
         {% for entry in entries %}
             <article class="audit-item">
+                {% if current_user.role == "admin" %}
+                    <label class="checkbox-row audit-select">
+                        <input type="checkbox" class="audit-select-checkbox" name="selected_entries" value="{{ entry.id }}" form="auditBulkDeleteForm">
+                    </label>
+                {% endif %}
                 <div class="audit-time">{{ entry.created_at.strftime('%d.%m.%Y %H:%M:%S') if entry.created_at else '' }}</div>
                 <div class="audit-main">
                     <div class="audit-title-row">
@@ -125,12 +171,52 @@
 })();
 </script>
 
+<script>
+(function () {
+    const selectAll = document.getElementById('auditSelectAll');
+    const checkboxes = Array.prototype.slice.call(document.querySelectorAll('.audit-select-checkbox'));
+    const deleteButton = document.getElementById('auditBulkDeleteButton');
+    const countLabel = document.getElementById('auditSelectedCount');
+    if (!checkboxes.length) return;
+
+    function refresh() {
+        const selected = checkboxes.filter(function (box) { return box.checked; });
+        if (countLabel) countLabel.textContent = selected.length;
+        if (deleteButton) deleteButton.disabled = selected.length === 0;
+        if (selectAll) {
+            selectAll.checked = selected.length === checkboxes.length;
+            selectAll.indeterminate = selected.length > 0 && selected.length < checkboxes.length;
+        }
+    }
+
+    checkboxes.forEach(function (box) {
+        box.addEventListener('change', refresh);
+    });
+    if (selectAll) {
+        selectAll.addEventListener('change', function () {
+            checkboxes.forEach(function (box) { box.checked = selectAll.checked; });
+            refresh();
+        });
+    }
+
+    window.confirmAuditBulkDelete = function () {
+        const selected = checkboxes.filter(function (box) { return box.checked; });
+        if (!selected.length) return false;
+        return confirm(selected.length + ' ausgewählte Revisionsprotokoll-Eintrag/Einträge wirklich löschen?');
+    };
+
+    refresh();
+})();
+</script>
+
 <style>
 .audit-modern-filter { display:grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap:14px; align-items:end; }
 .audit-filter-buttons { grid-column: 1 / -1; }
 .audit-filter-buttons { padding-bottom:4px; }
 .audit-list { display:grid; gap:12px; }
-.audit-item { display:grid; grid-template-columns:170px 1fr; gap:14px; padding:14px; border:1px solid var(--line); border-radius:16px; background:#fbfcfd; }
+.audit-item { display:grid; grid-template-columns:auto 170px 1fr; gap:14px; padding:14px; border:1px solid var(--line); border-radius:16px; background:#fbfcfd; align-items:start; }
+.audit-select { padding-top:2px; }
+.audit-bulk-bar { display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; margin-bottom:14px; padding:10px 12px; border:1px solid #e5e7eb; border-radius:12px; background:#fafafa; }
 .audit-time { color:var(--muted); font-weight:700; font-size:0.9rem; }
 .audit-title-row { display:flex; gap:10px; flex-wrap:wrap; align-items:center; justify-content:space-between; }
 .audit-badge { border-radius:999px; background:var(--green-soft); color:var(--green); padding:4px 9px; font-size:0.82rem; font-weight:800; }

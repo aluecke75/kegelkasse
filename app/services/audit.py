@@ -1,12 +1,64 @@
 """Revisionsprotokoll: Schreiben von Änderungsvermerken (audit_log) sowie
 Formatierungs-/Snapshot-Helfer für Vorher/Nachher-Anzeigen."""
 import re
+from datetime import datetime, timedelta
 
 from flask_login import current_user
 
 from extensions import app
 from models import db, AuditLog
 from services.money import cents_to_euro
+
+# Kategorien, die für die automatische Aufbewahrungsfrist (Revisionsprotokoll
+# bereinigen) infrage kommen - rein operative Meldungen ohne dauerhaften
+# Beweiswert für eine Kassenprüfung. Finanziell/rechtlich relevante Kategorien
+# (finance, event, member, settings, penalty_type, annual_closing, Dokumente,
+# interest) sind bewusst NICHT enthalten und bleiben von der Automatik immer
+# unberührt, unabhängig vom Alter - es gibt keine zuverlässige Verknüpfung
+# zwischen einem Revisionsprotokoll-Eintrag und einem abgeschlossenen
+# Geschäftsjahr, deshalb lieber grundsätzlich ausnehmen als riskieren.
+RETENTION_ELIGIBLE_CATEGORIES = {"Datensicherung", "system", "Vereins-Import", "Vereins-Export"}
+
+
+def count_old_audit_log_entries(retention_days):
+    """Wie cleanup_old_audit_log_entries(), zählt aber nur, ohne zu löschen.
+
+    Wichtig für Aufrufer, die selbst noch einen "X Einträge gelöscht"-
+    Revisionsprotokoll-Eintrag schreiben wollen: der muss VOR dem
+    tatsächlichen Löschen erzeugt werden (siehe cleanup_old_audit_log_entries).
+    """
+    if not retention_days or retention_days <= 0:
+        return 0
+    cutoff = datetime.utcnow() - timedelta(days=retention_days)
+    return AuditLog.query.filter(
+        AuditLog.category.in_(RETENTION_ELIGIBLE_CATEGORIES),
+        AuditLog.created_at < cutoff,
+    ).count()
+
+
+def cleanup_old_audit_log_entries(retention_days):
+    """Löscht Revisionsprotokoll-Einträge aus den "operativen" Kategorien
+    (siehe RETENTION_ELIGIBLE_CATEGORIES), die älter als retention_days sind.
+
+    Committet NICHT selbst - Aufrufer ist dafür verantwortlich. Gibt die
+    Anzahl gelöschter Zeilen zurück.
+
+    Wer danach noch selbst einen audit_log()-Eintrag für diese Bereinigung
+    schreiben will, MUSS das VOR diesem Aufruf tun (siehe
+    count_old_audit_log_entries): die Tabelle nutzt SQLite-Rowids ohne
+    AUTOINCREMENT, die nach dem Löschen der zuvor höchsten ID sofort wieder
+    vergeben werden - ein danach eingefügter Eintrag würde sonst exakt die ID
+    einer gerade gelöschten Zeile "erben" und beim Nachschlagen wie ein nie
+    gelöschter Eintrag aussehen.
+    """
+    if not retention_days or retention_days <= 0:
+        return 0
+    cutoff = datetime.utcnow() - timedelta(days=retention_days)
+    deleted = AuditLog.query.filter(
+        AuditLog.category.in_(RETENTION_ELIGIBLE_CATEGORIES),
+        AuditLog.created_at < cutoff,
+    ).delete(synchronize_session=False)
+    return deleted
 
 
 def audit_value(value):

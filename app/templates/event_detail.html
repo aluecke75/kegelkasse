@@ -93,6 +93,31 @@
         box-shadow: var(--shadow);
     }
 
+    /* Zweite, am unteren Bildschirmrand "klebende" Scrollleiste: bei einer
+       langen Teilnehmerliste sitzt die eigentliche Scrollleiste der Tabelle
+       sonst erst ganz unten nach der letzten Zeile - man müsste immer erst
+       komplett runterscrollen, um sie zu erreichen. Diese hier bleibt
+       stattdessen am unteren Fensterrand sichtbar, solange die Tabelle im
+       Bild ist, und wird per JS mit der echten Tabelle synchronisiert. */
+    .sticky-hscroll {
+        position: sticky;
+        bottom: 0;
+        z-index: 5;
+        overflow-x: auto;
+        overflow-y: hidden;
+        height: 14px;
+        margin-top: -2px;
+        display: none;
+    }
+    /* Nur auf breiteren Bildschirmen aktiv - unter 760px hat .event-table-wrap
+       bereits eine eigene begrenzte Höhe mit eigener, immer erreichbarer
+       Scrollleiste (siehe @media max-width:760px weiter unten), da wäre diese
+       zusätzliche Leiste nur doppelt gemoppelt. */
+    @media (min-width: 761px) {
+        .sticky-hscroll.visible { display: block; }
+    }
+    #stickyHscrollInner { height: 1px; }
+
     .event-table {
         width: 100%;
         min-width: 940px;
@@ -783,7 +808,7 @@
 
 <form method="post" id="eventForm" enctype="multipart/form-data" data-event-status="{{ event.status }}">
     {% if event.status not in ["settlement", "lane_cost"] %}
-    <div class="event-table-wrap">
+    <div class="event-table-wrap" id="eventTableWrap">
         <table class="event-table">
             <thead>
                 <tr>
@@ -882,6 +907,9 @@
                 {% endfor %}
             </tbody>
         </table>
+    </div>
+    <div class="sticky-hscroll" id="stickyHscroll">
+        <div id="stickyHscrollInner"></div>
     </div>
     {% endif %}
 
@@ -1644,6 +1672,39 @@ if (!editingManualAmount) {
     updateTotals();
     updateSettlementRest();
     updateLaneCostPreview();
+})();
+</script>
+
+<script>
+(function () {
+    const tableWrap = document.getElementById('eventTableWrap');
+    const stickyBar = document.getElementById('stickyHscroll');
+    const stickyInner = document.getElementById('stickyHscrollInner');
+    if (!tableWrap || !stickyBar || !stickyInner) return;
+
+    let syncing = false;
+
+    function refresh() {
+        const needsScroll = tableWrap.scrollWidth > tableWrap.clientWidth + 1;
+        stickyBar.classList.toggle('visible', needsScroll);
+        stickyInner.style.width = tableWrap.scrollWidth + 'px';
+    }
+
+    tableWrap.addEventListener('scroll', function () {
+        if (syncing) return;
+        syncing = true;
+        stickyBar.scrollLeft = tableWrap.scrollLeft;
+        syncing = false;
+    });
+    stickyBar.addEventListener('scroll', function () {
+        if (syncing) return;
+        syncing = true;
+        tableWrap.scrollLeft = stickyBar.scrollLeft;
+        syncing = false;
+    });
+
+    window.addEventListener('resize', refresh);
+    refresh();
 })();
 </script>
 {% endblock %}

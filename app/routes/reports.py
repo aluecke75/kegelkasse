@@ -2,7 +2,7 @@
 from datetime import datetime, timedelta
 
 from flask import request, flash, redirect, url_for, render_template, Response
-from flask_login import login_required
+from flask_login import login_required, current_user
 from sqlalchemy import or_
 
 from extensions import app
@@ -10,7 +10,8 @@ from auth import role_required
 from models import db, Member, BowlingEvent, EventParticipant, ParticipantPenalty, PenaltyType, MemberPenaltyTransaction, AccountTransaction, CashbookEntry, AnnualClosing, AuditLog
 from services.dates import _month_label, _last_n_months
 from services.money import cents_to_euro
-from services.audit import audit_log, audit_object_label, annual_closing_snapshot
+from services.audit import audit_log, audit_object_label, annual_closing_snapshot, cleanup_old_audit_log_entries, count_old_audit_log_entries, RETENTION_ELIGIBLE_CATEGORIES
+from services.settings import setting_value, set_setting_value, safe_int_setting
 from services.export import export_filename, export_response, export_headers
 from services.pdf import _PDF_PAGE_WIDTH, _pdf_text_cmd, _pdf_page_header_cmds, _pdf_footer_cmds, _pdf_assemble, get_logo_pdf_image
 from routes.cashbook import account_balance, cashbook_export_rows
@@ -726,10 +727,70 @@ def exports_download():
     return export_response(rows, headers, export_type, fmt, title)
 
 
-@app.route("/audit-log")
+@app.route("/audit-log", methods=["GET", "POST"])
 @login_required
 @role_required("admin", "cashier", "auditor")
 def audit_log_page():
+    if request.method == "POST":
+        if current_user.role != "admin":
+            flash("Nur Admins können das Revisionsprotokoll bereinigen.", "danger")
+            return redirect(url_for("audit_log_page"))
+
+        form_action = request.form.get("form_action", "")
+
+        if form_action == "audit_log_retention_settings":
+            old_value = safe_int_setting("audit_log_retention_days", 0, 0)
+            try:
+                new_value = int(request.form.get("audit_log_retention_days", "0") or "0")
+            except ValueError:
+                new_value = 0
+            if new_value not in (0, 90, 180, 365, 730, 1825):
+                new_value = 0
+            set_setting_value("audit_log_retention_days", str(new_value))
+            audit_log(
+                "system",
+                "audit_log_retention_changed",
+                "Aufbewahrungsfrist fürs Revisionsprotokoll geändert",
+                object_type="AppSetting",
+                old_value=f"{old_value} Tage" if old_value else "aus",
+                new_value=f"{new_value} Tage" if new_value else "aus",
+            )
+            db.session.commit()
+            flash("Aufbewahrungsfrist wurde gespeichert.", "success")
+            return redirect(url_for("audit_log_page"))
+
+        if form_action == "audit_log_delete_entries":
+            try:
+                selected_ids = [int(value) for value in request.form.getlist("selected_entries")]
+            except ValueError:
+                selected_ids = []
+            if not selected_ids:
+                flash("Es wurde kein Eintrag zum Löschen ausgewählt.", "warning")
+                return redirect(url_for("audit_log_page"))
+
+            # Reihenfolge wichtig: erst zählen/loggen, dann löschen. Die
+            # audit_logs-Tabelle nutzt SQLite-Rowids ohne AUTOINCREMENT - ein
+            # NACH dem Löschen eingefügter Log-Eintrag würde sonst sofort die
+            # ID der gerade gelöschten (höchsten) Zeile wiederverwenden und
+            # beim Nachschlagen wie ein nie gelöschter Eintrag aussehen.
+            matched_ids = [
+                row.id for row in AuditLog.query.filter(AuditLog.id.in_(selected_ids)).all()
+            ]
+            audit_log(
+                "system",
+                "audit_log_entries_deleted",
+                f"{len(matched_ids)} Revisionsprotokoll-Eintrag(e) manuell gelöscht",
+                object_type="AuditLog",
+            )
+            if matched_ids:
+                AuditLog.query.filter(AuditLog.id.in_(matched_ids)).delete(synchronize_session=False)
+            db.session.commit()
+            flash(f"{len(matched_ids)} Eintrag(e) wurden gelöscht.", "success")
+            return redirect(url_for("audit_log_page"))
+
+        flash("Unbekannte Aktion.", "danger")
+        return redirect(url_for("audit_log_page"))
+
     category = request.args.get("category", "").strip()
     user = request.args.get("user", "").strip()
     q = request.args.get("q", "").strip()
@@ -783,8 +844,12 @@ def audit_log_page():
         ("member", "Mitglieder"),
         ("penalty_type", "Strafarten"),
         ("settings", "Einstellungen"),
-        ("documents", "Dokumente"),
-        ("backup", "Backups"),
+        ("annual_closing", "Jahresabschluss"),
+        ("interest", "Zinsen"),
+        ("Dokumente", "Dokumente"),
+        ("Datensicherung", "Datensicherung"),
+        ("Vereins-Import", "Vereins-Import"),
+        ("Vereins-Export", "Vereins-Export"),
         ("system", "System"),
     ]
     users = [row[0] for row in db.session.query(AuditLog.username).filter(AuditLog.username.isnot(None)).distinct().order_by(AuditLog.username).all()]
@@ -799,4 +864,45 @@ def audit_log_page():
         date_from=date_from,
         date_to=date_to,
         object_filter_label=audit_object_label(object_type, object_id) if object_id else None,
+        retention_days=safe_int_setting("audit_log_retention_days", 0, 0),
+        retention_eligible_categories=sorted(RETENTION_ELIGIBLE_CATEGORIES),
     )
+
+
+@app.before_request
+def maybe_cleanup_audit_log():
+    # Sehr leichte eingebaute Automatik, gleiches Muster wie
+    # maybe_create_scheduled_backup() in routes/backups.py: läuft höchstens
+    # einmal täglich, beim ersten Request nach Mitternacht.
+    if request.endpoint == "static":
+        return
+    try:
+        retention_days = safe_int_setting("audit_log_retention_days", 0, 0)
+        if not retention_days:
+            return
+
+        last_value = setting_value("audit_log_last_cleanup", "") or ""
+        today = datetime.now().date()
+        if last_value:
+            try:
+                if datetime.fromisoformat(last_value).date() >= today:
+                    return
+            except ValueError:
+                pass
+
+        # Erst zählen/loggen, dann löschen - siehe Kommentar bei
+        # cleanup_old_audit_log_entries() zum SQLite-Rowid-Wiederverwendungs-Risiko.
+        pending = count_old_audit_log_entries(retention_days)
+        if pending:
+            audit_log(
+                "system",
+                "audit_log_cleanup",
+                f"{pending} alte Revisionsprotokoll-Eintrag(e) automatisch gelöscht",
+                details=f"Aufbewahrungsfrist: {retention_days} Tage",
+                object_type="AuditLog",
+            )
+        cleanup_old_audit_log_entries(retention_days)
+        set_setting_value("audit_log_last_cleanup", datetime.now().isoformat(timespec="seconds"))
+        db.session.commit()
+    except Exception:
+        db.session.rollback()

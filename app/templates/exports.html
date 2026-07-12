@@ -18,7 +18,7 @@
 </div>
 
 <div class="section-grid">
-    <section class="modern-card">
+    <section class="modern-card export-card">
         <div class="modern-header">
             <div class="modern-icon">📒</div>
             <div>
@@ -58,7 +58,7 @@
         </form>
     </section>
 
-    <section class="modern-card">
+    <section class="modern-card export-card">
         <div class="modern-header">
             <div class="modern-icon">👥</div>
             <div>
@@ -91,7 +91,7 @@
         </form>
     </section>
 
-    <section class="modern-card">
+    <section class="modern-card export-card">
         <div class="modern-header">
             <div class="modern-icon">⚖️</div>
             <div>
@@ -116,7 +116,7 @@
         </form>
     </section>
 
-    <section class="modern-card">
+    <section class="modern-card export-card">
         <div class="modern-header">
             <div class="modern-icon">📰</div>
             <div>
@@ -148,7 +148,7 @@
         </form>
     </section>
 
-    <section class="modern-card">
+    <section class="modern-card export-card">
         <div class="modern-header">
             <div class="modern-icon">🎳</div>
             <div>
@@ -179,7 +179,7 @@
         {% endif %}
     </section>
 
-    <section class="modern-card">
+    <section class="modern-card export-card">
         <div class="modern-header">
             <div class="modern-icon">📅</div>
             <div>
@@ -212,7 +212,7 @@
         </form>
     </section>
 
-    <section class="modern-card">
+    <section class="modern-card export-card">
         <div class="modern-header">
             <div class="modern-icon">📊</div>
             <div>
@@ -245,7 +245,7 @@
         </form>
     </section>
 
-    <section class="modern-card">
+    <section class="modern-card export-card">
         <div class="modern-header">
             <div class="modern-icon">🔎</div>
             <div>
@@ -278,7 +278,7 @@
         </form>
     </section>
 
-    <section class="modern-card">
+    <section class="modern-card export-card">
         <div class="modern-header">
             <div class="modern-icon">📈</div>
             <div>
@@ -311,7 +311,7 @@
         </form>
     </section>
 
-    <section class="modern-card">
+    <section class="modern-card export-card">
         <div class="modern-header">
             <div class="modern-icon">✅</div>
             <div>
@@ -324,4 +324,12 @@
     </section>
 </div>
 
+<style>
+/* Alle Export-Karten gleich hoch (section-grid streckt sie ohnehin) und den
+   grünen "...exportieren"/"...erstellen"-Button jeweils bündig unten
+   ausrichten, unabhängig davon wie viele Felder eine Karte hat. */
+.export-card { display: flex; flex-direction: column; }
+.export-card form { display: flex; flex-direction: column; flex: 1; }
+.export-card .inline-actions { margin-top: auto; padding-top: 12px; }
+</style>
 {% endblock %}

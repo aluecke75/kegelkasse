@@ -200,6 +200,28 @@
     color: #1e3a8a;
 }
 
+.info-toggle {
+    grid-column: 1 / -1;
+    margin-bottom: 10px;
+}
+.info-toggle summary {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    background: #eff6ff;
+    color: #1e3a8a;
+    border: 1px solid #bfdbfe;
+    font-weight: 800;
+    font-size: 0.78rem;
+    cursor: pointer;
+    list-style: none;
+}
+.info-toggle summary::-webkit-details-marker { display: none; }
+.info-toggle .info-box { margin: 8px 0 0; }
+
 .tip-box {
     background: #fffbeb;
     border: 1px solid #fde68a;
@@ -671,11 +693,6 @@
                     <details data-remember-key="backups-second-target">
                         <summary><strong>☁ Zweites Backup-Ziel / WebDAV vorbereiten</strong></summary>
 
-                        <div class="tip-box">
-                            <strong>💡</strong>
-                            <div>Für Nextcloud/WebDAV am besten ein App-Passwort verwenden.</div>
-                        </div>
-
                         <label class="checkbox-row">
                             <input id="backupExtraTargetEnabled" type="checkbox" name="backup_extra_target_enabled" value="1" {% if settings.extra_target_enabled %}checked{% endif %}>
                             Zusätzliches zweites Backup-Ziel aktivieren
@@ -695,6 +712,17 @@
                             <p class="backup-target-hint">Erst Zielart auswählen, danach werden die passenden Zugangsdaten angezeigt.</p>
 
                             <div id="backupFieldsWebdav" class="backup-target-fields">
+                                <details class="info-toggle">
+                                    <summary title="Hinweise anzeigen">ⓘ</summary>
+                                    <div class="info-box">
+                                        <strong>ℹ️</strong>
+                                        <div>
+                                            Funktioniert mit jedem WebDAV-Server, z. B. Nextcloud/ownCloud oder direkt einer Synology per WebDAV.
+                                            Am besten ein eigenes App-Passwort verwenden statt des normalen Kontopassworts.
+                                            Beispiel-URL: <code>https://cloud.example.de/remote.php/dav/files/benutzer/Kegelkasse-Backups</code>.
+                                        </div>
+                                    </div>
+                                </details>
                                 <label style="grid-column:1 / -1;">
                                     WebDAV-/Nextcloud-URL
                                     <input class="backup-path-input" type="url" name="backup_webdav_url" value="{{ settings.webdav_url }}" placeholder="https://cloud.example.de/remote.php/dav/files/benutzer/Kegelkasse-Backups">
@@ -715,16 +743,24 @@
                             </div>
 
                             <div id="backupFieldsDropbox" class="backup-target-fields">
-                                <div class="info-box" style="grid-column:1 / -1;">
-                                    <strong>ℹ️</strong>
-                                    <div>
-                                        Dazu wird eine eigene Dropbox-App benötigt (kostenlos, im
-                                        <a href="https://www.dropbox.com/developers/apps" target="_blank" rel="noopener">Dropbox App Console</a>
-                                        anlegen, Zugriffstyp "Scoped access", Berechtigung <code>files.content.write</code>).
-                                        Als Weiterleitungs-URI dort genau diese Adresse eintragen:
-                                        <br><code>{{ dropbox_redirect_uri }}</code>
+                                <details class="info-toggle">
+                                    <summary title="Hinweise anzeigen">ⓘ</summary>
+                                    <div class="info-box">
+                                        <strong>ℹ️</strong>
+                                        <div>
+                                            Dazu wird eine eigene Dropbox-App benötigt (kostenlos, im
+                                            <a href="https://www.dropbox.com/developers/apps" target="_blank" rel="noopener">Dropbox App Console</a>
+                                            anlegen, Zugriffstyp "Scoped access", Berechtigung <code>files.content.write</code>).
+                                            Als Weiterleitungs-URI dort genau diese Adresse eintragen:
+                                            <br><code>{{ dropbox_redirect_uri }}</code>
+                                            <br><br>
+                                            <strong>Berechtigung nachträglich geändert?</strong> Eine bestehende Verbindung merkt sich die
+                                            Berechtigungen vom Zeitpunkt des Verbindens. Nach einer Änderung im Reiter "Permissions" der
+                                            Dropbox App Console (z. B. <code>files.content.write</code> nachträglich aktiviert) unten bei
+                                            "Verbindung trennen" klicken und danach neu verbinden, sonst schlägt der Upload weiterhin fehl.
+                                        </div>
                                     </div>
-                                </div>
+                                </details>
 
                                 <label>
                                     App-Key
@@ -758,16 +794,22 @@
                             </div>
 
                             <div id="backupFieldsGoogleDrive" class="backup-target-fields">
-                                <div class="info-box" style="grid-column:1 / -1;">
-                                    <strong>ℹ️</strong>
-                                    <div>
-                                        Dazu wird ein eigenes Projekt in der
-                                        <a href="https://console.cloud.google.com/apis/credentials" target="_blank" rel="noopener">Google Cloud Console</a>
-                                        benötigt (OAuth-Client vom Typ "Webanwendung", Drive API aktivieren).
-                                        Als autorisierte Weiterleitungs-URI dort genau diese Adresse eintragen:
-                                        <br><code>{{ google_drive_redirect_uri }}</code>
+                                <details class="info-toggle">
+                                    <summary title="Hinweise anzeigen">ⓘ</summary>
+                                    <div class="info-box">
+                                        <strong>ℹ️</strong>
+                                        <div>
+                                            Dazu wird ein eigenes Projekt in der
+                                            <a href="https://console.cloud.google.com/apis/credentials" target="_blank" rel="noopener">Google Cloud Console</a>
+                                            benötigt (OAuth-Client vom Typ "Webanwendung", Drive API aktivieren).
+                                            Als autorisierte Weiterleitungs-URI dort genau diese Adresse eintragen:
+                                            <br><code>{{ google_drive_redirect_uri }}</code>
+                                            <br><br>
+                                            Berechtigungen (Scopes) nachträglich geändert? Dann unten "Verbindung trennen" und neu verbinden -
+                                            eine bestehende Verbindung merkt sich sonst die alten Berechtigungen.
+                                        </div>
                                     </div>
-                                </div>
+                                </details>
 
                                 <label>
                                     Client-ID
@@ -801,16 +843,22 @@
                             </div>
 
                             <div id="backupFieldsOneDrive" class="backup-target-fields">
-                                <div class="info-box" style="grid-column:1 / -1;">
-                                    <strong>ℹ️</strong>
-                                    <div>
-                                        Dazu wird eine eigene Anwendung im
-                                        <a href="https://portal.azure.com/#view/Microsoft_AAD_RegisteredApps/ApplicationsListBlade" target="_blank" rel="noopener">Azure-Portal (App-Registrierungen)</a>
-                                        benötigt (Kontotyp "Persönliche Microsoft-Konten" oder passend zu eurem Konto, Berechtigung <code>Files.ReadWrite</code>).
-                                        Als Weiterleitungs-URI dort genau diese Adresse vom Typ "Web" eintragen:
-                                        <br><code>{{ onedrive_redirect_uri }}</code>
+                                <details class="info-toggle">
+                                    <summary title="Hinweise anzeigen">ⓘ</summary>
+                                    <div class="info-box">
+                                        <strong>ℹ️</strong>
+                                        <div>
+                                            Dazu wird eine eigene Anwendung im
+                                            <a href="https://portal.azure.com/#view/Microsoft_AAD_RegisteredApps/ApplicationsListBlade" target="_blank" rel="noopener">Azure-Portal (App-Registrierungen)</a>
+                                            benötigt (Kontotyp "Persönliche Microsoft-Konten" oder passend zu eurem Konto, Berechtigung <code>Files.ReadWrite</code>).
+                                            Als Weiterleitungs-URI dort genau diese Adresse vom Typ "Web" eintragen:
+                                            <br><code>{{ onedrive_redirect_uri }}</code>
+                                            <br><br>
+                                            Berechtigungen nachträglich geändert? Dann unten "Verbindung trennen" und neu verbinden -
+                                            eine bestehende Verbindung merkt sich sonst die alten Berechtigungen.
+                                        </div>
                                     </div>
-                                </div>
+                                </details>
 
                                 <label>
                                     Anwendungs-ID (Client-ID)
