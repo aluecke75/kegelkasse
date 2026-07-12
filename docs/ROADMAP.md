@@ -68,6 +68,15 @@ Stand: 2026-07-12. Aktueller Gesamtstatus: siehe [PROJECT_STATUS.md](PROJECT_STA
 
 Siehe auch [PUBLIC_RELEASE_TODO.md](../PUBLIC_RELEASE_TODO.md) für die "Muss vor 1.0"-Kurzliste.
 
+## Ideen-Backlog (2026-07-12, noch nicht geplant)
+
+Inspiriert durch einen Funktionsvergleich mit einem anderen, technisch komplett anders aufgebauten Kegelverein-Projekt (React/TypeScript statt Python/Flask, kein Code übernommen, nur Funktionsideen — das fremde Repo hat keine Lizenz, Code-Übernahme wäre ohnehin nicht erlaubt gewesen). Noch nicht priorisiert, nur vorgemerkt:
+
+- **Vereinsnachrichten/Ankündigungen-Board** — Stelle, an der der Vorstand Nachrichten fürs ganze Team posten kann, optional mit einfachen Umfragen (z. B. Terminfindung). Größte echte Lücke, überschaubarer Aufwand.
+- **Allgemeine Vereinstermine, getrennt vom Kegelabend** — leichte "Termine"-Funktion (Weihnachtsfeier, Mitgliederversammlung, Ausflug) mit einfacher Zu-/Absage, ohne die Finanz-Verknüpfung, die "Kegelabend" hat.
+- **Passwortloses Login (Passkey/WebAuthn)** — kein Passwort merken nötig. Nice-to-have, für die kleine Nutzerzahl nicht dringend.
+- **Web-Push-Benachrichtigungen** — hängt technisch an der weiter unten bereits zurückgestellten PWA/Offline-Funktion, ändert nichts an deren Priorität.
+
 ## Bewusst zurückgestellt (nach Version 1.0)
 
 - Unterstützung für MariaDB und PostgreSQL
