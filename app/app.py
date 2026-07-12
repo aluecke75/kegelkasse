@@ -69,6 +69,22 @@ from models import (
 )
 from extensions import app, login_manager, APP_VERSION, RATE_TYPES, BASE_RATE_KEYS
 
+# Datensicherung: gemeinsames DeveloperKit-Modul statt der bisherigen
+# alleinstehenden Implementierung (siehe routes/backups.py, die jetzt nur
+# noch den Kegelkasse-spezifischen Vereins-Export/-Import enthält). Nutzt
+# Kegelkasses eigene db-Instanz (siehe developerkit.backup-Docstring: Flask-
+# SQLAlchemy erlaubt pro App nur eine einzige SQLAlchemy-Instanz).
+from developerkit.backup import init_app as init_backup
+
+init_backup(
+    app,
+    db=db,
+    backup_dir=os.getenv("BACKUP_DIR", "/app/backups"),
+    documents_dir=str(get_document_dir()),
+    app_label="Kegelkasse",
+    base_template="base.html",
+)
+
 
 def active_database_info():
     profile = get_active_database_profile()
@@ -460,7 +476,7 @@ def first_start_setup():
     wiederherstellen, Daten importieren oder Demo starten. Die konkreten
     Formulare erscheinen erst nach der Auswahl.
     """
-    from routes.backups import backup_dir, verify_backup_file, restore_database_from_backup
+    from developerkit.backup.service import backup_dir, verify_backup_file, restore_database_from_backup
 
     if not installation_needs_setup():
         return redirect(url_for("login"))
@@ -1198,7 +1214,7 @@ import routes.documents  # noqa: E402,F401  registriert /documents*
 from routes.documents import document_allowed
 
 
-import routes.backups  # noqa: E402,F401  registriert /backups*, /import-export, /club/export/download
+import routes.backups  # noqa: E402,F401  registriert /import-export, /club/export/download
 
 
 import routes.members  # noqa: E402,F401  registriert /members*
@@ -1213,10 +1229,46 @@ import routes.monthly_contributions  # noqa: E402,F401  registriert /finance/mon
 import routes.events  # noqa: E402,F401  registriert /events*, /my-event*, /my-stats
 
 
+def migrate_backup_settings_to_developerkit():
+    """Einmalige Migration: Kegelkasses bisherige Backup-Einstellungen
+    (eigene AppSetting-Tabelle) in die neue developerkit.backup-Settings-
+    Tabelle übernehmen, damit ein bereits konfiguriertes Cloud-Ziel oder
+    eine Verschlüsselung nach der Umstellung nicht verloren geht. Läuft nur
+    einmal (Markierung in der neuen Tabelle)."""
+    from developerkit.backup.models import setting as dk_setting, set_setting as dk_set_setting
+
+    if dk_setting("_migrated_from_kegelkasse_v1"):
+        return
+
+    keys_to_migrate = [
+        "backup_enabled", "backup_interval", "backup_time",
+        "backup_keep_days", "backup_keep_count", "backup_include_documents",
+        "backup_extra_target_enabled", "backup_target_type",
+        "backup_webdav_url", "backup_webdav_username", "backup_webdav_password",
+        "backup_dropbox_app_key", "backup_dropbox_app_secret",
+        "dropbox_refresh_token", "dropbox_access_token", "dropbox_token_expires_at", "dropbox_account_label",
+        "backup_google_client_id", "backup_google_client_secret",
+        "google_drive_refresh_token", "google_drive_access_token", "google_drive_token_expires_at", "google_drive_account_label",
+        "backup_onedrive_client_id", "backup_onedrive_client_secret",
+        "onedrive_refresh_token", "onedrive_access_token", "onedrive_token_expires_at", "onedrive_account_label",
+        "backup_last_auto", "backup_last_result",
+        "backup_encryption_mode", "backup_encryption_public_key",
+        "backup_encryption_public_key_created_at", "backup_encryption_password",
+    ]
+    for key in keys_to_migrate:
+        alt = AppSetting.query.filter_by(key=key).first()
+        if alt and alt.value not in (None, ""):
+            dk_set_setting(key, alt.value)
+
+    dk_set_setting("_migrated_from_kegelkasse_v1", "1")
+    db.session.commit()
+
+
 with app.app_context():
     db.create_all()
     ensure_interest_booking_cancel_columns()
     migrate_schema_extensions()
+    migrate_backup_settings_to_developerkit()
 
     # Öffentliche-Version-Basis: Bei einer leeren Installation wird kein versteckter
     # Standard-Admin mehr erzeugt. Stattdessen führt /setup durch die Ersteinrichtung.

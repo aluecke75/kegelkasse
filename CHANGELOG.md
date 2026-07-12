@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.99.13
+
+- **Datensicherung auf das gemeinsame DeveloperKit-Backup-Modul umgestellt.** Die allgemeine Datensicherung (lokale Sicherungen, automatische Zeitplanung, Cloud-Ziele, Verschlüsselung) läuft jetzt über dasselbe, auch von KleinvermieterLotse genutzte Modul statt über eigenständigen Kegelkasse-Code - neu erreichbar unter Administration → Datensicherung (`/verwaltung/backups`, vorher `/backups`). Bestehende Backup-Einstellungen (Zeitplan, Cloud-Zugangsdaten, Verschlüsselung) wurden automatisch übernommen, bereits vorhandene Sicherungs-ZIPs im alten Format bleiben lesbar und wiederherstellbar - kein Datenverlust-Risiko beim Umstieg.
+- Der **Vereins-Export/-Import** (Administration → Import/Export, Umzug/Archivierung/Wiederverwendung in der öffentlichen Version) bleibt unverändert eigenständiger Kegelkasse-Code, unabhängig von der allgemeinen Datensicherung.
+- Dabei im gemeinsamen Modul gefunden und behoben: eine Wiederherstellung oder ein Vereins-Import legt vorher automatisch eine Sicherheitskopie an - war dabei ein Cloud-Ziel (z.B. Dropbox) konfiguriert, aber gerade nicht erreichbar, wurde die komplette Wiederherstellung/der Import blockiert, obwohl die lokale Sicherheitskopie längst erfolgreich geschrieben war. Betrifft jetzt auch KleinvermieterLotse (siehe DeveloperKit v0.1.9).
+- Internes: `tests/run_checks.py` auf den neuen Pfad umgestellt; End-to-End gegen eine echte Kopie der Demo-Datenbank sowie echte, im alten Format erstellte Sicherungs-ZIPs getestet (Rückwärtskompatibilität, Einstellungs-Migration, Vereins-Export/-Import-Rundlauf, Einrichtungsassistent-Wiederherstellung).
+
 ## v0.99.12
 
 - Revisionsprotokoll: neuer Bereich "🧹 Revisionsprotokoll bereinigen" (nur für Admins). Aufbewahrungsfrist wählbar (nie/90 Tage/180 Tage/1/2/5 Jahre) - betrifft ausschließlich rein operative Kategorien (Datensicherung, System, Vereins-Import, Vereins-Export) ohne dauerhaften Beweiswert für eine Kassenprüfung; finanziell/rechtlich relevante Einträge (Finanzen, Kegelabende, Mitglieder, Einstellungen, Strafarten, Jahresabschluss, Dokumente, Zinsen) bleiben davon immer unberührt. Läuft automatisch höchstens einmal täglich im Hintergrund, zusätzlich manuelles Einzel-/Sammel-Löschen einzelner Einträge über Auswahl-Checkboxen möglich. Kategorie-Filter der Übersicht um alle tatsächlich verwendeten Kategorien ergänzt (vorher fehlten z.B. Jahresabschluss/Zinsen als Filter, "Dokumente"/"Datensicherung" stimmten nicht mit den echten Kategorienamen überein).

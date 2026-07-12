@@ -2,4 +2,10 @@ flask
 flask_sqlalchemy
 flask_login
 werkzeug
-cryptography
+
+# DeveloperKit (Benutzerverwaltung, Rollen, Theme, Logging, Datensicherung)
+# wird NICHT hier installiert, sondern in einer separaten Build-Stage im
+# Dockerfile, da das Repo privat ist und einen GitHub-Token benoetigt.
+# Nur das Backup-Modul wird genutzt (init_backup(app, db=db, ...) in app.py) --
+# Kegelkasses eigene Benutzerverwaltung/Rollen/Theme bleiben unveraendert.
+# cryptography kommt als Abhaengigkeit von developerkit mit.

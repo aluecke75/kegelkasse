@@ -42,7 +42,7 @@ def check(name, passed, detail=""):
 GET_ROUTES = [
     "/", "/test-database", "/account", "/admin", "/branding/logo",
     "/documents", "/documents/download/1", "/documents/preview/1",
-    "/backups", "/import-export", "/members", "/members/new", "/members/1/edit",
+    "/verwaltung/backups/", "/import-export", "/members", "/members/new", "/members/1/edit",
     "/settings/rates", "/settings/event-rhythm", "/settings/rates/new",
     "/settings/penalty-types", "/settings/penalty-types/new", "/settings/penalty-types/1/edit",
     "/cashbook/opening-balances", "/search", "/search?q=a", "/annual-closings",
@@ -142,14 +142,21 @@ def check_admin_setting_toggle(client):
 
 
 def check_backup_lifecycle(client):
-    """Lokale Sicherung erstellen, prüfen, löschen - ohne Cloud-Ziel."""
-    r = client.post("/backups", data={"form_action": "create_backup"}, follow_redirects=True)
+    """Lokale Sicherung erstellen, prüfen, löschen - ohne Cloud-Ziel.
+
+    Die allgemeine Datensicherung lebt seit der Umstellung auf das
+    gemeinsame DeveloperKit-Backup-Modul unter /verwaltung/backups
+    (siehe app.py). Der alte Pfad /backups (Kegelkasse-eigener Code) ist
+    entfallen; /backups/import-export (Vereins-Export/-Import) blieb
+    unverändert Kegelkasse-eigen."""
+    r = client.post("/verwaltung/backups/", data={"form_action": "create_backup"}, follow_redirects=True)
     ok = r.status_code == 200 and b"Internal Server" not in r.data
-    check("POST /backups (create_backup)", ok, f"Status {r.status_code}")
+    check("POST /verwaltung/backups/ (create_backup)", ok, f"Status {r.status_code}")
     if not ok:
         return
 
-    from routes.backups import backup_file_list
+    from developerkit.backup.service import backup_file_list
+
     with app.app_context():
         files = backup_file_list()
         manual = next((f for f in files if f["kind"] == "Manuell"), None)
@@ -158,11 +165,15 @@ def check_backup_lifecycle(client):
         check("Testsicherung gefunden", False, "keine manuelle Sicherung in der Liste")
         return
 
-    r = client.post("/backups", data={"form_action": "check_backup", "filename": manual["name"]}, follow_redirects=True)
-    check("POST /backups (check_backup)", r.status_code == 200 and b"Internal Server" not in r.data)
+    r = client.post(
+        "/verwaltung/backups/", data={"form_action": "check_backup", "filename": manual["name"]}, follow_redirects=True
+    )
+    check("POST /verwaltung/backups/ (check_backup)", r.status_code == 200 and b"Internal Server" not in r.data)
 
-    r = client.post("/backups", data={"form_action": "delete_backup", "filename": manual["name"]}, follow_redirects=True)
-    check("POST /backups (delete_backup, aufräumen)", r.status_code == 200 and b"Internal Server" not in r.data)
+    r = client.post(
+        "/verwaltung/backups/", data={"form_action": "delete_backup", "filename": manual["name"]}, follow_redirects=True
+    )
+    check("POST /verwaltung/backups/ (delete_backup, aufräumen)", r.status_code == 200 and b"Internal Server" not in r.data)
 
 
 def check_event_lifecycle(client):
