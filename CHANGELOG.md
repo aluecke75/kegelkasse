@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.99.15
+
+- Datensicherung: eigenes Kegelkasse-Design (Akkordeon-Bereiche, Status-Übersicht, Datenbankgröße/Tabellen/Einträge) wiederhergestellt. Die Umstellung auf das gemeinsame DeveloperKit-Backup-Modul (v0.99.13) hatte die Seite vorübergehend auf dessen generisches, unstyled Basis-Template umgestellt — die Funktionslogik lief unverändert weiter, aber Optik und die aufklappbaren Akkordeon-Abschnitte fehlten. Jetzt über ein eigenes Kegelkasse-Template (`app/templates/backup/uebersicht.html`, überschreibt das DeveloperKit-Template gezielt nur für diese eine Seite) gelöst, ohne die gemeinsame Modul-Architektur wieder aufzugeben.
+
 ## v0.99.14
 
 - Beim Deploy von v0.99.13 gegen die echte Vereinsdatenbank gefunden: die bereits vorhandenen 9 Sicherungen (im alten Dateinamensformat) tauchten nach der Umstellung in der neuen Backup-Übersicht nicht mehr auf - über den Dateipfad wären sie zwar weiterhin wiederherstellbar gewesen, aber unsichtbar. Behoben in DeveloperKit v0.1.10 (`DEVELOPERKIT_VERSION` entsprechend angehoben).

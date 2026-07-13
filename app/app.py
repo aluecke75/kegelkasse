@@ -86,6 +86,50 @@ init_backup(
 )
 
 
+@app.context_processor
+def inject_backup_db_info():
+    # Nur für die Datensicherungs-Übersicht berechnen (SQLite-weite
+    # Tabellen-/Zeilenzählung ist nicht ganz billig) - das eigene
+    # Kegelkasse-Template dort (templates/backup/uebersicht.html, überschreibt
+    # das generische DeveloperKit-Template) zeigt diese Werte im "Backup
+    # erstellen"-Bereich an, wie vor der Umstellung auf developerkit.backup.
+    if request.endpoint != "developerkit_backup.uebersicht":
+        return {}
+    from developerkit.backup.service import human_file_size
+
+    db_path = get_database_path()
+    table_count = 0
+    row_count = 0
+    db_size = 0
+    if db_path.exists():
+        db_size = db_path.stat().st_size
+        try:
+            conn = sqlite3.connect(str(db_path))
+            cursor = conn.cursor()
+            tables = [
+                row[0]
+                for row in cursor.execute(
+                    "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'"
+                ).fetchall()
+            ]
+            table_count = len(tables)
+            for table in tables:
+                try:
+                    row_count += int(cursor.execute(f'SELECT COUNT(*) FROM "{table}"').fetchone()[0] or 0)
+                except Exception:
+                    pass
+            conn.close()
+        except Exception:
+            pass
+    return {
+        "db_info": {
+            "db_size_label": human_file_size(db_size),
+            "table_count": table_count,
+            "row_count": row_count,
+        }
+    }
+
+
 def active_database_info():
     profile = get_active_database_profile()
     info = TEST_DATABASE_PROFILES.get(profile, TEST_DATABASE_PROFILES["production"]).copy()
