@@ -43,6 +43,10 @@ data/backups/*
 logs/*
 !logs/.gitkeep
 
+# Laufzeitdaten des separaten Demo-Containers (kegelkasse-demo, compose.yml)
+data-demo/
+logs-demo/
+
 # ------------------------------------------------------------
 # Flask
 # ------------------------------------------------------------

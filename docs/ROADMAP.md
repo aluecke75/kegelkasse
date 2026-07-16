@@ -7,7 +7,7 @@ Stand: 2026-07-12. Aktueller Gesamtstatus: siehe [PROJECT_STATUS.md](PROJECT_STA
 1. **Revisionsprotokoll** (höchste Priorität) — ✅ im Wesentlichen abgeschlossen
    - ✅ Vorher-/Nachher-Werte: zeigt jetzt nur noch geänderte Felder als kompakte Tabelle (2026-07-09)
    - ✅ Filter optimiert: Datumsfilter (von/bis) sowie Deep-Link-Filterung auf einzelne Datensätze (z. B. "alle Änderungen zu diesem Mitglied/Kegelabend"), mit Links von der Mitglied- und Kegelabend-Seite (2026-07-09)
-   - Ereignisse bereinigen — noch offen, genaue Anforderung noch zu klären
+   - ✅ Ereignisse bereinigen — umgesetzt als "Revisionsprotokoll bereinigen" (v0.99.12): admin-wählbare Aufbewahrungsfrist für rein operative Kategorien (Datensicherung, System, Vereins-Import/-Export), automatisch täglich + manuelles Einzel-/Sammel-Löschen; finanziell/rechtlich relevante Einträge bleiben immer unberührt
    - Darstellung modernisieren — im Wesentlichen bereits modern, keine weiteren Punkte bekannt
 
 2. **Mobile Optimierung**

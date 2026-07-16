@@ -49,6 +49,51 @@ services:
       retries: 3
       start_period: 30s
 
+  # Zweiter, eigenständiger Container nur für die Demo-Datenbank: eigenes
+  # Volume (kein gemeinsamer Zugriff mit dem produktiven Container oben, kein
+  # SQLite-Locking-Risiko), eigener Port. Nutzt dasselbe bereits gebaute
+  # Image (kein eigener build:-Block), daher keine erneute GITHUB_TOKEN-
+  # Nutzung nötig. Aktives Datenbankprofil in diesem Volume ist fest auf
+  # "demo" gesetzt (data-demo/database/active_database.txt) - da hier nie
+  # eine echte Vereinsdatenbank im Volume liegt, ist auch ein versehentliches
+  # Umschalten auf "production" über die Test-Datenbank-Verwaltung ungefährlich
+  # (würde nur eine leere neue Datenbank in diesem isolierten Volume anlegen).
+  kegelkasse-demo:
+
+    container_name: kegelkasse-demo
+
+    image: kegelkasse-kegelkasse:latest
+
+    init: true
+
+    restart: unless-stopped
+
+    ports:
+      - "${KEGELKASSE_DEMO_PORT:-8092}:5000"
+
+    environment:
+      TZ: ${TZ}
+      PUID: ${PUID}
+      PGID: ${PGID}
+      SECRET_KEY: ${SECRET_KEY}
+      ADMIN_USERNAME: ${ADMIN_USERNAME}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD}
+      DEVELOPER_MODE: ${DEVELOPER_MODE}
+
+    volumes:
+
+      - ${KEGELKASSE_DEMO_DATABASE_PATH:-./data-demo/database}:/app/database
+      - ${KEGELKASSE_DEMO_BACKUP_PATH:-./data-demo/backups}:/app/backups
+      - ${KEGELKASSE_DEMO_UPLOADS_PATH:-./data-demo/uploads}:/app/uploads
+      - ${KEGELKASSE_DEMO_LOGS_PATH:-./logs-demo}:/app/logs
+
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:5000"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
 secrets:
   gh_token:
     environment: GITHUB_TOKEN
