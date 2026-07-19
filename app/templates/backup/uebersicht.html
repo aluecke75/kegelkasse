@@ -661,8 +661,8 @@
             <div class="backup-panel-body">
                 <p class="backup-card-sub">Legt fest, wie oft Sicherungen automatisch erstellt und wie lange sie aufbewahrt werden sollen.</p>
 
-                <form method="post">
-                    <input type="hidden" name="form_action" value="backup_settings">
+                <form method="post" id="backupAutoForm">
+                    <input type="hidden" name="form_action" value="backup_settings" id="scheduleFormAction">
 
                     <div class="backup-form-grid">
                         <label class="checkbox-row">
@@ -807,7 +807,7 @@
                                     {% else %}
                                         <p class="muted" style="margin-top:0;">Noch nicht verbunden. App-Key/Secret eintragen und auf "Mit Dropbox verbinden" klicken – wird automatisch mitgespeichert.</p>
                                     {% endif %}
-                                    <button type="submit" class="button secondary" name="form_action" value="backup_settings_connect_dropbox">{{ "Neu verbinden" if cloud.dropbox_connected else "Mit Dropbox verbinden" }}</button>
+                                    <button type="submit" class="button secondary" onclick="document.getElementById('scheduleFormAction').value='backup_settings_connect_dropbox';">{{ "Neu verbinden" if cloud.dropbox_connected else "Mit Dropbox verbinden" }}</button>
                                     {% if cloud.dropbox_connected %}
                                         <form method="post" action="{{ url_for('developerkit_backup.dropbox_oauth_disconnect') }}" style="display:inline;" onsubmit="return confirm('Dropbox-Verbindung wirklich trennen?');">
                                             <button type="submit" class="button secondary">Verbindung trennen</button>
@@ -856,7 +856,7 @@
                                     {% else %}
                                         <p class="muted" style="margin-top:0;">Noch nicht verbunden. Client-ID/Secret eintragen und auf "Mit Google Drive verbinden" klicken – wird automatisch mitgespeichert.</p>
                                     {% endif %}
-                                    <button type="submit" class="button secondary" name="form_action" value="backup_settings_connect_google_drive">{{ "Neu verbinden" if cloud.google_drive_connected else "Mit Google Drive verbinden" }}</button>
+                                    <button type="submit" class="button secondary" onclick="document.getElementById('scheduleFormAction').value='backup_settings_connect_google_drive';">{{ "Neu verbinden" if cloud.google_drive_connected else "Mit Google Drive verbinden" }}</button>
                                     {% if cloud.google_drive_connected %}
                                         <form method="post" action="{{ url_for('developerkit_backup.google_drive_oauth_disconnect') }}" style="display:inline;" onsubmit="return confirm('Google-Drive-Verbindung wirklich trennen?');">
                                             <button type="submit" class="button secondary">Verbindung trennen</button>
@@ -905,7 +905,7 @@
                                     {% else %}
                                         <p class="muted" style="margin-top:0;">Noch nicht verbunden. Client-ID/Secret eintragen und auf "Mit OneDrive verbinden" klicken – wird automatisch mitgespeichert.</p>
                                     {% endif %}
-                                    <button type="submit" class="button secondary" name="form_action" value="backup_settings_connect_onedrive">{{ "Neu verbinden" if cloud.onedrive_connected else "Mit OneDrive verbinden" }}</button>
+                                    <button type="submit" class="button secondary" onclick="document.getElementById('scheduleFormAction').value='backup_settings_connect_onedrive';">{{ "Neu verbinden" if cloud.onedrive_connected else "Mit OneDrive verbinden" }}</button>
                                     {% if cloud.onedrive_connected %}
                                         <form method="post" action="{{ url_for('developerkit_backup.onedrive_oauth_disconnect') }}" style="display:inline;" onsubmit="return confirm('OneDrive-Verbindung wirklich trennen?');">
                                             <button type="submit" class="button secondary">Verbindung trennen</button>
@@ -918,7 +918,7 @@
 
                     <p class="inline-actions">
                         <button class="btn-primary" type="submit">Einstellungen speichern</button>
-                        <button id="backupTestButton" class="btn-secondary" type="submit" name="form_action" value="test_backup_target">Ziel testen</button>
+                        <button id="backupTestButton" class="btn-secondary" type="submit" onclick="document.getElementById('scheduleFormAction').value='test_backup_target';">Ziel testen</button>
                     </p>
                 </form>
             </div>
@@ -1147,6 +1147,40 @@
     if (enabled) enabled.addEventListener('change', refreshBackupTargetUi);
     if (type) type.addEventListener('change', refreshBackupTargetUi);
     refreshBackupTargetUi();
+})();
+</script>
+
+<script>
+(function () {
+    // "Einstellungen speichern" (Klick oder Enter) speichert serverseitig
+    // über die Aktion "backup_settings" nur die Zeitplan-Felder, nicht das
+    // Cloud-Ziel (WebDAV/Dropbox/Google/OneDrive) - anders als früher, wo
+    // eine einzige Funktion beides zusammen gespeichert hat. WebDAV hat
+    // anders als die anderen Ziele keinen eigenen "Verbinden"-Button, der
+    // das nachholen würde. Deshalb hier zusätzlich im Hintergrund einmal
+    // mit der Aktion "backup_cloud_settings" abschicken, bevor die
+    // sichtbare Seiten-Navigation passiert - gleiches Formular, gleiche
+    // Felder, nur mit anderem form_action-Wert.
+    const form = document.getElementById('backupAutoForm');
+    const actionField = document.getElementById('scheduleFormAction');
+    if (!form || !actionField) return;
+
+    form.addEventListener('submit', function (evt) {
+        if (actionField.value !== 'backup_settings') {
+            // Verbinden-/Ziel-testen-Button: die jeweilige Aktion speichert
+            // serverseitig bereits selbst das Cloud-Ziel mit - eine einzelne
+            // Anfrage reicht.
+            return;
+        }
+        evt.preventDefault();
+        const cloudData = new FormData(form);
+        cloudData.set('form_action', 'backup_cloud_settings');
+        fetch(window.location.href, { method: 'POST', body: cloudData, redirect: 'manual' })
+            .catch(function () {})
+            .then(function () {
+                form.submit();
+            });
+    });
 })();
 </script>
 

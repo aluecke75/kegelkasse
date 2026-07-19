@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.99.16
+
+- Datensicherung: zwei echte Fehler im wiederhergestellten Formular für "Automatische Sicherungen"/Cloud-Ziel behoben, gefunden bei einer gezielten UI-Durchsicht und selbst mit echten Anfragen gegen die App nachgestellt:
+  - WebDAV-Zieleinstellungen (URL/Benutzer/Passwort) ließen sich über die Oberfläche gar nicht speichern - der Haupt-Button "Einstellungen speichern" hat serverseitig nur die Zeitplan-Felder gespeichert, nie das Cloud-Ziel. Jetzt schickt der Klick zusätzlich im Hintergrund einmal die Cloud-Ziel-Felder mit, unsichtbar für den Nutzer (keine Änderung an Aussehen oder Bedienung).
+  - Die Buttons "Mit Dropbox/Google Drive/OneDrive verbinden" und "Ziel testen" haben nie ihre eigentliche Aktion ausgelöst, sondern immer nur die Zeitplan-Einstellungen erneut gespeichert - Ursache war ein verstecktes Formularfeld mit demselben Namen wie die Buttons, dessen Wert beim Absenden immer Vorrang hatte. Behoben, ohne am Aussehen etwas zu ändern.
+
 ## v0.99.15
 
 - Datensicherung: eigenes Kegelkasse-Design (Akkordeon-Bereiche, Status-Übersicht, Datenbankgröße/Tabellen/Einträge) wiederhergestellt. Die Umstellung auf das gemeinsame DeveloperKit-Backup-Modul (v0.99.13) hatte die Seite vorübergehend auf dessen generisches, unstyled Basis-Template umgestellt — die Funktionslogik lief unverändert weiter, aber Optik und die aufklappbaren Akkordeon-Abschnitte fehlten. Jetzt über ein eigenes Kegelkasse-Template (`app/templates/backup/uebersicht.html`, überschreibt das DeveloperKit-Template gezielt nur für diese eine Seite) gelöst, ohne die gemeinsame Modul-Architektur wieder aufzugeben.
