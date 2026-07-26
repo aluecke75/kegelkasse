@@ -205,6 +205,29 @@ def inject_active_event_navigation():
 
 
 @app.context_processor
+def inject_donate_settings():
+    return {
+        "donate_button_enabled": setting_value("donate_button_enabled", "1") == "1",
+    }
+
+
+@app.context_processor
+def inject_update_check():
+    if not (current_user.is_authenticated and current_user.role == "admin"):
+        return {"update_available": False}
+    try:
+        from services.update_check import check_for_update
+        update_available, latest_version, latest_release_url = check_for_update(APP_VERSION)
+    except Exception:
+        update_available, latest_version, latest_release_url = False, None, None
+    return {
+        "update_available": update_available,
+        "latest_version": latest_version,
+        "latest_release_url": latest_release_url,
+    }
+
+
+@app.context_processor
 def inject_nav_badges():
     """Kleine Erledigungs-Zähler für das Menü (z. B. offene Monatsbeiträge)."""
     try:

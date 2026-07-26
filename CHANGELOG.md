@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.99.17
+
+- Dashboard-Fehler behoben: Mitglieder (Rolle "member") sahen die Kachel "Offene Monatsbeiträge" auf dem Dashboard, aber der Link führte auf die Admin-/Kassierer-Seite `/finance/monthly-contributions`, die für ihre Rolle gesperrt ist (403-Fehler). Neue schreibgeschützte Seite "Meine Monatsbeiträge" (`/finance/my-monthly-contributions`) zeigt Mitgliedern jetzt mindestens ihren eigenen Zahlungsstand der letzten 12 Monate (Soll, eingegangen, Wertstellung, Status); die Dashboard-Kachel verlinkt für Mitglieder dorthin.
+
 ## v0.99.16
 
 - Datensicherung: zwei echte Fehler im wiederhergestellten Formular für "Automatische Sicherungen"/Cloud-Ziel behoben, gefunden bei einer gezielten UI-Durchsicht und selbst mit echten Anfragen gegen die App nachgestellt:

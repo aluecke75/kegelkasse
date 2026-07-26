@@ -45,7 +45,12 @@
         .database-option.active { background:#f8fafc; }
 
         .auditor-readonly-note { background:#f8fafc; border:1px solid var(--line); border-radius:12px; padding:10px 12px; color:var(--muted); margin-bottom:14px; }
+        .user-meta-block { display:flex; flex-direction:column; align-items:flex-end; gap:4px; }
         .user-meta { font-size:0.78rem; color:#d7e6dc; text-align:right; white-space:nowrap; }
+        .donate-link { display:inline-flex; align-items:center; gap:6px; font-size:0.92rem; font-weight:800; color:#fff; background:rgba(255,255,255,0.14); border:1px solid rgba(255,255,255,0.28); border-radius:999px; padding:6px 15px; text-decoration:none; white-space:nowrap; box-shadow:0 2px 8px rgba(0,0,0,0.15); transition:background .15s ease, transform .15s ease; }
+        .donate-link:hover { background:rgba(255,255,255,0.26); transform:translateY(-1px); }
+        .update-badge { display:inline-flex; align-items:center; gap:5px; font-size:0.74rem; font-weight:800; color:#3d2e00; background:#fbbf24; border:1px solid #f59e0b; border-radius:999px; padding:3px 10px; text-decoration:none; white-space:nowrap; }
+        .update-badge:hover { background:#f59e0b; }
         .topbar-search { display:flex; gap:6px; align-items:center; flex:1 1 220px; max-width:320px; }
         .topbar-search input { margin:0; padding:6px 10px; border-radius:999px; border:1px solid rgba(255,255,255,0.25); background:rgba(255,255,255,0.12); color:#fff; font-size:0.85rem; width:100%; }
         .topbar-search input::placeholder { color:#c8d8cd; }
@@ -211,6 +216,9 @@ border-left:6px solid #22c55e;
 
             <span>Kegelkasse</span>
             <span class="brand-version">v{{ app_version }}</span>
+            {% if update_available %}
+                <a href="{{ latest_release_url }}" target="_blank" rel="noopener" class="update-badge" title="Neue Version verfügbar, siehe Release-Hinweise auf GitHub">🔔 Update {{ latest_version }}</a>
+            {% endif %}
             {#
             =====================================================================
 Temporär deaktiviert (30.06.2026)
@@ -252,7 +260,12 @@ Nicht löschen – ggf. für spätere Entwicklungsarbeiten wieder aktivieren.
         {% endif %}
 
         {% if current_user.is_authenticated %}
-            <div class="user-meta">Angemeldet als: <a href="{{ url_for('account') }}" style="color:#fff;">{{ current_user.username }}</a> · Rolle: {{ current_user.role_label() }}</div>
+            <div class="user-meta-block">
+                <div class="user-meta">Angemeldet als: <a href="{{ url_for('account') }}" style="color:#fff;">{{ current_user.username }}</a> · Rolle: {{ current_user.role_label() }}</div>
+                {% if donate_button_enabled %}
+                    <a href="https://paypal.me/AchimLuecke" target="_blank" rel="noopener" class="donate-link" title="Diese Software wird ehrenamtlich entwickelt und gepflegt. Über eine kleine Spende freue ich mich sehr.">☕ Spenden</a>
+                {% endif %}
+            </div>
         {% endif %}
     </div>
 

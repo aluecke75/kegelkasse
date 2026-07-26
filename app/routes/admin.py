@@ -208,6 +208,22 @@ def admin_area():
             flash("Einstellungen wurden gespeichert.", "success")
             return redirect(url_for("admin_area"))
 
+        if form_action == "donate_settings":
+            old_value = setting_value("donate_button_enabled", "1")
+            new_value = "1" if request.form.get("donate_button_enabled") else "0"
+            set_setting_value("donate_button_enabled", new_value)
+            audit_log(
+                "settings",
+                "donate_settings_updated",
+                "Spenden-Button-Einstellung geändert",
+                object_type="AppSetting",
+                old_value="an" if old_value == "1" else "aus",
+                new_value="an" if new_value == "1" else "aus",
+            )
+            db.session.commit()
+            flash("Einstellungen wurden gespeichert.", "success")
+            return redirect(url_for("admin_area"))
+
         if form_action == "create_system_user":
             username = clean_username(request.form.get("new_username", ""))
             email = request.form.get("new_email", "").strip() or None
@@ -362,6 +378,7 @@ def admin_area():
         dashboard_card_definitions=DASHBOARD_CARD_DEFINITIONS,
         dashboard_cards=dashboard_card_visibility(),
         event_closed_confirmation_enabled=setting_value("event_closed_confirmation_enabled", "0") == "1",
+        donate_button_enabled=setting_value("donate_button_enabled", "1") == "1",
     )
 
 

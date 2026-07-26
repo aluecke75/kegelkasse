@@ -361,6 +361,24 @@
             </div>
         </div>
     </details>
+
+    <details class="admin-section" data-remember-key="admin-donate">
+        <summary>☕ Spenden-Button</summary>
+        <p class="admin-section-intro">Der kleine "☕ Spenden"-Link in der Kopfzeile führt zum privaten PayPal.me-Link des Entwicklers. Kann hier bei Bedarf für alle Benutzer ausgeblendet werden.</p>
+        <div class="admin-section-body">
+            <div class="modern-card">
+                <h2>☕ Sichtbarkeit</h2>
+                <form method="post" class="settings-form">
+                    <input type="hidden" name="form_action" value="donate_settings">
+                    <label class="checkbox-row">
+                        <input type="checkbox" name="donate_button_enabled" value="1" {% if donate_button_enabled %}checked{% endif %}>
+                        Spenden-Button in der Kopfzeile anzeigen
+                    </label>
+                    <button type="submit">Speichern</button>
+                </form>
+            </div>
+        </div>
+    </details>
 </div>
 
 <style>

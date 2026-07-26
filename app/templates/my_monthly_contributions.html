@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="modern-header">
+    <div class="modern-icon">📅</div>
+    <div>
+        <h1>Meine Monatsbeiträge</h1>
+        <p>Dein Zahlungsstand der letzten Monate.</p>
+    </div>
+</div>
+
+{% if not has_member %}
+    <div class="modern-card">
+        <p class="muted">Dein Benutzerkonto ist noch keinem Mitglied zugeordnet. Bitte an Admin oder Kassierer/-in wenden.</p>
+    </div>
+{% elif payments|length == 0 %}
+    <div class="modern-card">
+        <p class="muted">Für dich liegen noch keine erfassten Monatsbeiträge vor.</p>
+    </div>
+{% else %}
+    <div class="modern-card">
+        <div class="mobile-table-wrap">
+            <table>
+                <thead>
+                    <tr><th>Monat</th><th>Soll</th><th>Eingegangen</th><th>Wertstellung</th><th>Status</th></tr>
+                </thead>
+                <tbody>
+                    {% for payment in payments %}
+                        {% set status_class = 'status-paid' if payment.status_label() == 'bezahlt' else 'status-partial' if payment.status_label() == 'teilweise bezahlt' else 'status-overpaid' if payment.status_label() == 'überzahlt' else 'status-open' %}
+                        <tr>
+                            <td><strong>{{ payment.batch.period_label() }}</strong></td>
+                            <td>{{ payment.expected_euro() }} €</td>
+                            <td>{{ payment.paid_euro() }} €</td>
+                            <td>{{ payment.paid_date.strftime('%d.%m.%Y') if payment.paid_date else '-' }}</td>
+                            <td class="{{ status_class }}">{{ payment.status_label() }}</td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+{% endif %}
+
+<style>
+.status-paid { color:#006b2e; font-weight:800; }
+.status-partial { color:#8a5a00; font-weight:800; }
+.status-open { color:#b91c1c; font-weight:800; }
+.status-overpaid { color:#005e8a; font-weight:800; }
+</style>
+{% endblock %}

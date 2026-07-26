@@ -220,16 +220,21 @@
     {% if dashboard_cards.monthly_contributions %}
     <div class="modern-card">
         <h2>📌 Offene Monatsbeiträge</h2>
-        {% if open_monthly_batches %}
-            <ul class="compact-list">
-                {% for batch in open_monthly_batches[:5] %}
-                    <li>{{ batch.period_label() }} · {{ batch.status_label() }}</li>
-                {% endfor %}
-            </ul>
+        {% if current_user.role == "member" %}
+            <p class="muted">Hier siehst du deinen eigenen Zahlungsstand.</p>
+            <p><a href="{{ url_for('my_monthly_contributions') }}">Meine Monatsbeiträge ansehen</a></p>
         {% else %}
-            <p class="muted">Keine offenen Monatsbeiträge.</p>
+            {% if open_monthly_batches %}
+                <ul class="compact-list">
+                    {% for batch in open_monthly_batches[:5] %}
+                        <li>{{ batch.period_label() }} · {{ batch.status_label() }}</li>
+                    {% endfor %}
+                </ul>
+            {% else %}
+                <p class="muted">Keine offenen Monatsbeiträge.</p>
+            {% endif %}
+            <p><a href="{{ url_for('monthly_contributions') }}">Monatsbeiträge öffnen</a></p>
         {% endif %}
-        <p><a href="{{ url_for('monthly_contributions') }}">Monatsbeiträge öffnen</a></p>
     </div>
     {% endif %}
 </div>

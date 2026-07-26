@@ -648,3 +648,27 @@ def monthly_contributions():
         member_count=len(rows),
         previous_batches=previous_batches,
     )
+
+
+@app.route("/finance/my-monthly-contributions")
+@login_required
+def my_monthly_contributions():
+    member = Member.query.filter_by(user_id=current_user.id).first()
+    if not member:
+        return render_template("my_monthly_contributions.html", has_member=False)
+
+    payments = (
+        MonthlyContributionPayment.query
+        .join(MonthlyContributionBatch)
+        .filter(MonthlyContributionPayment.member_id == member.id)
+        .order_by(MonthlyContributionBatch.year.desc(), MonthlyContributionBatch.month.desc())
+        .limit(12)
+        .all()
+    )
+
+    return render_template(
+        "my_monthly_contributions.html",
+        has_member=True,
+        member=member,
+        payments=payments,
+    )

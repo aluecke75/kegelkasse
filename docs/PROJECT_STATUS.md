@@ -22,9 +22,8 @@ Kegelkasse ist von einer einfachen Vereinskasse zu einer vollständigen Vereinsv
 
 - Python / Flask
 - SQLite (Vereinsversion)
-- Docker, betrieben auf Synology NAS
-- Docker-Pfad: `/volume1/docker/kegelkasse`, Webport 8091
-- Reverse Proxy: https://kegeln.aluecke.synology.me
+- Docker, betrieben z. B. auf einem Synology NAS
+- Läuft hinter einem beliebigen Reverse Proxy
 - Responsive Weboberfläche, mobile first, spätere PWA geplant
 
 ## Design-Standard
