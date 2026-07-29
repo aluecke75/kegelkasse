@@ -7,7 +7,7 @@ Wird in der nächsten Session gelesen und abgearbeitet, erledigte Punkte werden 
 `[x]` gesetzt statt gelöscht.
 
 - [x] v0.99.17 fertig committen: Dashboard-Fix "Meine Monatsbeiträge" (Mitglieder landeten auf gesperrter Admin-Seite) + neues Update-Check-Feature (`app/services/update_check.py`) liegen bereits fertig im Arbeitsverzeichnis, aber noch uncommitted.
-- [ ] GitHub-Repo `aluecke75/kegelkasse` anlegen und eine erste Release veröffentlichen — das neue Update-Check-Feature fragt genau dieses Repo per GitHub-Releases-API ab, das Repo existiert aber noch nicht (404). Ohne Repo+Release bleibt der Hinweis dauerhaft (aber unsichtbar) wirkungslos.
+- [x] GitHub-Repo `aluecke75/kegelkasse` anlegen und eine erste Release veröffentlichen — **war bereits erledigt** (Repo existiert seit 2026-06-14, Release `v0.99.18` seit 2026-07-27 veröffentlicht, keine Draft/Prerelease), todo.md-Eintrag war veraltet (behauptete fälschlich 404). Beim Nachprüfen (2026-07-29) verifiziert: lokaler `main` ist mit `origin` synchron (`2aad7c1`), Release ist öffentlich abrufbar.
 
 ## Hinweis
 
