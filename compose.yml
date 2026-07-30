@@ -4,6 +4,12 @@ services:
 
     container_name: kegelkasse
 
+    # Standardweg: vorgefertigtes Image von ghcr.io (kein DeveloperKit-Token
+    # nötig, "docker compose pull && docker compose up -d"). Der build:-Block
+    # bleibt als Alternative für alle mit eigenem DeveloperKit-Zugriff, die
+    # selbst aus dem Quellcode bauen wollen ("docker compose up -d --build").
+    image: ghcr.io/aluecke75/kegelkasse:${KEGELKASSE_VERSION:-latest}
+
     build:
       context: ./app
       dockerfile: Dockerfile
@@ -51,18 +57,18 @@ services:
 
   # Zweiter, eigenständiger Container nur für die Demo-Datenbank: eigenes
   # Volume (kein gemeinsamer Zugriff mit dem produktiven Container oben, kein
-  # SQLite-Locking-Risiko), eigener Port. Nutzt dasselbe bereits gebaute
-  # Image (kein eigener build:-Block), daher keine erneute GITHUB_TOKEN-
-  # Nutzung nötig. Aktives Datenbankprofil in diesem Volume ist fest auf
-  # "demo" gesetzt (data-demo/database/active_database.txt) - da hier nie
-  # eine echte Vereinsdatenbank im Volume liegt, ist auch ein versehentliches
-  # Umschalten auf "production" über die Test-Datenbank-Verwaltung ungefährlich
-  # (würde nur eine leere neue Datenbank in diesem isolierten Volume anlegen).
+  # SQLite-Locking-Risiko), eigener Port. Nutzt dasselbe Image wie oben (kein
+  # eigener build:-Block), daher keine erneute GITHUB_TOKEN-Nutzung nötig.
+  # Aktives Datenbankprofil in diesem Volume ist fest auf "demo" gesetzt
+  # (data-demo/database/active_database.txt) - da hier nie eine echte
+  # Vereinsdatenbank im Volume liegt, ist auch ein versehentliches Umschalten
+  # auf "production" über die Test-Datenbank-Verwaltung ungefährlich (würde
+  # nur eine leere neue Datenbank in diesem isolierten Volume anlegen).
   kegelkasse-demo:
 
     container_name: kegelkasse-demo
 
-    image: kegelkasse-kegelkasse:latest
+    image: ghcr.io/aluecke75/kegelkasse:${KEGELKASSE_VERSION:-latest}
 
     init: true
 

@@ -24,7 +24,11 @@ Details zu allen Änderungen: siehe [CHANGELOG.md](CHANGELOG.md).
 - Python / Flask
 - SQLite (Standard), MariaDB optional vorbereitet
 - Responsive Weboberfläche, mobile first
-- Betrieb per Docker / Docker Compose
+- Betrieb per Docker / Docker Compose, läuft z. B. auf einem Synology NAS oder jedem anderen Docker-Host hinter einem beliebigen Reverse Proxy
+
+## Status
+
+Kegelkasse läuft produktiv im Verein, der es hervorgebracht hat. Die Installation läuft über ein vorgefertigtes Docker-Image, ganz ohne eigenen Zugriff auf das private DeveloperKit-Repo. Für die allgemeine Nutzung durch andere Vereine sind noch einige Punkte offen (u. a. mehrmandantenfähige Ersteinrichtung) — siehe [PUBLIC_RELEASE_TODO.md](PUBLIC_RELEASE_TODO.md) für die aktuelle Restliste vor Version 1.0.
 
 ## Installation
 
@@ -34,15 +38,20 @@ Voraussetzung: Docker mit Compose-Plugin.
 git clone https://github.com/aluecke75/kegelkasse.git
 cd kegelkasse
 cp .env.example .env
-# .env anpassen: SECRET_KEY, ADMIN_USERNAME/-PASSWORD, GITHUB_TOKEN (siehe unten)
-docker compose up -d --build
+# .env anpassen: SECRET_KEY, ADMIN_USERNAME/-PASSWORD
+docker compose pull
+docker compose up -d
 ```
 
 Die App ist danach unter `http://localhost:${APP_PORT}` erreichbar (Port siehe `.env`). Beim ersten Aufruf führt ein Einrichtungsassistent durch die Ersteinrichtung.
 
-### Hinweis zum Bauen des Images
+### Alternative: Image selbst bauen
 
-Kegelkasse nutzt für einige gemeinsame Funktionen (Datensicherung, Rechteverwaltung, Theming) das interne Paket **DeveloperKit**. Dieses Paket liegt aktuell noch in einem privaten Repository — zum eigenständigen Bauen des Docker-Images ist daher ein GitHub-Token mit Lesezugriff auf `aluecke75/DeveloperKit` nötig (`GITHUB_TOKEN` in der `.env`). Ohne Zugriff auf dieses Token lässt sich das Image derzeit nicht selbst bauen; eine vollständig eigenständige Nutzung ohne diese Abhängigkeit ist für eine spätere Version geplant.
+Kegelkasse nutzt für einige gemeinsame Funktionen (Datensicherung, Rechteverwaltung, Theming) das interne Paket **DeveloperKit**, das in einem privaten Repository liegt. Für die normale Installation über das vorgefertigte Image oben spielt das keine Rolle. Wer stattdessen selbst aus dem Quellcode bauen möchte, braucht dafür zusätzlich ein GitHub-Token mit Lesezugriff auf `aluecke75/DeveloperKit` (`GITHUB_TOKEN` in der `.env`):
+
+```bash
+docker compose up -d --build
+```
 
 ## Konfiguration
 
@@ -50,14 +59,24 @@ Alle Einstellungen erfolgen über Umgebungsvariablen, siehe [.env.example](.env.
 
 ## Updates
 
-Neue Versionen werden als [GitHub Releases](https://github.com/aluecke75/kegelkasse/releases) veröffentlicht. Ein Admin-Konto in der App zeigt automatisch einen Hinweis in der Kopfzeile an, sobald eine neuere Version verfügbar ist.
+Neue Versionen werden als [GitHub Releases](https://github.com/aluecke75/kegelkasse/releases) veröffentlicht und automatisch als Docker-Image nach `ghcr.io/aluecke75/kegelkasse` gebaut. Ein Admin-Konto in der App zeigt automatisch einen Hinweis in der Kopfzeile an, sobald eine neuere Version verfügbar ist.
 
 Aktualisieren:
 
 ```bash
-git pull
-docker compose up -d --build
+docker compose pull
+docker compose up -d
 ```
+
+Mit einem Werkzeug wie [Watchtower](https://containrrr.dev/watchtower/) läuft das auch automatisch.
+
+## Datenschutz
+
+Kegelkasse verarbeitet personenbezogene Daten von Vereinsmitgliedern (u. a. Namen, ggf. Bankverbindungen für Beiträge). Als Betreiber einer selbst gehosteten Instanz bist du selbst für den datenschutzkonformen Betrieb (DSGVO) verantwortlich — insbesondere Zugriffsschutz, Verschlüsselung ausgelagerter Datensicherungen (siehe Administration → Datensicherung) und angemessene Aufbewahrungsfristen.
+
+## Fragen & Probleme
+
+Für Fehler, Fragen oder Vorschläge bitte ein [GitHub Issue](https://github.com/aluecke75/kegelkasse/issues) eröffnen. Kegelkasse wird ehrenamtlich in der Freizeit gepflegt, es gibt keine Support-Garantie.
 
 ## Lizenz
 
