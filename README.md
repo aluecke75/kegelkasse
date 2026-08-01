@@ -76,7 +76,7 @@ Kegelkasse verarbeitet personenbezogene Daten von Vereinsmitgliedern (u. a. Name
 
 ## Fragen & Probleme
 
-Für Fehler, Fragen oder Vorschläge bitte ein [GitHub Issue](https://github.com/aluecke75/kegelkasse/issues) eröffnen. Kegelkasse wird ehrenamtlich in der Freizeit gepflegt, es gibt keine Support-Garantie.
+Fehler und fehlende Funktionen dürfen gerne gemeldet werden — genauso wie Fragen oder sonstige Vorschläge — bitte über ein [GitHub Issue](https://github.com/aluecke75/kegelkasse/issues). Kegelkasse wird ehrenamtlich in der Freizeit gepflegt, es gibt keine Support-Garantie.
 
 ## Lizenz
 
