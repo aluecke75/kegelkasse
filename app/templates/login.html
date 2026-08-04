@@ -15,15 +15,6 @@
             </div>
         </div>
 
-        <div class="subtle-box" style="margin-bottom:16px;">
-            <strong>Aktive Datenbank:</strong><br>
-            {{ active_database_info.label }}
-            {% if active_database_info.is_test %}
-                <span class="badge-warning">TESTMODUS</span>
-            {% endif %}
-            <p class="muted" style="margin:6px 0 0;">{{ active_database_info.description }}</p>
-        </div>
-
         <form method="post" class="auth-form">
             <label>Benutzername
                 <input type="text" name="username" required autocomplete="username">
