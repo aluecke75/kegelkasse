@@ -870,6 +870,39 @@ def dashboard():
             "description": f"{batch.period_label()} · {batch.status_label()}",
             "url": url_for("monthly_contributions"),
         })
+    elif show_admin_tasks:
+        # Für einen fälligen Monat existiert unter Umständen noch gar kein
+        # Batch-Datensatz, solange niemand die Monatsbeiträge-Seite gespeichert
+        # hat (der Batch wird dort lazy angelegt). Ohne diesen Zweig bliebe der
+        # Hinweis unsichtbar, obwohl die Grundgebühren noch offen sind - auch
+        # wenn dadurch schon ein ganzer Monat (z.B. Vormonat nie begonnen)
+        # unbemerkt überfällig geworden ist.
+        last_finalized_batch = (
+            MonthlyContributionBatch.query
+            .filter(MonthlyContributionBatch.status == "finalized")
+            .order_by(MonthlyContributionBatch.year.desc(), MonthlyContributionBatch.month.desc())
+            .first()
+        )
+        if last_finalized_batch:
+            expected_year = last_finalized_batch.year
+            expected_month = last_finalized_batch.month + 1
+            if expected_month > 12:
+                expected_month = 1
+                expected_year += 1
+        else:
+            expected_year, expected_month = today.year, today.month
+
+        expected_period_overdue = (expected_year, expected_month) < (today.year, today.month)
+        expected_period_due_today = (expected_year, expected_month) == (today.year, today.month) and today.day >= 5
+
+        if expected_period_overdue or expected_period_due_today:
+            dashboard_tasks.append({
+                "priority": "high" if expected_period_overdue else "medium",
+                "icon": "📌",
+                "title": "Monatsbeiträge prüfen",
+                "description": f"{month_label(expected_year, expected_month)} · noch nicht begonnen",
+                "url": url_for("monthly_contributions"),
+            })
 
     if show_admin_tasks and open_penalties_cents > 0:
         dashboard_tasks.append({

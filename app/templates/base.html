@@ -205,13 +205,18 @@ border-left:6px solid #22c55e;
 <header>
     <div class="topbar">
         <div class="brand">
-            {% if developer_mode %}
+            {% if has_logo and logo_display_mode in ("header", "header_and_login") %}
+                {% if developer_mode %}
+                    <a href="{{ url_for('test_database_page') }}" title="Test-Datenbank-Auswahl">
+                        <img src="{{ url_for('branding_logo') }}?v={{ logo_filename }}" alt="Vereinslogo" class="brand-logo-header">
+                    </a>
+                {% else %}
+                    <img src="{{ url_for('branding_logo') }}?v={{ logo_filename }}" alt="Vereinslogo" class="brand-logo-header">
+                {% endif %}
+            {% elif developer_mode %}
                 <a class="brand-badge" href="{{ url_for('test_database_page') }}" title="Test-Datenbank-Auswahl">🎳</a>
             {% else %}
                 <span class="brand-badge" title="Kegelkasse">🎳</span>
-            {% endif %}
-            {% if has_logo and logo_display_mode in ("header", "header_and_login") %}
-                <img src="{{ url_for('branding_logo') }}?v={{ logo_filename }}" alt="Vereinslogo" class="brand-logo-header">
             {% endif %}
 
             <span>Kegelkasse</span>
