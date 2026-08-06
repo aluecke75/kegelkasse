@@ -337,6 +337,7 @@ from services.password import (
     active_password_reset_tokens,
 )
 from services.mail import mail_settings, mail_settings_summary, send_system_mail
+from services.monthly_contribution_reminder import maybe_send_cashier_reminder
 
 
 def username_is_available(username, current_user_id=None):
@@ -838,6 +839,7 @@ def dashboard():
             "club_total": cents_to_euro(cash_balance_cents + bank_balance_cents),
         }
 
+    open_member_count = len(open_member_rows)
     open_member_rows = sorted(open_member_rows, key=lambda row: row["amount_cents"], reverse=True)[:5]
 
     dashboard_tasks = []
@@ -874,9 +876,7 @@ def dashboard():
         # Für einen fälligen Monat existiert unter Umständen noch gar kein
         # Batch-Datensatz, solange niemand die Monatsbeiträge-Seite gespeichert
         # hat (der Batch wird dort lazy angelegt). Ohne diesen Zweig bliebe der
-        # Hinweis unsichtbar, obwohl die Grundgebühren noch offen sind - auch
-        # wenn dadurch schon ein ganzer Monat (z.B. Vormonat nie begonnen)
-        # unbemerkt überfällig geworden ist.
+        # Hinweis unsichtbar, obwohl die Grundgebühren noch offen sind.
         last_finalized_batch = (
             MonthlyContributionBatch.query
             .filter(MonthlyContributionBatch.status == "finalized")
@@ -892,12 +892,19 @@ def dashboard():
         else:
             expected_year, expected_month = today.year, today.month
 
-        expected_period_overdue = (expected_year, expected_month) < (today.year, today.month)
-        expected_period_due_today = (expected_year, expected_month) == (today.year, today.month) and today.day >= 5
+        # Hinweis erscheint erst ab dem 5. Tag des auf den Beitragszeitraum
+        # folgenden Monats - unabhängig davon, wie viele Monate der Rückstand
+        # inzwischen umfasst.
+        reminder_year, reminder_month = expected_year, expected_month + 1
+        if reminder_month > 12:
+            reminder_month = 1
+            reminder_year += 1
+        monthly_contribution_task_due = today >= date(reminder_year, reminder_month, 5)
 
-        if expected_period_overdue or expected_period_due_today:
+        if monthly_contribution_task_due:
+            maybe_send_cashier_reminder(expected_year, expected_month)
             dashboard_tasks.append({
-                "priority": "high" if expected_period_overdue else "medium",
+                "priority": "medium",
                 "icon": "📌",
                 "title": "Monatsbeiträge prüfen",
                 "description": f"{month_label(expected_year, expected_month)} · noch nicht begonnen",
@@ -909,7 +916,7 @@ def dashboard():
             "priority": "medium",
             "icon": "💶",
             "title": "Offene Strafkonten prüfen",
-            "description": f"{len(open_member_rows)} Mitglieder · {cents_to_euro(open_penalties_cents)} € offen",
+            "description": f"{open_member_count} Mitglieder · {cents_to_euro(open_penalties_cents)} € offen",
             "url": url_for("penalty_balances"),
         })
 
