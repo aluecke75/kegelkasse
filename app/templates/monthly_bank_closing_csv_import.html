@@ -84,6 +84,8 @@
         <div class="metric-card"><span>Bereits übernommen</span><strong>{{ review_rows | selectattr("already_imported") | list | length }}</strong></div>
     </div>
 
+    {% set can_book = current_user.role in ["admin", "cashier"] %}
+
     <div class="modern-card">
         <div class="modern-header">
             <div class="modern-icon">✅</div>
@@ -99,10 +101,16 @@
             </div>
         </div>
 
-        <form method="post" id="csvImportForm">
-            <input type="hidden" name="month" value="{{ month_value }}">
-
-            {% if current_user.role in ["admin", "cashier"] %}
+        {# Kassenprüfer/-innen (Rolle "auditor") bekommen bewusst kein <form
+           method="post">: das globale Auditor-Lesemodus-Skript in base.html
+           blendet jedes POST-Formular auf der Seite komplett aus (Schutz vor
+           versehentlichen Buchungen) - das hätte sonst die gesamte
+           Prüftabelle mitsamt der reinen Lesedaten unsichtbar gemacht. Für
+           sie deshalb ein <div> mit identischem Inhalt, aber ohne
+           Eingabeelemente (siehe can_book-Verzweigungen unten). #}
+        {% if can_book %}<form method="post" id="csvImportForm">{% else %}<div id="csvImportForm">{% endif %}
+            {% if can_book %}
+                <input type="hidden" name="month" value="{{ month_value }}">
                 <div class="inline-actions" style="margin-bottom:12px;">
                     <button type="button" id="selectAllBtn" class="button secondary small-button">Alle auswählen</button>
                     <button type="button" id="selectNoneBtn" class="button secondary small-button">Alle abwählen</button>
@@ -145,15 +153,20 @@
                                             <span class="status-badge status-lock">kein Vorschlag</span>
                                         {% endif %}
 
-                                        <label class="visually-hidden" for="category_{{ row.index }}">Kategorie für Buchung vom {{ row.date_raw }} über {{ row.amount_euro }} €</label>
-                                        <select id="category_{{ row.index }}" name="category_{{ row.index }}">
-                                            {% for option in categories %}
-                                                <option value="{{ option }}" {% if option == row.category %}selected{% endif %}>{{ option }}</option>
-                                            {% endfor %}
-                                        </select>
+                                        {% if can_book %}
+                                            <label class="visually-hidden" for="category_{{ row.index }}">Kategorie für Buchung vom {{ row.date_raw }} über {{ row.amount_euro }} €</label>
+                                            <select id="category_{{ row.index }}" name="category_{{ row.index }}">
+                                                {% for option in categories %}
+                                                    <option value="{{ option }}" {% if option == row.category %}selected{% endif %}>{{ option }}</option>
+                                                {% endfor %}
+                                            </select>
 
-                                        <label class="visually-hidden" for="person_{{ row.index }}">Person für Buchung vom {{ row.date_raw }} über {{ row.amount_euro }} €</label>
-                                        <input id="person_{{ row.index }}" class="person-input" type="text" name="person_{{ row.index }}" value="{{ row.person }}" placeholder="Person (optional)">
+                                            <label class="visually-hidden" for="person_{{ row.index }}">Person für Buchung vom {{ row.date_raw }} über {{ row.amount_euro }} €</label>
+                                            <input id="person_{{ row.index }}" class="person-input" type="text" name="person_{{ row.index }}" value="{{ row.person }}" placeholder="Person (optional)">
+                                        {% else %}
+                                            <div>{{ row.category or "-" }}</div>
+                                            {% if row.person %}<div class="muted">{{ row.person }}</div>{% endif %}
+                                        {% endif %}
                                     {% endif %}
                                 </td>
                                 <td class="take-decision-cell">
@@ -171,7 +184,7 @@
                                             <input type="checkbox" disabled aria-label="Buchung vom {{ row.date_raw }} über {{ row.amount_euro }} € - nicht möglich (Fehler)">
                                             <span>nicht möglich (Fehler)</span>
                                         </label>
-                                    {% elif current_user.role in ["admin", "cashier"] %}
+                                    {% elif can_book %}
                                         <label class="checkbox-row">
                                             <input type="checkbox" class="take-checkbox" name="take" value="{{ row.index }}" checked aria-label="Buchung vom {{ row.date_raw }} über {{ row.amount_euro }} € übernehmen">
                                             <span>Übernehmen</span>
@@ -189,14 +202,14 @@
                 </table>
             </div>
 
-            {% if current_user.role in ["admin", "cashier"] %}
+            {% if can_book %}
                 <div class="inline-actions" style="margin-top:16px;">
                     <button type="submit">Ausgewählte Buchungen übernehmen</button>
                 </div>
             {% else %}
                 <p class="muted">Kassenprüfer/-innen haben nur Leserechte und können keine Buchungen übernehmen.</p>
             {% endif %}
-        </form>
+        {% if can_book %}</form>{% else %}</div>{% endif %}
     </div>
 {% endif %}
 

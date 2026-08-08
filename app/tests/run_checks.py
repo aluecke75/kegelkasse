@@ -352,6 +352,39 @@ def check_csv_import_review(client):
     r = client.get(f"/finance/monthly-bank-closing/csv-import?month={month_value}")
     check("Bereits übernommene Zeile wird als solche markiert", "bereits übernommen" in r.data.decode("utf-8"))
 
+    # Kassenprüfer (Rolle "auditor") dürfen die Review-Seite laut @role_required
+    # aufrufen - das globale Auditor-Lesemodus-Skript in base.html blendet aber
+    # jedes <form method="post"> clientseitig komplett aus. Die Review-Tabelle
+    # rendert für sie deshalb bewusst in einem <div> statt <form> (siehe
+    # Template). Hier direkt am servergenerierten HTML geprüft, ohne echten
+    # Browser/JS.
+    with app.app_context():
+        auditor = User.query.filter_by(role="auditor", active=True).first()
+        admin_for_restore = User.query.filter_by(role="admin", active=True).first()
+    if not auditor:
+        check("Kassenprüfer-Testbenutzer für Sichtbarkeits-Check gefunden", False, "keine aktive Rolle 'auditor' in der Demo-Datenbank gefunden")
+    else:
+        # Bewusst derselbe Client (nicht ein zweiter app.test_client()): verschachtelte
+        # test_client()-Instanzen teilen sich denselben Flask-Kontext-Stack und können
+        # sich gegenseitig die Session "stehlen" (führte hier zu einem Testartefakt -
+        # der Prüfer erschien als admin authentifiziert, obwohl seine Session korrekt
+        # gesetzt war). Stattdessen: Session desselben Clients kurz umschalten, danach
+        # zurück auf admin, damit die nachfolgenden Prüfungen unverändert weiterlaufen.
+        with client.session_transaction() as sess:
+            sess["_user_id"] = str(auditor.id)
+            sess["_fresh"] = True
+        r = client.get(f"/finance/monthly-bank-closing/csv-import?month={month_value}")
+        body = r.data.decode("utf-8")
+        check("Kassenprüfer: Review-Seite lädt (Status 200)", r.status_code == 200)
+        check(
+            "Kassenprüfer: Review-Tabelle steckt in einem <div>, nicht in einem <form> (würde sonst clientseitig komplett ausgeblendet)",
+            '<div id="csvImportForm">' in body and '<form method="post" id="csvImportForm">' not in body,
+        )
+        check("Kassenprüfer: sieht die gebuchte Kategorie 'Bahnkosten' trotzdem im Klartext", "Bahnkosten" in body)
+        with client.session_transaction() as sess:
+            sess["_user_id"] = str(admin_for_restore.id)
+            sess["_fresh"] = True
+
     # Idempotenz: erneutes Übernehmen derselben Zeile darf nicht doppelt buchen.
     client.post("/finance/monthly-bank-closing/csv-import", data={
         "month": month_value, "take": ["1"], "category_1": "Sonstige Einnahme",
