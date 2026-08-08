@@ -16,6 +16,16 @@ from models import db, Member, MonthlyContributionBatch, MonthlyContributionPaym
 from services.dates import parse_month_param, month_label, first_day_of_month, shift_weekend_to_monday, last_day_of_month
 from services.money import cents_to_euro, euro_to_cents
 from services.audit import audit_log
+from services.csv_import_matching import suggest_for_row, learn_from_confirmation, monthly_contribution_duplicate_hint
+from routes.cashbook import cashbook_category_options
+
+# Deutlich über dem, was ein Kegelklub-Konto in einem Monat realistisch an
+# Buchungszeilen hat - stellt aber sicher, dass parse_bank_statement_csv()
+# für den Buchungen-übernehmen-Assistenten wirklich ALLE Zeilen liefert und
+# nicht (wie beim reinen Vorschau-Panel) nach den ersten paar abschneidet.
+CSV_IMPORT_ROW_LIMIT = 5000
+
+_BANK_STATEMENT_DATE_FORMATS = ("%d.%m.%Y", "%Y-%m-%d", "%d.%m.%y")
 
 
 def proposed_member_paid_date(member_id, year, month):
@@ -213,6 +223,87 @@ def parse_bank_statement_csv(document, max_rows=20):
         "income_total_euro": cents_to_euro(income_total_cents),
         "expense_total_euro": cents_to_euro(expense_total_cents),
     }
+
+
+def parse_bank_statement_row_date(date_raw):
+    """Wandelt das Datum einer einzelnen CSV-Zeile robust in ein echtes
+    Datum um (deutsche Kontoauszug-Exporte liefern meist TT.MM.JJJJ, manche
+    auch ISO). Gibt None zurück, wenn nichts davon passt - die Zeile ist
+    dann für die Übernahme gesperrt (siehe build_csv_import_review_rows)."""
+    date_raw = (date_raw or "").strip()
+    if not date_raw:
+        return None
+    for fmt in _BANK_STATEMENT_DATE_FORMATS:
+        try:
+            return datetime.strptime(date_raw, fmt).date()
+        except ValueError:
+            continue
+    return None
+
+
+def build_csv_import_review_rows(document):
+    """Baut die Review-Zeilen für den Buchungen-prüfen-Assistenten:
+    geparste CSV-Zeile + Konfidenz-Vorschlag (gelernt/vermutet/kein
+    Treffer), weicher Monatsbeitrags-Dubletten-Hinweis und Markierung
+    bereits übernommener Zeilen (source_document_id + source_row_index)."""
+    parsed = parse_bank_statement_csv(document, max_rows=CSV_IMPORT_ROW_LIMIT)
+    if not parsed["ok"]:
+        return parsed, []
+
+    # is_void ausschließen: eine stornierte CSV-Buchung darf erneut zur
+    # Übernahme angeboten werden - sonst bliebe die Zeile nach einer
+    # Korrektur (Stornieren im Kassenbuch) für immer als "bereits
+    # übernommen" gesperrt, obwohl sie tatsächlich nicht mehr in der Kasse
+    # steht.
+    existing_by_index = {
+        entry.source_row_index: entry
+        for entry in CashbookEntry.query.filter_by(source_document_id=document.id).filter(CashbookEntry.is_void == False).all()  # noqa: E712
+        if entry.source_row_index is not None
+    }
+
+    review_rows = []
+    for row in parsed["rows"]:
+        index = row["index"]
+        existing_entry = existing_by_index.get(index)
+        row_date = parse_bank_statement_row_date(row["date"])
+
+        error = row.get("error")
+        if not error and row_date is None:
+            error = f"Datum konnte nicht gelesen werden: „{row['date']}“"
+
+        entry = {
+            "index": index,
+            "date_raw": row["date"],
+            "date_iso": row_date.isoformat() if row_date else "",
+            "text": row["text"],
+            "purpose": row["purpose"],
+            "amount_cents": row["amount_cents"],
+            "amount_euro": row["amount_euro"],
+            "type": row["type"],
+            "error": error,
+            "already_imported": existing_entry is not None,
+            "existing_entry": existing_entry,
+        }
+
+        if error:
+            entry.update({"confidence": "none", "category": "", "person": "", "duplicate_hint": None})
+        elif existing_entry:
+            entry.update({
+                "confidence": "none",
+                "category": existing_entry.category,
+                "person": existing_entry.person or "",
+                "duplicate_hint": None,
+            })
+        else:
+            suggestion = suggest_for_row(row["text"], row["purpose"], row["amount_cents"])
+            entry.update(suggestion)
+            entry["duplicate_hint"] = monthly_contribution_duplicate_hint(
+                row_date, row["amount_cents"], row["text"], row["purpose"]
+            )
+
+        review_rows.append(entry)
+
+    return parsed, review_rows
 
 
 @app.route("/finance/monthly-bank-closing", methods=["GET", "POST"])
@@ -431,6 +522,172 @@ def monthly_bank_closing():
         statement_csv_document=statement_csv_document,
         statement_document=statement_document,
         csv_preview=csv_preview,
+    )
+
+
+@app.route("/finance/monthly-bank-closing/csv-import", methods=["GET", "POST"])
+@login_required
+@role_required("admin", "cashier", "auditor")
+def monthly_bank_closing_csv_import():
+    """Review-Assistent für die CSV-Kontoauszug-Datenübernahme: zeigt die
+    geparsten CSV-Zeilen mit vorausgefülltem, farblich markiertem Vorschlag
+    (Kategorie/Person je Konfidenz-Stufe) sowie einem weichen
+    Monatsbeitrags-Dubletten-Hinweis. Erst nach bewusster Auswahl+Bestätigung
+    werden die Zeilen als CashbookEntry/AccountTransaction gebucht - siehe
+    build_csv_import_review_rows() und services/csv_import_matching.py."""
+    from app import closed_year_block_message
+
+    if current_user.role == "auditor" and request.method == "POST":
+        flash("Kassenprüfer/-innen haben nur Leserechte und können keine Änderungen speichern.", "warning")
+        return redirect(request.referrer or url_for("dashboard"))
+
+    year, month = parse_month_param(request.values.get("month"))
+    month_value = f"{year:04d}-{month:02d}"
+    period_start = date(year, month, 1)
+
+    document = (
+        Document.query
+        .filter(Document.category == "Kontoauszug CSV")
+        .filter(Document.document_date == period_start)
+        .filter(Document.deleted_at.is_(None))
+        .order_by(Document.uploaded_at.desc())
+        .first()
+    )
+
+    if not document:
+        flash("Für diesen Monat ist keine Kontoauszug-CSV-Datei hochgeladen.", "warning")
+        return redirect(url_for("monthly_bank_closing", month=month_value))
+
+    if request.method == "POST":
+        parsed, review_rows = build_csv_import_review_rows(document)
+        if not parsed["ok"]:
+            flash(parsed["message"], "danger")
+            return redirect(url_for("monthly_bank_closing_csv_import", month=month_value))
+
+        rows_by_index = {row["index"]: row for row in review_rows}
+        already_imported_count = sum(1 for row in review_rows if row["already_imported"])
+
+        booked_count = 0
+        booked_total_cents = 0
+        skipped_closed_year = []
+        skipped_invalid = 0
+
+        for index_raw in request.form.getlist("take"):
+            try:
+                index = int(index_raw)
+            except ValueError:
+                continue
+
+            row = rows_by_index.get(index)
+            if not row or row["already_imported"]:
+                continue
+
+            if row["error"] or not row["date_iso"]:
+                skipped_invalid += 1
+                continue
+
+            booking_date = datetime.strptime(row["date_iso"], "%Y-%m-%d").date()
+
+            block_reason = closed_year_block_message(booking_date)
+            if block_reason:
+                skipped_closed_year.append(f"Zeile {index} ({row['date_raw']})")
+                continue
+
+            category = (request.form.get(f"category_{index}") or row["category"] or "").strip()
+            if category not in cashbook_category_options():
+                category = "Sonstige Einnahme" if row["amount_cents"] >= 0 else "Sonstige Ausgabe"
+            person = (request.form.get(f"person_{index}") or row["person"] or "").strip()[:160]
+
+            amount_cents = abs(row["amount_cents"])
+            direction = "income" if row["amount_cents"] >= 0 else "expense"
+            reason = (row["purpose"] or row["text"] or f"CSV-Import Zeile {index}").strip()[:255]
+
+            note_lines = []
+            if row["text"]:
+                note_lines.append(f"Buchungstext: {row['text']}")
+            if row["purpose"] and row["purpose"] != reason:
+                note_lines.append(f"Verwendungszweck: {row['purpose']}")
+            note_lines.append(f"CSV-Import: {document.original_filename}, Zeile {index}")
+
+            entry = CashbookEntry(
+                booking_date=booking_date,
+                direction=direction,
+                account="bank",
+                amount_cents=amount_cents,
+                category=category,
+                person=person,
+                reason=reason,
+                note="\n".join(note_lines),
+                created_by_user_id=current_user.id,
+                source_document_id=document.id,
+                source_row_index=index,
+            )
+            db.session.add(entry)
+
+            # Zeile sofort als übernommen markieren: verhindert, dass ein
+            # doppelt übermittelter "take"-Wert (z. B. durch eine manipulierte
+            # Anfrage, da das deaktivierte Checkbox-Attribut clientseitig
+            # keinen echten Schutz bietet) dieselbe CSV-Zeile innerhalb
+            # desselben Requests mehrfach bucht.
+            row["already_imported"] = True
+
+            signed_amount = amount_cents if direction == "income" else -amount_cents
+            db.session.add(AccountTransaction(
+                account="bank",
+                category="csv_import",
+                amount_cents=signed_amount,
+                booking_date=booking_date,
+                description=f"CSV-Import: {category} - {reason}" + (f" ({person})" if person else ""),
+            ))
+
+            learn_from_confirmation(row["text"], row["purpose"], category, person)
+
+            booked_count += 1
+            booked_total_cents += signed_amount
+
+        if booked_count:
+            details = (
+                f"Datei: {document.original_filename}; Zeitraum {month_label(year, month)}; "
+                f"Gesamt: {cents_to_euro(booked_total_cents)} €; "
+                f"Bereits zuvor übernommen: {already_imported_count}; "
+                f"Übersprungen (Jahr abgeschlossen): {len(skipped_closed_year)}"
+            )
+            if skipped_closed_year:
+                details += " [" + ", ".join(skipped_closed_year) + "]"
+            details += f"; Übersprungen (ungültige Zeile): {skipped_invalid}"
+
+            audit_log(
+                "finance",
+                "csv_import_booked",
+                f"CSV-Import gebucht: {booked_count} Buchungen ({month_label(year, month)})",
+                details=details,
+                object_type="Document",
+                object_id=document.id,
+                new_value=f"{booked_count} Buchungen, {cents_to_euro(booked_total_cents)} €",
+            )
+
+        db.session.commit()
+
+        message_parts = [f"{booked_count} Buchung(en) übernommen."]
+        if skipped_closed_year:
+            message_parts.append(f"{len(skipped_closed_year)} übersprungen (Jahr bereits abgeschlossen).")
+        if skipped_invalid:
+            message_parts.append(f"{skipped_invalid} übersprungen (ungültige Zeile).")
+        flash(" ".join(message_parts), "success" if booked_count else "warning")
+
+        return redirect(url_for("monthly_bank_closing_csv_import", month=month_value))
+
+    parsed, review_rows = build_csv_import_review_rows(document)
+
+    return render_template(
+        "monthly_bank_closing_csv_import.html",
+        year=year,
+        month=month,
+        month_value=month_value,
+        document=document,
+        parsed=parsed,
+        review_rows=review_rows,
+        categories=cashbook_category_options(),
     )
 
 

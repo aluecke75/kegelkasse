@@ -92,6 +92,11 @@ def migrate_schema_extensions():
     add("documents", "deleted_at", "deleted_at DATETIME")
     add("documents", "deleted_by_user_id", "deleted_by_user_id INTEGER")
 
+    # CSV-Kontoauszug-Import: technische Dublettenprüfung je Dokument/Zeile
+    # (siehe routes/monthly_contributions.py, monthly_bank_closing_csv_import).
+    add("cashbook_entries", "source_document_id", "source_document_id INTEGER")
+    add("cashbook_entries", "source_row_index", "source_row_index INTEGER")
+
     # Kassenprüfer-/Bestätigungsfelder für bestehende SQLite-Datenbanken.
     for table_name in ["cash_audits", "annual_closings", "interest_settings", "interest_bookings"]:
         add(table_name, "confirmed_by_user_id", "confirmed_by_user_id INTEGER")

@@ -215,6 +215,218 @@ def check_event_lifecycle(client):
         check("Test-Kegelabend aufgeräumt", db.session.get(BowlingEvent, event_id) is None)
 
 
+def check_csv_import_review(client):
+    """CSV-Kontoauszug-Datenübernahme (Review-Assistent monthly_bank_closing_csv_import):
+    Konfidenz-Vorschläge (gelernt/vermutet/kein Treffer), Lerneffekt beim
+    Bestätigen, weicher Monatsbeitrags-Dubletten-Hinweis, Sperre für bereits
+    abgeschlossene Jahre und Idempotenz (source_document_id/source_row_index -
+    keine Doppelbuchung bei erneutem Aufruf)."""
+    from pathlib import Path
+    from models import (
+        Document, CashbookEntry, AccountTransaction, CsvImportRule,
+        Member, MonthlyContributionBatch, MonthlyContributionPayment, AnnualClosing,
+    )
+
+    marker = "SELBSTTESTCSVIMPORT"
+    test_year, test_month = 2099, 1
+    month_value = f"{test_year:04d}-{test_month:02d}"
+
+    csv_text = "\n".join([
+        "Datum;Buchungstext;Verwendungszweck;Betrag",
+        f"01.01.{test_year};Überweisung;{marker} ohne Treffer;12,34",
+        f"02.01.{test_year};Lastschrift;{marker} Mitgliedsbeitrag Max Mustermann Re-Nr 000123;20,00",
+        f"03.01.{test_year};Dauerauftrag;{marker} Miete Kegelbahn Halle Re-Nr 000555;-45,00",
+        f"04.01.{test_year};Buchung;{marker} ungueltige Zeile;abc",
+        "05.01.2020;Überweisung;" + marker + " gesperrtes Jahr;10,00",
+    ]) + "\n"
+
+    with app.app_context():
+        from app import active_database_info
+
+        member = Member.query.filter_by(first_name="Max", last_name="Mustermann").first()
+        if not member:
+            check("Testmitglied für CSV-Import-Check gefunden", False, "Mitglied 'Max Mustermann' nicht in der Demo-Datenbank gefunden")
+            return
+        member_display_name = member.display_name()
+
+        documents_dir = Path(active_database_info()["documents_path"])
+        documents_dir.mkdir(parents=True, exist_ok=True)
+        stored_filename = "selftest_csv_import.csv"
+        target = documents_dir / stored_filename
+        target.write_text(csv_text, encoding="utf-8")
+
+        document = Document(
+            title="Selbsttest Kontoauszug CSV",
+            category="Kontoauszug CSV",
+            document_date=datetime(test_year, test_month, 1).date(),
+            description="Automatischer Selbsttest - bitte ignorieren",
+            original_filename="selftest.csv",
+            stored_filename=stored_filename,
+            mime_type="text/csv",
+            file_size=target.stat().st_size,
+        )
+        db.session.add(document)
+        db.session.flush()
+        document_id = document.id
+
+        batch = MonthlyContributionBatch(year=test_year, month=test_month, account="bank", status="draft")
+        db.session.add(batch)
+        db.session.flush()
+        db.session.add(MonthlyContributionPayment(
+            batch_id=batch.id, member_id=member.id,
+            expected_cents=2000, paid_cents=2000,
+            paid_date=datetime(test_year, test_month, 7).date(),
+        ))
+
+        db.session.add(AnnualClosing(year=2020, closing_date=datetime(2021, 1, 15).date()))
+        db.session.commit()
+
+        from services.csv_import_matching import suggest_for_row, monthly_contribution_duplicate_hint
+
+        suggestion = suggest_for_row("Lastschrift", f"{marker} Mitgliedsbeitrag Max Mustermann Re-Nr 000123", 2000)
+        check(
+            "Vermutet-Konfidenz erkennt Mitgliedsnamen im Verwendungszweck",
+            suggestion["confidence"] == "guessed" and suggestion["category"] == "Mitgliedsbeitrag" and suggestion["person"] == member_display_name,
+            str(suggestion),
+        )
+
+        hint = monthly_contribution_duplicate_hint(
+            datetime(test_year, test_month, 2).date(), 2000, "Lastschrift", f"{marker} Mitgliedsbeitrag Max Mustermann Re-Nr 000123"
+        )
+        check("Dubletten-Hinweis erkennt bereits gebuchten Monatsbeitrag (gleicher Betrag/Zeitraum/Name)", hint is not None, str(hint))
+
+    r = client.get(f"/finance/monthly-bank-closing/csv-import?month={month_value}")
+    ok = r.status_code == 200 and b"Internal Server" not in r.data
+    check("GET /finance/monthly-bank-closing/csv-import", ok, f"Status {r.status_code}")
+    body = r.data.decode("utf-8") if ok else ""
+    check("Review-Seite zeigt 'vermutet'-Badge", "vermutet" in body)
+    check("Review-Seite zeigt Dubletten-Hinweis-Text", "Möglicher Treffer" in body)
+
+    # Zeile 1 (kein Treffer), 3 (Ausgabe -> soll gelernt werden) und 4/5 (ungültig
+    # bzw. gesperrtes Jahr - dürfen trotz "take" NICHT gebucht werden) übernehmen.
+    # Zeile 2 (nur "vermutet") wird bewusst NICHT ausgewählt - Design-Vorgabe:
+    # kein automatisches Buchen ohne bewusste Bestätigung.
+    r = client.post("/finance/monthly-bank-closing/csv-import", data={
+        "month": month_value,
+        "take": ["1", "3", "4", "5"],
+        "category_1": "Sonstige Einnahme",
+        "person_1": "",
+        "category_3": "Bahnkosten",
+        "person_3": "Kegelbahn Selbsttest",
+    }, follow_redirects=True)
+    ok = r.status_code == 200 and b"Internal Server" not in r.data
+    check("POST /finance/monthly-bank-closing/csv-import (Zeilen übernehmen)", ok, f"Status {r.status_code}")
+
+    with app.app_context():
+        entries = CashbookEntry.query.filter_by(source_document_id=document_id).all()
+        booked_indexes = {e.source_row_index for e in entries}
+
+        check("Zeile 1 (kein Treffer, bewusst ausgewählt) wurde gebucht", 1 in booked_indexes)
+        check("Zeile 2 (nur vermutet, NICHT ausgewählt) wurde NICHT gebucht", 2 not in booked_indexes)
+        check("Zeile 3 (Ausgabe) wurde gebucht", 3 in booked_indexes)
+        check("Zeile 4 (ungültiger Betrag) wurde trotz Auswahl NICHT gebucht", 4 not in booked_indexes)
+        check("Zeile 5 (gesperrtes Jahr 2020) wurde trotz Auswahl NICHT gebucht", 5 not in booked_indexes)
+
+        entry3 = next((e for e in entries if e.source_row_index == 3), None)
+        check(
+            "Zeile 3 korrekt als Bank-Ausgabe gebucht (Betrag/Konto/Richtung)",
+            entry3 is not None and entry3.direction == "expense" and entry3.account == "bank" and entry3.amount_cents == 4500,
+        )
+
+        rule = CsvImportRule.query.filter(CsvImportRule.learning_key.like(f"%{marker}%KEGELBAHN%")).first()
+        check("Lerneffekt: Regel für Zeile 3 wurde gespeichert (Kategorie+Person)", rule is not None and rule.category == "Bahnkosten" and rule.person == "Kegelbahn Selbsttest")
+
+        relearned = suggest_for_row("Dauerauftrag", f"{marker} Miete Kegelbahn Halle Re-Nr 000999", -4500)
+        check(
+            "Gelernte Regel wird bei abweichender Belegnummer als 'gelernt' vorgeschlagen",
+            relearned["confidence"] == "learned" and relearned["category"] == "Bahnkosten" and relearned["person"] == "Kegelbahn Selbsttest",
+            str(relearned),
+        )
+
+        transactions = AccountTransaction.query.filter_by(category="csv_import").filter(
+            AccountTransaction.booking_date.in_([datetime(test_year, 1, 1).date(), datetime(test_year, 1, 3).date()])
+        ).all()
+        check("AccountTransaction je gebuchter CSV-Zeile angelegt", len(transactions) == 2, f"gefunden: {len(transactions)}")
+
+    # Erneuter Aufruf der Review-Seite: bereits übernommene Zeile ist markiert.
+    r = client.get(f"/finance/monthly-bank-closing/csv-import?month={month_value}")
+    check("Bereits übernommene Zeile wird als solche markiert", "bereits übernommen" in r.data.decode("utf-8"))
+
+    # Idempotenz: erneutes Übernehmen derselben Zeile darf nicht doppelt buchen.
+    client.post("/finance/monthly-bank-closing/csv-import", data={
+        "month": month_value, "take": ["1"], "category_1": "Sonstige Einnahme",
+    }, follow_redirects=True)
+    with app.app_context():
+        count_row1 = CashbookEntry.query.filter_by(source_document_id=document_id, source_row_index=1).count()
+        check("Erneutes Übernehmen derselben Zeile bucht nicht doppelt (Idempotenz)", count_row1 == 1, f"gefunden: {count_row1}")
+
+    # Ein doppelt übermittelter "take"-Wert innerhalb *eines* Requests (z. B. durch
+    # eine manipulierte Anfrage, da das deaktivierte Checkbox-Attribut clientseitig
+    # keinen echten Schutz bietet) darf dieselbe, bisher nicht gebuchte Zeile 2
+    # trotzdem nur einmal buchen.
+    client.post("/finance/monthly-bank-closing/csv-import", data={
+        "month": month_value, "take": ["2", "2"],
+        "category_2": "Mitgliedsbeitrag", "person_2": member_display_name,
+    }, follow_redirects=True)
+    with app.app_context():
+        count_row2 = CashbookEntry.query.filter_by(source_document_id=document_id, source_row_index=2).count()
+        check("Doppelter 'take'-Wert im selben Request bucht nicht doppelt", count_row2 == 1, f"gefunden: {count_row2}")
+
+    # Eine stornierte CSV-Buchung (is_void) muss wieder zur Übernahme angeboten
+    # werden - sonst bliebe eine korrigierte Zeile für immer gesperrt, obwohl sie
+    # tatsächlich nicht mehr in der Kasse steht.
+    with app.app_context():
+        entry_row2 = CashbookEntry.query.filter_by(source_document_id=document_id, source_row_index=2).first()
+        entry_row2.is_void = True
+        db.session.commit()
+
+        from routes.monthly_contributions import build_csv_import_review_rows
+        document_obj = db.session.get(Document, document_id)
+        _, rows_after_void = build_csv_import_review_rows(document_obj)
+        row2_after_void = next((r for r in rows_after_void if r["index"] == 2), None)
+        check(
+            "Stornierte Zeile gilt wieder als nicht übernommen und kann erneut ausgewählt werden",
+            row2_after_void is not None and row2_after_void["already_imported"] is False,
+        )
+
+    client.post("/finance/monthly-bank-closing/csv-import", data={
+        "month": month_value, "take": ["2"],
+        "category_2": "Mitgliedsbeitrag", "person_2": member_display_name,
+    }, follow_redirects=True)
+    with app.app_context():
+        active_row2_count = CashbookEntry.query.filter_by(
+            source_document_id=document_id, source_row_index=2, is_void=False
+        ).count()
+        check(
+            "Nach Stornierung erneut übernommene Zeile legt genau eine neue aktive Buchung an",
+            active_row2_count == 1, f"gefunden: {active_row2_count}",
+        )
+
+    # Aufräumen.
+    with app.app_context():
+        CashbookEntry.query.filter_by(source_document_id=document_id).delete(synchronize_session=False)
+        AccountTransaction.query.filter_by(category="csv_import").filter(
+            AccountTransaction.booking_date.in_([
+                datetime(test_year, 1, 1).date(),
+                datetime(test_year, 1, 2).date(),
+                datetime(test_year, 1, 3).date(),
+            ])
+        ).delete(synchronize_session=False)
+        CsvImportRule.query.filter(CsvImportRule.learning_key.like(f"%{marker}%")).delete(synchronize_session=False)
+        MonthlyContributionPayment.query.filter_by(batch_id=batch.id).delete(synchronize_session=False)
+        MonthlyContributionBatch.query.filter_by(year=test_year, month=test_month).delete(synchronize_session=False)
+        AnnualClosing.query.filter_by(year=2020).delete(synchronize_session=False)
+        Document.query.filter_by(id=document_id).delete(synchronize_session=False)
+        db.session.commit()
+        if target.exists():
+            target.unlink()
+        check(
+            "Selbsttest-Daten (CSV-Import) aufgeräumt",
+            CashbookEntry.query.filter_by(source_document_id=document_id).count() == 0
+            and Document.query.filter_by(id=document_id).count() == 0,
+        )
+
+
 def check_audit_log_cleanup(client):
     """Revisionsprotokoll bereinigen: Aufbewahrungsfrist speichern, alte
     operative Einträge werden gelöscht, geschützte Kategorien bleiben
@@ -308,6 +520,7 @@ def run():
         check_admin_setting_toggle(client)
         check_backup_lifecycle(client)
         check_event_lifecycle(client)
+        check_csv_import_review(client)
         check_audit_log_cleanup(client)
 
     failed = [r for r in results if not r[1]]

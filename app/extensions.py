@@ -23,7 +23,7 @@ login_manager.login_view = "login"
 login_manager.login_message = "Bitte zuerst anmelden."
 login_manager.init_app(app)
 
-APP_VERSION = "0.99.20"
+APP_VERSION = "0.99.21"
 
 RATE_TYPES = {
     "monthly_fee": "Monatsbeitrag",

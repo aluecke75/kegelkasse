@@ -320,6 +320,9 @@
                                 </div>
                             </div>
                         {% endif %}
+                        <div class="actions" style="margin-top:12px;">
+                            <a class="button secondary" href="{{ url_for('monthly_bank_closing_csv_import', month=month_value) }}">Buchungen prüfen &amp; übernehmen</a>
+                        </div>
                     {% else %}
                         <span class="status-badge status-lock">optional</span>
                     {% endif %}

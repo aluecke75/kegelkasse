@@ -1,0 +1,241 @@
+{% extends "base.html" %}
+
+{% block content %}
+<style>
+    .status-badge {
+        display: inline-block;
+        padding: 7px 14px;
+        border-radius: 999px;
+        font-weight: 900;
+        white-space: nowrap;
+    }
+
+    .status-open { background: #fff3cd; color: #8a6400; }
+    .status-done { background: #dff6e7; color: #146c43; }
+    .status-lock { background: #e9ecef; color: #495057; }
+
+    .status-badge.status-warn {
+        background: #fff7ed;
+        color: #9a3412;
+        white-space: normal;
+        text-align: left;
+        font-weight: 700;
+    }
+
+    .status-badge.status-danger {
+        background: var(--danger-soft);
+        color: var(--danger);
+    }
+
+    tr.row-error { background: #fff1f1; }
+    tr.row-done { background: #f8fafc; color: #667085; }
+
+    .row-error-text { color: #b91c1c; font-weight: 700; font-size: 0.85rem; margin-top: 4px; }
+    .row-source-text { color: #526178; font-size: 0.85rem; }
+    .person-input { min-width: 150px; max-width: none; }
+    .small-button { padding: 7px 10px; font-size: 0.9rem; white-space: nowrap; }
+    .amount-income { color: #146c43; font-weight: 800; }
+    .amount-expense { color: #b91c1c; font-weight: 800; }
+    .date-cell, .amount-cell { white-space: nowrap; }
+    .suggestion-cell select, .suggestion-cell input { margin-top: 6px; }
+
+    /* Für Bildschirmleser: Feldbeschriftung ist vorhanden, aber optisch
+       nicht nötig, weil Spaltenüberschrift + Badge den Kontext schon
+       sichtbar liefern. */
+    .visually-hidden {
+        position: absolute !important;
+        width: 1px;
+        height: 1px;
+        padding: 0;
+        margin: -1px;
+        overflow: hidden;
+        clip: rect(0, 0, 0, 0);
+        white-space: nowrap;
+        border: 0;
+    }
+
+    .take-decision-cell .checkbox-row { margin: 0; }
+    .take-decision-cell .status-badge.status-warn { margin-bottom: 8px; }
+</style>
+
+<div class="modern-header">
+    <div class="modern-icon">🧾</div>
+    <div>
+        <h1>Buchungen aus Kontoauszug prüfen &amp; übernehmen</h1>
+        <p>{{ "%02d"|format(month) }}.{{ year }} · Datei: {{ document.original_filename }}</p>
+    </div>
+</div>
+
+<div class="actions" style="margin-bottom:16px;">
+    <a class="button secondary" href="{{ url_for('monthly_bank_closing', month=month_value) }}">← Zurück zum Monatsabschluss</a>
+</div>
+
+{% if not parsed.ok %}
+    <div class="modern-card">
+        <p>{{ parsed.message }}</p>
+    </div>
+{% else %}
+
+    <div class="metric-grid">
+        <div class="metric-card"><span>CSV-Zeilen</span><strong>{{ review_rows | length }}</strong></div>
+        <div class="metric-card"><span>Gelernt</span><strong>{{ review_rows | selectattr("confidence", "equalto", "learned") | list | length }}</strong></div>
+        <div class="metric-card"><span>Vermutet</span><strong>{{ review_rows | selectattr("confidence", "equalto", "guessed") | list | length }}</strong></div>
+        <div class="metric-card"><span>Fehlerhaft</span><strong>{{ review_rows | selectattr("error") | list | length }}</strong></div>
+        <div class="metric-card"><span>Bereits übernommen</span><strong>{{ review_rows | selectattr("already_imported") | list | length }}</strong></div>
+    </div>
+
+    <div class="modern-card">
+        <div class="modern-header">
+            <div class="modern-icon">✅</div>
+            <div>
+                <h2>Zeilen prüfen</h2>
+                <p>
+                    Konfidenz-Badge bei Kategorie/Person: <span class="status-badge status-done">gelernt</span> = exakt aus früherer Bestätigung erkannt ·
+                    <span class="status-badge status-open">vermutet</span> = Mitgliedsname im Text gefunden ·
+                    <span class="status-badge status-lock">kein Vorschlag</span> = bitte selbst auswählen ·
+                    <span class="status-badge status-danger">Fehler</span> = Zeile kann nicht automatisch übernommen werden (z. B. Datum nicht lesbar).
+                    Ein Dubletten-Hinweis bei „Übernehmen“ schließt eine Zeile nicht automatisch aus - Sie entscheiden pro Zeile selbst.
+                </p>
+            </div>
+        </div>
+
+        <form method="post" id="csvImportForm">
+            <input type="hidden" name="month" value="{{ month_value }}">
+
+            {% if current_user.role in ["admin", "cashier"] %}
+                <div class="inline-actions" style="margin-bottom:12px;">
+                    <button type="button" id="selectAllBtn" class="button secondary small-button">Alle auswählen</button>
+                    <button type="button" id="selectNoneBtn" class="button secondary small-button">Alle abwählen</button>
+                </div>
+            {% endif %}
+
+            <div class="mobile-table-wrap">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Datum</th>
+                            <th>Text / Verwendungszweck</th>
+                            <th>Betrag</th>
+                            <th>Kategorie &amp; Person</th>
+                            <th>Übernehmen</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for row in review_rows %}
+                            <tr class="{% if row.error %}row-error{% elif row.already_imported %}row-done{% endif %}">
+                                <td class="date-cell">{{ row.date_raw }}</td>
+                                <td>
+                                    {% if row.text %}<div class="row-source-text">{{ row.text }}</div>{% endif %}
+                                    <div>{{ row.purpose or "-" }}</div>
+                                    {% if row.error %}<div class="row-error-text">{{ row.error }}</div>{% endif %}
+                                </td>
+                                <td class="amount-cell {{ 'amount-income' if row.amount_cents >= 0 else 'amount-expense' }}">{{ row.amount_euro }} €</td>
+                                <td class="suggestion-cell">
+                                    {% if row.error %}
+                                        <span class="status-badge status-danger">Fehler</span>
+                                    {% elif row.already_imported %}
+                                        <div><strong>{{ row.category or "-" }}</strong></div>
+                                        {% if row.person %}<div class="muted">{{ row.person }}</div>{% endif %}
+                                    {% else %}
+                                        {% if row.confidence == "learned" %}
+                                            <span class="status-badge status-done">gelernt</span>
+                                        {% elif row.confidence == "guessed" %}
+                                            <span class="status-badge status-open">vermutet</span>
+                                        {% else %}
+                                            <span class="status-badge status-lock">kein Vorschlag</span>
+                                        {% endif %}
+
+                                        <label class="visually-hidden" for="category_{{ row.index }}">Kategorie für Buchung vom {{ row.date_raw }} über {{ row.amount_euro }} €</label>
+                                        <select id="category_{{ row.index }}" name="category_{{ row.index }}">
+                                            {% for option in categories %}
+                                                <option value="{{ option }}" {% if option == row.category %}selected{% endif %}>{{ option }}</option>
+                                            {% endfor %}
+                                        </select>
+
+                                        <label class="visually-hidden" for="person_{{ row.index }}">Person für Buchung vom {{ row.date_raw }} über {{ row.amount_euro }} €</label>
+                                        <input id="person_{{ row.index }}" class="person-input" type="text" name="person_{{ row.index }}" value="{{ row.person }}" placeholder="Person (optional)">
+                                    {% endif %}
+                                </td>
+                                <td class="take-decision-cell">
+                                    {% if row.duplicate_hint %}
+                                        <div class="status-badge status-warn">⚠ {{ row.duplicate_hint }}</div>
+                                    {% endif %}
+
+                                    {% if row.already_imported %}
+                                        <label class="checkbox-row muted">
+                                            <input type="checkbox" checked disabled aria-label="Buchung vom {{ row.date_raw }} über {{ row.amount_euro }} € - bereits übernommen">
+                                            <span>bereits übernommen</span>
+                                        </label>
+                                    {% elif row.error %}
+                                        <label class="checkbox-row muted">
+                                            <input type="checkbox" disabled aria-label="Buchung vom {{ row.date_raw }} über {{ row.amount_euro }} € - nicht möglich (Fehler)">
+                                            <span>nicht möglich (Fehler)</span>
+                                        </label>
+                                    {% elif current_user.role in ["admin", "cashier"] %}
+                                        <label class="checkbox-row">
+                                            <input type="checkbox" class="take-checkbox" name="take" value="{{ row.index }}" checked aria-label="Buchung vom {{ row.date_raw }} über {{ row.amount_euro }} € übernehmen">
+                                            <span>Übernehmen</span>
+                                        </label>
+                                    {% else %}
+                                        <label class="checkbox-row muted">
+                                            <input type="checkbox" disabled aria-label="Buchung vom {{ row.date_raw }} über {{ row.amount_euro }} € - nur Leserechte">
+                                            <span>nur Leserechte</span>
+                                        </label>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+
+            {% if current_user.role in ["admin", "cashier"] %}
+                <div class="inline-actions" style="margin-top:16px;">
+                    <button type="submit">Ausgewählte Buchungen übernehmen</button>
+                </div>
+            {% else %}
+                <p class="muted">Kassenprüfer/-innen haben nur Leserechte und können keine Buchungen übernehmen.</p>
+            {% endif %}
+        </form>
+    </div>
+{% endif %}
+
+<script>
+(function () {
+    var form = document.getElementById("csvImportForm");
+    if (form) {
+        form.addEventListener("keydown", function (event) {
+            var tag = (event.target.tagName || "").toLowerCase();
+            if (event.key === "Enter" && (tag === "input" || tag === "select")) {
+                event.preventDefault();
+            }
+        });
+
+        // Schutz gegen versehentliches Doppelklicken: der Klick auf "Ausgewählte
+        // Buchungen übernehmen" darf nicht zweimal hintereinander abgeschickt werden
+        // koennen, sonst drohen doppelte Buchungen, bevor die Seite neu geladen ist.
+        form.addEventListener("submit", function () {
+            var submitButton = form.querySelector("button[type=submit]");
+            if (submitButton) {
+                submitButton.disabled = true;
+                submitButton.textContent = "Wird übernommen …";
+            }
+        });
+    }
+
+    var checkboxes = document.querySelectorAll(".take-checkbox");
+    var selectAll = document.getElementById("selectAllBtn");
+    var selectNone = document.getElementById("selectNoneBtn");
+    if (selectAll) {
+        selectAll.addEventListener("click", function () {
+            checkboxes.forEach(function (cb) { cb.checked = true; });
+        });
+    }
+    if (selectNone) {
+        selectNone.addEventListener("click", function () {
+            checkboxes.forEach(function (cb) { cb.checked = false; });
+        });
+    }
+})();
+</script>
+{% endblock %}

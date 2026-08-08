@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.99.21
+
+- Monatsabschluss: neuer Review-Assistent "Buchungen aus Kontoauszug prüfen & übernehmen" (`/finance/monthly-bank-closing/csv-import`, verlinkt vom Monatsabschluss aus) für die zuvor nur als Vorschau nutzbare Kontoauszug-CSV. Jede CSV-Zeile bekommt einen vorausgefüllten Vorschlag für Kategorie/Person mit Konfidenz-Badge (**gelernt** = exakter Treffer aus einer früheren Bestätigung, **vermutet** = Mitgliedsname im Text erkannt, **kein Vorschlag** = manuell auszuwählen), dazu ein rein informativer Dubletten-Hinweis gegen bereits gebuchte Monatsbeiträge. Gebucht wird nur, was bewusst per Checkbox ausgewählt und bestätigt wird; bereits übernommene Zeilen sind bei erneutem Aufruf gesperrt, gesperrte Geschäftsjahre werden automatisch übersprungen. Jede Bestätigung merkt sich die (ggf. korrigierte) Zuordnung für künftige, ähnliche Buchungen (z. B. wiederkehrende Lastschriften mit wechselnder Belegnummer).
+- Dabei bei der Durchsicht gefunden und behoben: eine stornierte CSV-Buchung blieb bisher dauerhaft als "bereits übernommen" gesperrt statt nach dem Stornieren erneut zur Übernahme angeboten zu werden; ein doppelt übermittelter Auswahlwert im selben Formular-Abschicken konnte dieselbe CSV-Zeile doppelt buchen.
+
 ## v0.99.17
 
 - Dashboard-Fehler behoben: Mitglieder (Rolle "member") sahen die Kachel "Offene Monatsbeiträge" auf dem Dashboard, aber der Link führte auf die Admin-/Kassierer-Seite `/finance/monthly-contributions`, die für ihre Rolle gesperrt ist (403-Fehler). Neue schreibgeschützte Seite "Meine Monatsbeiträge" (`/finance/my-monthly-contributions`) zeigt Mitgliedern jetzt mindestens ihren eigenen Zahlungsstand der letzten 12 Monate (Soll, eingegangen, Wertstellung, Status); die Dashboard-Kachel verlinkt für Mitglieder dorthin.

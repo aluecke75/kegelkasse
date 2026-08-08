@@ -175,6 +175,15 @@ class CashbookEntry(db.Model):
     reason = db.Column(db.String(255), nullable=False)
     note = db.Column(db.Text, nullable=True)
 
+    # Herkunft aus dem CSV-Kontoauszug-Import (siehe services/csv_import_matching.py
+    # und routes/monthly_contributions.py, Route monthly_bank_closing_csv_import).
+    # Zusammen eindeutig: welche Zeile welches Dokuments bereits als Buchung
+    # übernommen wurde - rein technische Dublettenprüfung, unabhängig vom
+    # weichen Monatsbeitrags-Dubletten-Hinweis in der Review-Tabelle.
+    source_document_id = db.Column(db.Integer, db.ForeignKey("documents.id"), nullable=True)
+    source_document = db.relationship("Document", foreign_keys=[source_document_id])
+    source_row_index = db.Column(db.Integer, nullable=True)
+
     created_by_user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
     created_by_user = db.relationship("User", foreign_keys=[created_by_user_id])
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
@@ -737,6 +746,33 @@ class MonthlyContributionPayment(db.Model):
         return f"{diff / 100:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
 
 
+class CsvImportRule(db.Model):
+    """Gelernte Zuordnung für den CSV-Kontoauszug-Import (Lerneffekt).
+
+    Beim Bestätigen einer CSV-Zeile im Review-Assistenten (Route
+    monthly_bank_closing_csv_import) wird die dabei verwendete, ggf. vom
+    Kassierer korrigierte Kategorie/Person unter einem aus Buchungstext und
+    Verwendungszweck normalisierten Lernschlüssel gespeichert (siehe
+    services/csv_import_matching.py: normalize_learning_key). Künftige
+    CSV-Zeilen mit demselben Lernschlüssel - z. B. wiederkehrende
+    Lastschriften/Daueraufträge mit leicht unterschiedlicher Belegnummer -
+    werden dadurch automatisch mit hoher Konfidenz ("gelernt") vorgeschlagen.
+    """
+    __tablename__ = "csv_import_rules"
+
+    id = db.Column(db.Integer, primary_key=True)
+
+    learning_key = db.Column(db.String(255), unique=True, nullable=False)
+
+    category = db.Column(db.String(80), nullable=False)
+    person = db.Column(db.String(160), nullable=True)
+
+    hit_count = db.Column(db.Integer, nullable=False, default=1)
+
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
 class Document(db.Model):
     __tablename__ = "documents"
 
@@ -755,7 +791,11 @@ class Document(db.Model):
     event = db.relationship("BowlingEvent")
 
     cashbook_entry_id = db.Column(db.Integer, db.ForeignKey("cashbook_entries.id"), nullable=True)
-    cashbook_entry = db.relationship("CashbookEntry")
+    # foreign_keys explizit: seit CashbookEntry.source_document_id (CSV-Import,
+    # siehe oben) gibt es zwei FK-Pfade zwischen documents und
+    # cashbook_entries - ohne explizite Angabe kann SQLAlchemy den
+    # Join für diese Relationship sonst nicht mehr eindeutig bestimmen.
+    cashbook_entry = db.relationship("CashbookEntry", foreign_keys=[cashbook_entry_id])
 
     uploaded_by_user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
     uploaded_by_user = db.relationship("User", foreign_keys=[uploaded_by_user_id])
