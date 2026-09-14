@@ -989,7 +989,7 @@
                             <div class="settlement-mobile-grid">
                                 <div class="settlement-mobile-field">
                                     <label>Strafen</label>
-                                    <div class="settlement-mobile-number"><span class="settlement-penalty" data-penalty-cents="{{ row.penalty_cents }}">{{ row.penalty_euro }}</span> €</div>
+                                    <div class="settlement-mobile-number"><span class="settlement-penalty" data-penalty-cents="{{ row.balance_cents }}">{{ row.balance_euro }}</span> €</div>
                                 </div>
                                 <div class="settlement-mobile-field">
                                     <label>Bezahlt</label>
@@ -997,7 +997,7 @@
                                 </div>
                                 <div class="settlement-mobile-field">
                                     <label>Rest/Offen</label>
-                                    <div class="settlement-mobile-number"><span class="settlement-rest">{{ row.penalty_euro }}</span> €</div>
+                                    <div class="settlement-mobile-number"><span class="settlement-rest">{{ row.balance_euro }}</span> €</div>
                                 </div>
                             </div>
                         </div>

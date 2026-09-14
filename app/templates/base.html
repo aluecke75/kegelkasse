@@ -360,8 +360,28 @@ Nicht löschen – ggf. für spätere Entwicklungsarbeiten wieder aktivieren.
             <a href="{{ url_for('account') }}">Mein Konto</a>
             <a href="{{ url_for('logout') }}">Abmelden</a>
         </nav>
-    {% endif %}
+        {% endif %}
 </header>
+
+{% if developer_mode and active_database_display and active_database_display.is_test %}
+<div id="test-mode-banner" style="background:#fff1f1;border:1px solid #fecaca;color:#991c12;padding:12px 18px;box-shadow:0 2px 6px rgba(0,0,0,0.08);">
+    <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;max-width:1100px;margin:0 auto;">
+        <div style="display:flex;align-items:center;gap:8px;font-weight:800;font-size:0.92rem;">
+            <span>⚠️</span>
+            <span>Testmodus aktiv: Sie nutzen die <strong>{{ active_database_display.label }}</strong>.</span>
+        </div>
+        <div style="margin-left:auto;font-size:0.85rem;">
+            <form method="post" action="{{ url_for('test_database_control') }}" style="display:inline;">
+                <input type="hidden" name="action" value="switch_production">
+                <button type="submit" class="button btn-success" style="font-size:0.82rem;padding:4px 12px;border-radius:6px;">
+                    Zurück zur echten Vereinsdatenbank
+                </button>
+            </form>
+            <a href="{{ url_for('test_database_page') }}" style="color:#991c1b;text-decoration:underline;font-size:0.82rem;margin-left:12px;">Mehr Testoptionen …</a>
+        </div>
+    </div>
+</div>
+{% endif %}
 
 <main>
     {% with messages = get_flashed_messages(with_categories=true) %}
