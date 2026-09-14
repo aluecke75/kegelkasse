@@ -77,6 +77,13 @@ class Config:
     DEVELOPER_MODE = DEVELOPER_MODE
     SECRET_KEY = os.getenv("SECRET_KEY", "dev-secret-change-me")
 
+    # Standardmäßig aus, damit ein Zugriff per reinem HTTP (z.B. direkt per
+    # http://<nas-ip>:8091 im lokalen Netz, ohne Reverse-Proxy) nicht
+    # plötzlich am Login scheitert. Bewusst per Umgebungsvariable aktivierbar,
+    # wenn WIRKLICH jeder Zugriff (auch im LAN) über HTTPS läuft - sonst
+    # weigert sich der Browser, das Session-Cookie über HTTP zu senden.
+    SESSION_COOKIE_SECURE = os.getenv("SESSION_COOKIE_SECURE", "false").strip().lower() in ("1", "true", "yes", "on")
+
     SQLALCHEMY_DATABASE_URI = f"sqlite:///{get_database_path()}"
     SQLALCHEMY_TRACK_MODIFICATIONS = False
 

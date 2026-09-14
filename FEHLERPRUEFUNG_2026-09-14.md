@@ -18,7 +18,7 @@ Regression). F1/F2 zusätzlich gezielt mit eigenem Testskript verifiziert.
 | S5 | ⏸️ zurückgestellt | CSRF-Schutz: Änderung wäre projektweit (~30 Templates), zu invasiv für diese Runde ohne dedizierten Test |
 | S6 | ✅ behoben | Login-Lockout: 5 Fehlversuche/5 Min. → 60 Sek. Sperre je Benutzername |
 | S7 | ✅ behoben | CSV-/Formel-Injection-Schutz in Export (führendes Apostroph bei =+-@) |
-| S8 | ⏸️ zurückgestellt | `SESSION_COOKIE_SECURE`: Risiko, Login komplett zu blockieren, falls ohne HTTPS betrieben — bitte erst klären, ob ein Reverse-Proxy mit HTTPS davor steht |
+| S8 | ✅ behoben (opt-in) | `SESSION_COOKIE_SECURE` als neue Einstellung ergänzt, standardmäßig `false`. Da HTTPS via Reverse-Proxy bestätigt wurde: in der echten `.env` `SESSION_COOKIE_SECURE=true` setzen, um es scharf zu schalten (nur falls WIRKLICH jeder Zugriff, auch im LAN, über HTTPS läuft) |
 | S9 | ℹ️ kein Code-Fix nötig | Aktuell nicht ausnutzbar, da echte `.env` bereits starke Werte hat |
 | S10 | ℹ️ kein Code-Fix nötig | Keine Nutzereingaben beteiligt, kein echtes Risiko |
 | F1 | ✅ behoben | Löschbug: Wortgrenzen-Prüfung statt reinem LIKE-Textmuster |
@@ -46,11 +46,28 @@ Regression). F1/F2 zusätzlich gezielt mit eigenem Testskript verifiziert.
 
 **Bitte unbedingt selbst gegentesten, insbesondere:**
 - M1 am eigenen Handy: öffnen sich die Menüs jetzt per Tippen?
-- S2: Das bisherige "Testdatenbank vor dem Login umschalten" per Logo/URL
-  funktioniert jetzt nicht mehr ohne Admin-Login — falls das ein bewusst
-  genutzter Arbeitsablauf war, bitte Bescheid geben.
 - F3/F4: Bereits gebuchte alte Zinsgutschriften/Kassenprüfungen wurden NICHT
   rückwirkend korrigiert, nur die Berechnung für neue/zukünftige Buchungen.
+
+**Update zu S2** (Rückfrage beantwortet: Vor-Login-Umschalten wird bewusst
+als Admin genutzt): Der Weg bleibt erhalten, ist aber jetzt an eine
+Admin-Anmeldung geknüpft. `/test-database` fragt ohne bestehende Session
+zusätzlich Admin-Benutzername/-Passwort ab (inkl. Lockout wie beim
+normalen Login), bevor die Datenbank gewechselt wird. Der Banner-Button
+"Zurück zur echten Vereinsdatenbank" bleibt bewusst ungeschützt, da er nur
+in den sicheren Normalzustand zurückwechselt und keine Testdaten offenlegt
+oder etwas löscht. Reset/Löschen einer Testdatenbank verlangen ebenfalls die
+Admin-Anmeldung. Bitte einmal gegentesten, ob der gewohnte Ablauf so noch
+passt.
+
+**Update zu S8** (Rückfrage beantwortet: HTTPS via Reverse-Proxy vorhanden):
+Die Einstellung existiert jetzt (`SESSION_COOKIE_SECURE`), ist aber bewusst
+standardmäßig aus, weil `compose.yml` den Port zusätzlich direkt exponiert
+(`APP_PORT`) und ich nicht weiß, ob z.B. im Heimnetz manchmal auch direkt per
+`http://<nas-ip>:8091` zugegriffen wird. Bitte in der echten `.env`
+`SESSION_COOKIE_SECURE=true` ergänzen, **nur falls wirklich jeder Zugriff**
+(auch lokal) über HTTPS läuft — sonst könnte sich niemand mehr per direktem
+HTTP-Zugriff einloggen.
 
 ---
 

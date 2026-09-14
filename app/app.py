@@ -1013,9 +1013,23 @@ def test_database_page():
     return render_template("test_database.html")
 
 
+def _verify_admin_credentials(username, password):
+    """Prüft Admin-Zugangsdaten OHNE eine Login-Session anzulegen - genutzt,
+    um die Testdatenbank-Umschaltung weiterhin auch ohne vorheriges Einloggen
+    zu erlauben (bisheriger Admin-Workflow), aber nur für echte Admins der
+    gerade aktiven Datenbank statt komplett offen für jeden Besucher."""
+    username = (username or "").strip()
+    if not username or _login_locked_out(username):
+        return False
+    user = User.query.filter_by(username=username, active=True).first()
+    if user and user.role == "admin" and check_password_hash(user.password_hash, password or ""):
+        _LOGIN_FAILED_ATTEMPTS.pop(username, None)
+        return True
+    _login_record_failed_attempt(username)
+    return False
+
+
 @app.route("/test-database/switch", methods=["POST"])
-@login_required
-@role_required("admin")
 def switch_database_profile():
     if not app.config.get("DEVELOPER_MODE", False):
         abort(404)
@@ -1025,7 +1039,22 @@ def switch_database_profile():
     Die echte Vereinsdatenbank bleibt unter /app/database/kegelkasse.db unverändert.
     Damit SQLAlchemy sauber auf die andere Datei verbindet, wird der Containerprozess
     kurz beendet. Docker startet ihn wegen restart: unless-stopped automatisch neu.
+
+    Kein @login_required: bewusst auch ohne bestehende Session nutzbar (z.B.
+    um von der Produktivdatenbank aus in eine Testdatenbank zu wechseln, ohne
+    sich vorher einzuloggen). Stattdessen werden Admin-Zugangsdaten direkt in
+    diesem Formular geprüft (siehe _verify_admin_credentials) - schließt den
+    zuvor komplett offenen Zugriff, ohne den bestehenden Arbeitsablauf zu
+    brechen.
     """
+    if not current_user.is_authenticated and not _verify_admin_credentials(
+        request.form.get("admin_username"), request.form.get("admin_password")
+    ):
+        flash("Admin-Benutzername/Passwort erforderlich, um die Datenbank zu wechseln.", "danger")
+        return redirect(url_for("test_database_page"))
+    if current_user.is_authenticated and current_user.role != "admin":
+        abort(403)
+
     profile = normalize_database_profile(request.form.get("database_profile"))
     reset_test_database = request.form.get("reset_test_database") == "1"
 
@@ -1070,8 +1099,6 @@ def switch_database_profile():
 
 
 @app.route("/test-database/control", methods=["POST"])
-@login_required
-@role_required("admin")
 def test_database_control():
     if not app.config.get("DEVELOPER_MODE", False):
         abort(404)
@@ -1079,9 +1106,27 @@ def test_database_control():
 
     Speichern ist bei SQLite automatisch: Beim Zurückwechseln zur echten Datenbank
     wird die aktive Testdatenbank nicht gelöscht. Reset/Löschen sind nur für Testprofile erlaubt.
+
+    Kein pauschales @login_required: das Banner kann auch auf der Loginseite
+    erscheinen (aktive Testdatenbank ist ein globaler Serverzustand, nicht an
+    eine Session gebunden). "switch_production" bleibt bewusst ungeschützt -
+    es wechselt nur zurück zum sicheren Normalzustand, zeigt keine Testdaten
+    und löscht/verändert nichts. Die eingreifenden Aktionen (Reset/Löschen
+    einer Testdatenbank) verlangen ohne bestehende Admin-Session dagegen wie
+    bei switch_database_profile() eine inline Admin-Anmeldung.
     """
-    active_profile = get_active_database_profile()
     action = (request.form.get("action") or "").strip()
+
+    if action != "switch_production":
+        if not current_user.is_authenticated and not _verify_admin_credentials(
+            request.form.get("admin_username"), request.form.get("admin_password")
+        ):
+            flash("Admin-Benutzername/Passwort erforderlich für diese Aktion.", "danger")
+            return redirect(url_for("login"))
+        if current_user.is_authenticated and current_user.role != "admin":
+            abort(403)
+
+    active_profile = get_active_database_profile()
 
     if action == "switch_production":
         set_active_database_profile("production")

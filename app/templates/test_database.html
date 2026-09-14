@@ -41,6 +41,15 @@
             <span>Gewählte Testdatenbank vorher leeren/zurücksetzen<br><small>Bei der echten Vereinsdatenbank wird diese Option ignoriert.</small></span>
         </label>
 
+        {% if not current_user.is_authenticated %}
+        <div class="subtle-box">
+            <strong>Admin-Anmeldung erforderlich</strong>
+            <p class="muted" style="margin:4px 0 10px;">Ohne bestehende Anmeldung bitte Admin-Zugangsdaten eingeben, um die Datenbank zu wechseln.</p>
+            <label>Admin-Benutzername<input type="text" name="admin_username" autocomplete="username"></label>
+            <label>Admin-Passwort<input type="password" name="admin_password" autocomplete="current-password"></label>
+        </div>
+        {% endif %}
+
         <div class="inline-actions">
             <button type="submit">Datenbank wechseln</button>
             <a class="button secondary" href="{{ url_for('login') }}">Zur Loginseite</a>
