@@ -1,6 +1,6 @@
 # 🎳 Kegelkasse
 
-Eine selbst gehostete Vereinsverwaltung für Kegel-/Bowlingvereine: Mitgliederverwaltung, Kassenbuch, Bankkonto & Barkasse, Monatsbeiträge, Strafkonto, Kegelabende, Revision, Statistiken und Datensicherung — alles in einer App.
+Eine selbst gehostete Vereinsverwaltung für Kegelvereine: Mitgliederverwaltung, Kassenbuch, Bankkonto & Barkasse, Monatsbeiträge, Strafkonto, Kegelabende, Revision, Statistiken und Datensicherung — alles in einer App.
 
 Entstanden aus dem echten Bedarf eines Kegelvereins, läuft produktiv als Docker-Container.
 
