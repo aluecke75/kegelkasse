@@ -11,7 +11,7 @@ from models import db, InterestSetting, InterestBooking, CashbookEntry, AccountT
 from services.settings import get_app_setting
 from services.money import cents_to_euro, euro_to_cents, form_euro_to_cents, round_tax_cents
 from services.audit import audit_log
-from routes.cashbook import account_balance
+from routes.cashbook import account_balance, account_balance_as_of
 
 
 def get_finance_settings():
@@ -346,7 +346,11 @@ def interest_module():
                 )
                 return redirect(url_for("interest_module"))
 
-            basis_balance_cents = account_balance("bank")
+            # Historischer Stand zum Ende des Zinszeitraums statt des heutigen
+            # Live-Saldos - sonst wird bei späterer Buchung mit einem inzwischen
+            # gestiegenen/gesunkenen Kontostand statt dem tatsächlichen
+            # Periodenstand gerechnet.
+            basis_balance_cents = account_balance_as_of("bank", period_end)
             expected_cents = calculate_expected_interest_cents(
                 basis_balance_cents,
                 active_setting.annual_rate_basis_points,
@@ -443,7 +447,7 @@ def interest_module():
         today = datetime.today().date()
         default_start, default_end = datetime(today.year, 1, 1).date(), today
 
-    bank_balance_cents = account_balance("bank")
+    bank_balance_cents = account_balance_as_of("bank", default_end)
     expected_cents = calculate_expected_interest_cents(
         bank_balance_cents,
         active_setting.annual_rate_basis_points if active_setting else 0,

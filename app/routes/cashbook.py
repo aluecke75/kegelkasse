@@ -100,6 +100,12 @@ def opening_balances():
             description=description or "Startbestand Bankkonto",
         ))
 
+        audit_log(
+            "finance",
+            "opening_balances_saved",
+            "Startbestände gespeichert",
+            details=f"Barkasse: {cents_to_euro(cash_cents)} €; Bank: {cents_to_euro(bank_cents)} €; Datum: {booking_date}; Beschreibung: {description or '-'}",
+        )
         db.session.commit()
 
         flash("Startbestände wurden gespeichert.", "success")

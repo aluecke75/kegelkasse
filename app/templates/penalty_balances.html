@@ -18,6 +18,10 @@
             <label>Betrag<input class="euro-input" type="text" name="amount" placeholder="z. B. ,50 oder 20,00" inputmode="decimal" required></label>
             <label>Datum<input type="date" name="booking_date" value="{{ today }}" required></label>
             <label>Bemerkung<textarea name="note" rows="3" placeholder="z. B. gesammeltes Strafgeld"></textarea></label>
+            <label style="display:flex;align-items:center;gap:8px;font-weight:normal;">
+                <input type="checkbox" id="confirm_closed_year" name="confirm_closed_year" value="1">
+                <span style="margin:0;">Bewusst in einem bereits abgeschlossenen Jahr buchen (nur nötig, falls eine entsprechende Meldung erscheint)</span>
+            </label>
             <button type="submit">Überweisung buchen</button>
         </form>
     </div>

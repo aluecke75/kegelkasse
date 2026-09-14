@@ -1,5 +1,6 @@
 """Kegelabende: Anlegen, Strafen/Anwesenheit erfassen, Abrechnen (Barzahlungen,
 Bahnkosten), Bearbeitungssperre, persönliche Sicht ("Mein Kegelabend"/"Meine Statistik")."""
+import re
 import secrets
 from datetime import datetime, timedelta
 
@@ -661,7 +662,7 @@ def personal_event_payload():
             "message": "Dein Benutzerkonto ist noch keinem Mitglied zugeordnet.",
         }
 
-    event = BowlingEvent.query.filter(BowlingEvent.status.in_(("open", "settlement", "lane_cost"))).order_by(BowlingEvent.event_date.desc(), BowlingEvent.id.desc()).first()
+    event = get_active_event()
     is_live = True
 
     if not event:
@@ -835,13 +836,38 @@ def save_event_participants(event):
                 penalty.note = None
 
 
+def get_active_event():
+    """Der aktuell laufende Kegelabend: Status offen/Abrechnung/Bahnkosten UND
+    das Datum liegt heute oder in der Vergangenheit. Ein im Voraus für ein
+    zukünftiges Datum angelegter Abend gilt erst ab seinem eigenen Datum als
+    aktiv (vorher zeigen Dashboard/Navigation/"Mein Kegelabend" stattdessen
+    ganz normal den Countdown zum nächsten Termin)."""
+    return (
+        BowlingEvent.query
+        .filter(
+            BowlingEvent.status.in_(("open", "settlement", "lane_cost")),
+            BowlingEvent.event_date <= datetime.today().date(),
+        )
+        .order_by(BowlingEvent.event_date.desc(), BowlingEvent.id.desc())
+        .first()
+    )
+
+
 def reset_event_bookings(event):
     MemberPenaltyTransaction.query.filter_by(event_id=event.id).delete()
 
+    # Vorfilter per LIKE (nutzt einen Index/ist schnell), aber LIKE '%Kegelabend #1%'
+    # trifft auch "Kegelabend #10".."#19", "#100".."#199" usw. Deshalb zusätzlich
+    # in Python mit einer Wortgrenze exakt auf diese Event-ID prüfen.
     marker = f"Kegelabend #{event.id}"
-    old_transactions = AccountTransaction.query.filter(
+    marker_pattern = re.compile(rf"Kegelabend #{event.id}(?!\d)")
+    candidate_transactions = AccountTransaction.query.filter(
         AccountTransaction.description.like(f"%{marker}%")
     ).all()
+    old_transactions = [
+        transaction for transaction in candidate_transactions
+        if marker_pattern.search(transaction.description or "")
+    ]
 
     for transaction in old_transactions:
         db.session.delete(transaction)
@@ -918,12 +944,7 @@ def my_stats():
 def events():
     event_list = BowlingEvent.query.order_by(BowlingEvent.event_date.desc()).all()
 
-    active_event = (
-        BowlingEvent.query
-        .filter(BowlingEvent.status.in_(("open", "settlement", "lane_cost")))
-        .order_by(BowlingEvent.event_date.desc(), BowlingEvent.id.desc())
-        .first()
-    )
+    active_event = get_active_event()
 
     return render_template(
         "events.html",

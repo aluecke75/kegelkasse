@@ -10,7 +10,7 @@ from auth import role_required
 from models import db, CashAudit
 from services.money import cents_to_euro, form_euro_to_cents
 from services.audit import audit_log, cash_audit_snapshot
-from routes.cashbook import account_balance
+from routes.cashbook import account_balance_as_of
 
 
 def cash_audit_export_rows(year=None):
@@ -46,9 +46,6 @@ def cash_audits():
         flash("Kassenprüfer/-innen haben nur Leserechte und können keine Änderungen speichern.", "warning")
         return redirect(request.referrer or url_for("dashboard"))
 
-    expected_cash_cents = account_balance("cash")
-    expected_bank_cents = account_balance("bank")
-
     if request.method == "POST":
         audit_date_raw = request.form.get("audit_date") or datetime.today().date().isoformat()
         try:
@@ -56,6 +53,12 @@ def cash_audits():
         except ValueError:
             flash("Bitte ein gültiges Prüfdatum eingeben.", "danger")
             return redirect(url_for("cash_audits"))
+
+        # Soll-Stand zum gewählten Prüfdatum, nicht der heutige Live-Saldo -
+        # sonst verfälscht jede Buchung zwischen Prüfdatum und Erfassung die
+        # angezeigte Differenz.
+        expected_cash_cents = account_balance_as_of("cash", audit_date)
+        expected_bank_cents = account_balance_as_of("bank", audit_date)
 
         try:
             counted_cash_cents = form_euro_to_cents("counted_cash", "Barkasse gezählt")
@@ -98,11 +101,15 @@ def cash_audits():
         flash("Kassenprüfung wurde gespeichert.", "success")
         return redirect(url_for("cash_audits"))
 
+    today = datetime.today().date()
+    expected_cash_cents = account_balance_as_of("cash", today)
+    expected_bank_cents = account_balance_as_of("bank", today)
+
     audits = CashAudit.query.order_by(CashAudit.audit_date.desc(), CashAudit.created_at.desc()).all()
     return render_template(
         "cash_audits.html",
         audits=audits,
-        today=datetime.today().date().isoformat(),
+        today=today.isoformat(),
         expected_cash=cents_to_euro(expected_cash_cents),
         expected_bank=cents_to_euro(expected_bank_cents),
     )

@@ -2,7 +2,7 @@
 from datetime import datetime
 
 from flask import request, flash, redirect, url_for, render_template
-from flask_login import login_required
+from flask_login import login_required, current_user
 from werkzeug.security import generate_password_hash
 
 from extensions import app
@@ -10,12 +10,24 @@ from auth import role_required
 from models import db, Member, User
 from services.audit import audit_log, audit_value, audit_diff_lines, member_audit_snapshot
 
+ASSIGNABLE_MEMBER_ROLES = ("member", "cashier", "admin")
+
 
 def update_member_login(member):
     create_login = request.form.get("create_login") == "on"
     username = request.form.get("username", "").strip()
     role = request.form.get("role", "member").strip()
     password = request.form.get("password", "")
+
+    if role not in ASSIGNABLE_MEMBER_ROLES:
+        role = "member"
+
+    # Nur ein Admin darf die Admin-Rolle vergeben - sonst könnte sich ein
+    # Kassierer-Konto über dieses ganz normale Formular selbst (oder ein
+    # anderes Mitglied) zum Admin machen.
+    if role == "admin" and current_user.role != "admin":
+        flash("Nur Admins dürfen die Rolle 'Admin' vergeben.", "danger")
+        return
 
     if not create_login:
         if member.user:
@@ -28,6 +40,11 @@ def update_member_login(member):
 
     if member.user:
         user = member.user
+        if username != user.username:
+            existing = User.query.filter_by(username=username).first()
+            if existing:
+                flash("Dieser Benutzername ist bereits vergeben.", "danger")
+                return
         user.username = username
         user.role = role
         user.active = True

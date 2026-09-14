@@ -38,7 +38,11 @@ def admin_area():
         form_action = request.form.get("form_action", "user")
 
         if form_action == "cancel_password_reset":
-            reset_id = int(request.form.get("reset_id", 0) or 0)
+            try:
+                reset_id = int(request.form.get("reset_id", 0) or 0)
+            except ValueError:
+                flash("Ungültige Anfrage.", "danger")
+                return redirect(url_for("admin_area"))
             reset = PasswordResetToken.query.get_or_404(reset_id)
             reset.used_at = datetime.utcnow()
             audit_log(
@@ -227,10 +231,10 @@ def admin_area():
         if form_action == "create_system_user":
             username = clean_username(request.form.get("new_username", ""))
             email = request.form.get("new_email", "").strip() or None
-            role = request.form.get("new_role", "admin").strip()
+            role = request.form.get("new_role", "auditor").strip()
             password = request.form.get("new_password", "")
             if role not in ("admin", "cashier", "auditor"):
-                role = "admin"
+                role = "auditor"
             if not username:
                 flash("Bitte einen Benutzernamen für den Systembenutzer angeben.", "danger")
                 return redirect(url_for("admin_area"))
@@ -317,7 +321,11 @@ def admin_area():
             flash(message, "success" if sent else "danger")
             return redirect(url_for("admin_area"))
 
-        user_id = int(request.form.get("user_id", 0) or 0)
+        try:
+            user_id = int(request.form.get("user_id", 0) or 0)
+        except ValueError:
+            flash("Ungültige Anfrage.", "danger")
+            return redirect(url_for("admin_area"))
         user = User.query.get_or_404(user_id)
 
         old_username = user.username

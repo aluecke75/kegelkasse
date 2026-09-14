@@ -695,7 +695,7 @@ def monthly_bank_closing_csv_import():
 @login_required
 @role_required("admin", "cashier", "auditor")
 def monthly_contributions():
-    from app import current_rate_cents
+    from app import current_rate_cents, closed_year_block_message
 
     if current_user.role == "auditor" and request.method == "POST":
         flash("Kassenprüfer/-innen haben nur Leserechte und können keine Änderungen speichern.", "warning")
@@ -732,6 +732,25 @@ def monthly_contributions():
             batch.account = account
 
         active_members = Member.query.filter_by(active=True).all()
+
+        # Sperre für bereits abgeschlossene Jahre wie beim CSV-Import: hier gibt
+        # es kein einzelnes globales Buchungsdatum-Feld (jede Zeile hat ihr
+        # eigenes Wertstellungsdatum), daher automatisch zulassen (mit Hinweis
+        # für Admins) statt einer Bestätigungs-Checkbox pro Zeile - wie bei
+        # anderen Abläufen ohne eigenes Datumsfeld.
+        for member in active_members:
+            paid_date_raw = request.form.get(f"paid_date_{member.id}", "").strip()
+            if not paid_date_raw:
+                continue
+            try:
+                candidate_paid_date = datetime.strptime(paid_date_raw, "%Y-%m-%d").date()
+            except ValueError:
+                continue
+            block_reason = closed_year_block_message(candidate_paid_date, require_admin_confirmation=False)
+            if block_reason:
+                flash(block_reason, "danger")
+                return redirect(url_for("monthly_contributions", month=period_value))
+
         existing = {payment.member_id: payment for payment in batch.payments}
         default_expected = current_rate_cents("monthly_fee", target_date)
 

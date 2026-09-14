@@ -16,6 +16,7 @@ import secrets
 import smtplib
 import csv
 import threading
+import time
 import urllib.parse
 import urllib.request
 import urllib.error
@@ -190,12 +191,7 @@ def inject_branding():
 @app.context_processor
 def inject_active_event_navigation():
     try:
-        active_event_nav = (
-            BowlingEvent.query
-            .filter(BowlingEvent.status.in_(("open", "settlement", "lane_cost")))
-            .order_by(BowlingEvent.event_date.desc(), BowlingEvent.id.desc())
-            .first()
-        )
+        active_event_nav = get_active_event()
     except Exception:
         active_event_nav = None
 
@@ -364,7 +360,7 @@ from services.dates import (
 )
 
 
-from routes.events import next_event_date_from_rhythm, next_event_label
+from routes.events import next_event_date_from_rhythm, next_event_label, get_active_event
 
 
 def current_rate_cents(key, target_date):
@@ -748,6 +744,8 @@ def dashboard():
     active_member_count = len(active_members)
     next_date = next_event_date_from_rhythm()
 
+    active_event = get_active_event()
+
     cash_balance_cents = account_balance("cash")
     bank_balance_cents = account_balance("bank")
     open_penalties_cents = 0
@@ -766,12 +764,6 @@ def dashboard():
         elif balance < 0:
             credit_cents += abs(balance)
 
-    active_event = (
-        BowlingEvent.query
-        .filter(BowlingEvent.status.in_(("open", "settlement", "lane_cost")))
-        .order_by(BowlingEvent.event_date.desc(), BowlingEvent.id.desc())
-        .first()
-    )
     last_closed_event = (
         BowlingEvent.query
         .filter(BowlingEvent.status == "closed")
@@ -1022,6 +1014,8 @@ def test_database_page():
 
 
 @app.route("/test-database/switch", methods=["POST"])
+@login_required
+@role_required("admin")
 def switch_database_profile():
     if not app.config.get("DEVELOPER_MODE", False):
         abort(404)
@@ -1076,6 +1070,8 @@ def switch_database_profile():
 
 
 @app.route("/test-database/control", methods=["POST"])
+@login_required
+@role_required("admin")
 def test_database_control():
     if not app.config.get("DEVELOPER_MODE", False):
         abort(404)
@@ -1131,6 +1127,29 @@ def test_database_control():
     return redirect(url_for("login"))
 
 
+
+# Einfacher Brute-Force-Schutz beim Login: pro Benutzername gezählt, nur im
+# Arbeitsspeicher (kein Schema-Update nötig, setzt sich beim Neustart des
+# Prozesses zurück - für diesen niedrigfrequentierten Vereinseinsatz
+# ausreichend). Sperrt nur kurz, damit sich niemand versehentlich selbst
+# lange aussperrt.
+_LOGIN_FAILED_ATTEMPTS = {}
+_LOGIN_MAX_ATTEMPTS = 5
+_LOGIN_WINDOW_SECONDS = 300
+_LOGIN_LOCKOUT_SECONDS = 60
+
+
+def _login_locked_out(username):
+    now = time.time()
+    attempts = [t for t in _LOGIN_FAILED_ATTEMPTS.get(username, []) if now - t < _LOGIN_WINDOW_SECONDS]
+    _LOGIN_FAILED_ATTEMPTS[username] = attempts
+    return len(attempts) >= _LOGIN_MAX_ATTEMPTS and (now - attempts[-_LOGIN_MAX_ATTEMPTS]) < _LOGIN_LOCKOUT_SECONDS
+
+
+def _login_record_failed_attempt(username):
+    _LOGIN_FAILED_ATTEMPTS.setdefault(username, []).append(time.time())
+
+
 @app.route("/login", methods=["GET", "POST"])
 def login():
     if current_user.is_authenticated:
@@ -1140,12 +1159,19 @@ def login():
         username = request.form.get("username", "").strip()
         password = request.form.get("password", "")
 
+        if username and _login_locked_out(username):
+            flash("Zu viele Fehlversuche. Bitte kurz warten und es erneut versuchen.", "danger")
+            return render_template("login.html")
+
         user = User.query.filter_by(username=username, active=True).first()
 
         if user and check_password_hash(user.password_hash, password):
+            _LOGIN_FAILED_ATTEMPTS.pop(username, None)
             login_user(user)
             return redirect(url_for("dashboard"))
 
+        if username:
+            _login_record_failed_attempt(username)
         flash("Benutzername oder Passwort ist falsch.", "danger")
 
     return render_template("login.html")

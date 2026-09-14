@@ -77,8 +77,13 @@ def round_tax_cents(value_cents, rounding_mode):
 
 
 def round_to_ten_cents(cents):
-    """Mathematisch auf den nächsten 0,10-Euro-Schritt runden."""
+    """Mathematisch auf den nächsten 0,10-Euro-Schritt runden (halbe Cent immer aufgerundet).
+
+    Pythons eingebautes round() rundet bei genau x,x5 zur nächsten geraden Zahl
+    (Banker's Rounding), z. B. 25 -> 20 statt 30. Für Geldbeträge ist das nicht
+    gewünscht, daher hier explizit ROUND_HALF_UP.
+    """
     cents = cents or 0
     if cents <= 0:
         return 0
-    return int(round(cents / 10) * 10)
+    return int((Decimal(cents) / Decimal(10)).quantize(Decimal("1"), rounding=ROUND_HALF_UP) * 10)

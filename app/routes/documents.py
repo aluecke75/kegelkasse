@@ -92,9 +92,19 @@ def document_preview_type(doc):
         return "image"
     if ext == "pdf":
         return "pdf"
-    if ext in {"txt", "csv", "json", "html", "htm", "rtf"}:
+    if ext in {"txt", "csv", "json", "rtf"}:
         return "text"
+    # .html/.htm bewusst NICHT inline anzeigen: der Browser würde enthaltenes
+    # <script> im Sicherheitskontext der App ausführen (gespeichertes XSS über
+    # einen als "Dokument" hochgeladenen HTML-Anhang). Download statt Vorschau.
     return "download_only"
+
+
+def _document_id_from_form():
+    try:
+        return int(request.form.get("document_id") or 0)
+    except ValueError:
+        return 0
 
 
 @app.route("/documents", methods=["GET", "POST"])
@@ -168,7 +178,7 @@ def documents_page():
             return redirect(url_for("documents_page"))
 
         if form_action in ["delete", "archive"] and current_user.role in ["admin", "cashier"]:
-            doc = Document.query.get_or_404(int(request.form.get("document_id") or 0))
+            doc = Document.query.get_or_404(_document_id_from_form())
             old_summary = document_summary(doc)
             if not doc.deleted_at:
                 doc.deleted_at = datetime.utcnow()
@@ -191,7 +201,7 @@ def documents_page():
             return redirect(url_for("documents_page"))
 
         if form_action == "restore" and current_user.role in ["admin", "cashier"]:
-            doc = Document.query.get_or_404(int(request.form.get("document_id") or 0))
+            doc = Document.query.get_or_404(_document_id_from_form())
             old_summary = document_summary(doc)
             doc.deleted_at = None
             doc.deleted_by_user_id = None

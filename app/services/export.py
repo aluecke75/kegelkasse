@@ -23,13 +23,28 @@ def export_filename(prefix, extension):
     return f"{safe_prefix}_{stamp}.{extension}"
 
 
+_FORMULA_TRIGGER_CHARS = ("=", "+", "-", "@")
+
+
+def _sanitize_export_cell(value):
+    """Schützt gegen CSV-/Formel-Injection (CWE-1236): Excel/Calc interpretiert
+    Zellen, die mit =, +, -, @ beginnen, beim Öffnen als Formel. Freitext aus
+    Kontoauszug-Import oder Notizfeldern könnte so unbemerkt Code ausführen.
+    Ein führendes Apostroph erzwingt Text-Darstellung, ändert aber nichts an
+    normalen Werten (Beträge, Namen, Daten)."""
+    text = str(value) if value is not None else ""
+    if text and text[0] in _FORMULA_TRIGGER_CHARS:
+        return "'" + text
+    return text
+
+
 def export_rows_to_csv(rows, headers, filename):
     output = StringIO()
     output.write("﻿")
     writer = csv.writer(output, delimiter=";")
     writer.writerow(headers)
     for row in rows:
-        writer.writerow([row.get(header, "") for header in headers])
+        writer.writerow([_sanitize_export_cell(row.get(header, "")) for header in headers])
     return Response(
         output.getvalue(),
         mimetype="text/csv; charset=utf-8",
@@ -49,7 +64,7 @@ def export_rows_to_excel(rows, headers, filename, title="Kegelkasse Export"):
         '<tr>' + ''.join(f'<th>{esc(header)}</th>' for header in headers) + '</tr>',
     ]
     for row in rows:
-        html.append('<tr>' + ''.join(f'<td>{esc(row.get(header, ""))}</td>' for header in headers) + '</tr>')
+        html.append('<tr>' + ''.join(f'<td>{esc(_sanitize_export_cell(row.get(header, "")))}</td>' for header in headers) + '</tr>')
     html.append('</table></body></html>')
     return Response(
         "﻿" + "\n".join(html),

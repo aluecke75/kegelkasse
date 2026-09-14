@@ -547,8 +547,8 @@
         }
 
         .counter-control button {
-            width: 2.25rem;
-            height: 2.25rem;
+            width: 2.75rem;
+            height: 2.75rem;
         }
 
         .counter-control input {
@@ -693,8 +693,8 @@
         }
 
         .event-table .counter-control button {
-            width: 2.2rem;
-            height: 2.2rem;
+            width: 2.75rem;
+            height: 2.75rem;
         }
 
         .event-table .counter-control input {
@@ -886,7 +886,7 @@
                                             name="penalty_{{ participant.id }}_{{ penalty_type.id }}_quantity"
                                             value="{{ value.quantity or 0 }}"
                                             min="0"
-                                            inputmode="none"
+                                            inputmode="numeric"
                                             data-price="{{ penalty_type.amount_cents or 0 }}" data-target-mode="{{ penalty_type.target_mode }}"
                                             {% if entry_locked %}disabled{% endif %}
                                         >
@@ -1107,8 +1107,8 @@
         }
 
         .event-table .counter-control button {
-            width: 2.2rem;
-            height: 2.2rem;
+            width: 2.75rem;
+            height: 2.75rem;
         }
 
         .event-table .counter-control input {

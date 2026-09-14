@@ -68,6 +68,7 @@
         .nav-dropdown-content a { display:block; padding:10px 12px; margin:0; color:var(--text); border-radius:10px; }
         .nav-dropdown-content a:hover { background:#f2f6f3; }
         .nav-dropdown:hover .nav-dropdown-content { display:block; }
+        .nav-dropdown.open .nav-dropdown-content { display:block; }
         .nav-divider { border-top:1px solid var(--line); margin:6px 0; display:block; }
         .nav-section-title { display:block; padding:8px 12px 4px; color:var(--muted); font-size:0.75rem; font-weight:800; text-transform:uppercase; letter-spacing:0.04em; }
         main { padding: 22px; max-width: min(1800px, 96vw); margin: 0 auto; }
@@ -294,7 +295,9 @@ Nicht löschen – ggf. für spätere Entwicklungsarbeiten wieder aktivieren.
             <span class="nav-dropdown">
                 <span class="nav-dropbtn">Auswertungen ▾</span>
                 <span class="nav-dropdown-content">
-                    <a href="{{ url_for('reports') }}">Statistiken</a>
+                    {% if current_user.role in ["admin", "cashier", "auditor"] %}
+                        <a href="{{ url_for('reports') }}">Statistiken</a>
+                    {% endif %}
                     {% if not current_user.is_system_user %}
                         <a href="{{ url_for('my_stats') }}">Meine Statistik</a>
                     {% endif %}
@@ -417,6 +420,63 @@ Nicht löschen – ggf. für spätere Entwicklungsarbeiten wieder aktivieren.
             selector.classList.remove('open');
             toggle.setAttribute('aria-expanded', 'false');
         }
+    });
+})();
+</script>
+
+<script>
+(function () {
+    // Die Menüs (Finanzen, Einstellungen, Administration, Auswertungen)
+    // öffneten sich bisher nur per CSS :hover - auf einem Touchscreen ohne
+    // Maus lässt sich das nicht zuverlässig auslösen. Ergänzt Klick/Tipp und
+    // Tastatur als Alternative, ohne das bestehende Hover-Verhalten am PC zu
+    // verändern.
+    const dropdowns = document.querySelectorAll('.nav-dropdown');
+    if (!dropdowns.length) return;
+
+    function closeAll() {
+        dropdowns.forEach(function (dropdown) {
+            dropdown.classList.remove('open');
+            const button = dropdown.querySelector('.nav-dropbtn');
+            if (button) button.setAttribute('aria-expanded', 'false');
+        });
+    }
+
+    dropdowns.forEach(function (dropdown) {
+        const button = dropdown.querySelector('.nav-dropbtn');
+        if (!button) return;
+        button.setAttribute('tabindex', '0');
+        button.setAttribute('role', 'button');
+        button.setAttribute('aria-expanded', 'false');
+        button.addEventListener('click', function (event) {
+            event.preventDefault();
+            event.stopPropagation();
+            const wasOpen = dropdown.classList.contains('open');
+            closeAll();
+            if (!wasOpen) {
+                dropdown.classList.add('open');
+                button.setAttribute('aria-expanded', 'true');
+            }
+        });
+        button.addEventListener('keydown', function (event) {
+            if (event.key === 'Enter' || event.key === ' ') {
+                event.preventDefault();
+                button.click();
+            }
+        });
+    });
+
+    document.addEventListener('click', function (event) {
+        dropdowns.forEach(function (dropdown) {
+            if (!dropdown.contains(event.target)) {
+                dropdown.classList.remove('open');
+                const button = dropdown.querySelector('.nav-dropbtn');
+                if (button) button.setAttribute('aria-expanded', 'false');
+            }
+        });
+    });
+    document.addEventListener('keydown', function (event) {
+        if (event.key === 'Escape') closeAll();
     });
 })();
 </script>

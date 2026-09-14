@@ -92,7 +92,7 @@ def annual_year_summary(year):
         "member_credits_cents": member_credits_cents,
         "event_count": BowlingEvent.query.filter(BowlingEvent.event_date >= start, BowlingEvent.event_date < end, BowlingEvent.status == "closed").count(),
         "cancelled_event_count": BowlingEvent.query.filter(BowlingEvent.event_date >= start, BowlingEvent.event_date < end, BowlingEvent.status == "cancelled").count(),
-        "open_event_count": BowlingEvent.query.filter(BowlingEvent.event_date >= start, BowlingEvent.event_date < end, BowlingEvent.status == "open").count(),
+        "open_event_count": BowlingEvent.query.filter(BowlingEvent.event_date >= start, BowlingEvent.event_date < end, BowlingEvent.status.in_(("open", "settlement", "lane_cost"))).count(),
         "income_cents": income_cents,
         "expense_cents": expense_cents,
         "last_audit": last_audit,

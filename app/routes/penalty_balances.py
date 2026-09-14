@@ -38,6 +38,8 @@ def penalty_balances():
         return redirect(request.referrer or url_for("dashboard"))
 
     if request.method == "POST":
+        from app import closed_year_block_message
+
         member_id = int(request.form.get("member_id", 0) or 0)
         amount_raw = request.form.get("amount", "0").strip()
         booking_date_raw = request.form.get("booking_date", "").strip()
@@ -49,6 +51,11 @@ def penalty_balances():
         except ValueError:
             return redirect(url_for("penalty_balances"))
         booking_date = datetime.strptime(booking_date_raw, "%Y-%m-%d").date()
+
+        block_reason = closed_year_block_message(booking_date)
+        if block_reason:
+            flash(block_reason, "danger")
+            return redirect(url_for("penalty_balances"))
 
         if amount_cents <= 0:
             flash("Bitte einen positiven Zahlungsbetrag eingeben.", "danger")

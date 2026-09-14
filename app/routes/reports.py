@@ -507,6 +507,7 @@ def export_year_options():
 
 @app.route("/reports")
 @login_required
+@role_required("admin", "cashier", "auditor")
 def reports():
     year_raw = request.args.get("year", "all")
     selected_year = None
