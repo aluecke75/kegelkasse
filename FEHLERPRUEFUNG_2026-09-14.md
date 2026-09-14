@@ -30,7 +30,7 @@ Regression). F1/F2 zusätzlich gezielt mit eigenem Testskript verifiziert.
 | F7 | ✅ behoben | Monatsbeiträge: Sperre für abgeschlossene Jahre ergänzt |
 | F8 | ✅ behoben | Jahresabschluss blockiert jetzt auch bei "Barzahlung"/"Bahnkosten" hängenden Abenden |
 | F9 | ⏸️ zurückgestellt | Bräuchte einen neuen "manuell abschließen"-Weg (kleines Feature, keine reine Fehlerkorrektur) |
-| F10 | ⏸️ zurückgestellt | Seltener Randfall (überlappende Zinsperioden), niedrige Priorität |
+| F10 | ✅ behoben | Dublettenschutz erkennt jetzt auch überlappende (nicht nur exakt gleiche) Zinsperioden |
 | F11 | ⏸️ zurückgestellt | Storno-Rücksynchronisation zum Strafkonto ist eine größere, funktionsübergreifende Änderung — lieber gezielt einzeln angehen |
 | F12 | ✅ behoben | Startbestände: Revisions-Protokolleintrag ergänzt |
 | T1 | ✅ behoben | Doppelter Benutzername beim Bearbeiten wird jetzt abgefangen |
