@@ -331,10 +331,14 @@ def interest_module():
                 flash(block_reason, "danger")
                 return redirect(url_for("interest_module"))
 
+            # Überlappung statt nur exakt gleicher Zeitraum: zwei Standard-
+            # Intervall-Bedingungen (start <= anderes Ende UND ende >= anderes
+            # Start) erkennen auch teilweise überschneidende Zinsperioden
+            # (z. B. Jan-Mär und Feb-Apr), nicht nur exakte Duplikate.
             existing_interest_booking = (
                 InterestBooking.query
-                .filter(InterestBooking.period_start == period_start)
-                .filter(InterestBooking.period_end == period_end)
+                .filter(InterestBooking.period_start <= period_end)
+                .filter(InterestBooking.period_end >= period_start)
                 .filter(InterestBooking.is_cancelled == False)
                 .first()
             )
