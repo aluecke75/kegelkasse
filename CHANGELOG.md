@@ -1,5 +1,42 @@
 # Changelog
 
+## v0.99.23
+
+Größere Fehlerprüfung (technisch, fachlich, Sicherheit, Mobile-Bedienung),
+Details in `FEHLERPRUEFUNG_2026-09-14.md`/`OFFENE_PUNKTE.md`. 25 von 27
+gefundenen Punkten behoben:
+
+- **Sicherheit:** Rollen-Eskalation über das Mitgliederformular geschlossen
+  (ein Kassierer-Konto konnte sich selbst zum Admin machen); Testdatenbank-
+  Umschalten vor dem Login verlangt jetzt eine Admin-Anmeldung statt komplett
+  offen zu sein; gespeichertes XSS über als "Dokument" hochgeladene
+  HTML-Dateien geschlossen (Download statt Inline-Vorschau); `/reports`
+  zeigte bislang jedem Mitglied die Finanzdaten aller anderen an, jetzt nur
+  noch Admin/Kassierer/Kassenprüfer; einfacher Login-Lockout gegen
+  Passwort-Raten; CSV-/Formel-Injection-Schutz im Export; optionales
+  `SESSION_COOKIE_SECURE`.
+- **Fachlich:** Ein im Voraus angelegter, zukünftiger Kegelabend wurde
+  überall fälschlich als "gerade laufend" behandelt (verfrühte "Strafen
+  erfassen"-Aufforderung, verschwindender Countdown auf dem Dashboard) - an
+  allen 4 betroffenen Stellen durch einen Datumsfilter behoben. Zinsen und
+  Kassenprüfung rechneten mit dem heutigen statt dem historischen
+  Kontostand der jeweiligen Periode. Kegelabend löschen/korrigieren konnte
+  durch ein zu ungenaues Textmuster Kassenbuchungen anderer Kegelabende
+  mitlöschen. Weitere Korrekturen: Rundungsfehler bei Fehlgeld, fehlende
+  Jahresabschluss-Sperren bei Strafgeld/Monatsbeiträgen, hängengebliebene
+  Kegelabende blockierten den Jahresabschluss nicht, Startbestände ohne
+  Revisionsprotokoll, überlappende Zinsperioden nicht als Dublette erkannt,
+  Monatsbeitrag mit 0 € Soll blockierte den Monatsabschluss dauerhaft.
+- **Mobile:** Hauptmenüs (Finanzen/Einstellungen/Administration/
+  Auswertungen) öffneten sich bisher nur per Maus-Hover und waren auf dem
+  Handy vermutlich gar nicht erreichbar - jetzt zusätzlich per Klick/Tipp/
+  Tastatur bedienbar. Zähl-Buttons und Tabellen-Buttons für Touch vergrößert,
+  Zifferntastatur für das Trefferzahl-Feld, Diagramme reagieren jetzt auch
+  auf Antippen.
+- **Technisch:** diverses Exception-Handling und Validierungslücken
+  geschlossen (doppelter Benutzername, ungültige Formularwerte, E-Mail-
+  Format).
+
 ## v0.99.21
 
 - Monatsabschluss: neuer Review-Assistent "Buchungen aus Kontoauszug prüfen & übernehmen" (`/finance/monthly-bank-closing/csv-import`, verlinkt vom Monatsabschluss aus) für die zuvor nur als Vorschau nutzbare Kontoauszug-CSV. Jede CSV-Zeile bekommt einen vorausgefüllten Vorschlag für Kategorie/Person mit Konfidenz-Badge (**gelernt** = exakter Treffer aus einer früheren Bestätigung, **vermutet** = Mitgliedsname im Text erkannt, **kein Vorschlag** = manuell auszuwählen), dazu ein rein informativer Dubletten-Hinweis gegen bereits gebuchte Monatsbeiträge. Gebucht wird nur, was bewusst per Checkbox ausgewählt und bestätigt wird; bereits übernommene Zeilen sind bei erneutem Aufruf gesperrt, gesperrte Geschäftsjahre werden automatisch übersprungen. Jede Bestätigung merkt sich die (ggf. korrigierte) Zuordnung für künftige, ähnliche Buchungen (z. B. wiederkehrende Lastschriften mit wechselnder Belegnummer).
