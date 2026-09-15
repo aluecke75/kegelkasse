@@ -838,10 +838,15 @@ def monthly_contributions():
         # einen eigenen bestätigten Zahlungseintrag mit mindestens Sollbetrag hat.
         # Wichtig: Nicht batch.payments verwenden, weil diese Collection während der
         # laufenden Session bei neuen Einträgen unvollständig sein kann.
+        # Ein Sollbetrag von 0 € (z.B. Ehrenmitglied) gilt als trivial erfüllt,
+        # sonst blockiert ein solches Mitglied den ganzen Monat für immer,
+        # weil expected_cents > 0 nie erfüllt wäre.
         all_confirmed = bool(active_members) and len(processed_payments) == len(active_members) and all(
-            (payment.expected_cents or 0) > 0
-            and (payment.paid_cents or 0) >= (payment.expected_cents or 0)
-            and payment.paid_date is not None
+            (payment.expected_cents or 0) == 0
+            or (
+                (payment.paid_cents or 0) >= (payment.expected_cents or 0)
+                and payment.paid_date is not None
+            )
             for payment in processed_payments
         )
 

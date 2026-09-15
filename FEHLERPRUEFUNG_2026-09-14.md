@@ -29,13 +29,13 @@ Regression). F1/F2 zusätzlich gezielt mit eigenem Testskript verifiziert.
 | F6 | ✅ behoben | Strafgeld-Überweisung: Sperre für abgeschlossene Jahre ergänzt |
 | F7 | ✅ behoben | Monatsbeiträge: Sperre für abgeschlossene Jahre ergänzt |
 | F8 | ✅ behoben | Jahresabschluss blockiert jetzt auch bei "Barzahlung"/"Bahnkosten" hängenden Abenden |
-| F9 | ⏸️ zurückgestellt | Bräuchte einen neuen "manuell abschließen"-Weg (kleines Feature, keine reine Fehlerkorrektur) |
+| F9 | ✅ behoben | 0€-Sollbetrag (z.B. Ehrenmitglied) gilt jetzt als trivial erfüllt statt den Monatsabschluss dauerhaft zu blockieren |
 | F10 | ✅ behoben | Dublettenschutz erkennt jetzt auch überlappende (nicht nur exakt gleiche) Zinsperioden |
 | F11 | ⏸️ zurückgestellt | Storno-Rücksynchronisation zum Strafkonto ist eine größere, funktionsübergreifende Änderung — lieber gezielt einzeln angehen |
 | F12 | ✅ behoben | Startbestände: Revisions-Protokolleintrag ergänzt |
 | T1 | ✅ behoben | Doppelter Benutzername beim Bearbeiten wird jetzt abgefangen |
 | T2 | ✅ behoben | `int()`-Absturz bei manipulierten Formularfeldern abgefangen (admin.py, documents.py) |
-| T3 | ⏸️ zurückgestellt | E-Mail-Validierung nachträglich scharf zu schalten könnte bereits gespeicherte Altdaten treffen — erst gezielt prüfen |
+| T3 | ✅ behoben | E-Mail-Format wird jetzt beim Speichern (Mitglied neu/bearbeiten, eigenes Konto) geprüft; bereits gespeicherte Altdaten bleiben unangetastet |
 | T4 | ✅ behoben | Ungültige Rolle fällt jetzt auf "auditor" statt "admin" zurück |
 | T5 | ⏸️ zurückgestellt | Nebenwirkung bei GET ist unschön, aber risikoarm; Änderung erst nach Rücksprache |
 | M1 | ✅ behoben | Menüs (Finanzen/Einstellungen/Administration/Auswertungen) jetzt per Klick/Tipp/Tastatur bedienbar, zusätzlich zu Hover |

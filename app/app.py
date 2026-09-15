@@ -1344,6 +1344,9 @@ def account():
             changed_parts.append("Benutzername geändert")
 
         if email != old_email:
+            if not validate_email_format(email):
+                flash("Bitte eine gültige E-Mail-Adresse eingeben.", "danger")
+                return redirect(url_for("account"))
             current_user.email = email
             changed_parts.append("E-Mail-Adresse geändert")
 

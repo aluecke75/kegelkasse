@@ -9,6 +9,7 @@ from extensions import app
 from auth import role_required
 from models import db, Member, User
 from services.audit import audit_log, audit_value, audit_diff_lines, member_audit_snapshot
+from services.validation import validate_email_format
 
 ASSIGNABLE_MEMBER_ROLES = ("member", "cashier", "admin")
 
@@ -101,6 +102,10 @@ def member_new():
             flash("Vorname ist ein Pflichtfeld.", "danger")
             return redirect(url_for("member_new"))
 
+        if not validate_email_format(email):
+            flash("Bitte eine gültige E-Mail-Adresse eingeben.", "danger")
+            return redirect(url_for("member_new"))
+
         joined_at = (
             datetime.strptime(joined_at_raw, "%Y-%m-%d").date()
             if joined_at_raw
@@ -150,12 +155,17 @@ def member_edit(member_id):
     member = Member.query.get_or_404(member_id)
 
     if request.method == "POST":
+        email_input = request.form.get("email", "").strip()
+        if not validate_email_format(email_input):
+            flash("Bitte eine gültige E-Mail-Adresse eingeben.", "danger")
+            return redirect(url_for("member_edit", member_id=member.id))
+
         old_snapshot = member_audit_snapshot(member)
 
         member.first_name = request.form.get("first_name", "").strip()
         member.last_name = request.form.get("last_name", "").strip()
         member.nickname = request.form.get("nickname", "").strip() or None
-        member.email = request.form.get("email", "").strip() or None
+        member.email = email_input or None
         member.note = request.form.get("note", "").strip() or None
         member.active = request.form.get("active") == "on"
 
