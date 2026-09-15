@@ -175,6 +175,13 @@
                     showTooltip(evt, "<strong>" + (pt.raw.label || "") + "</strong><br>" + s.name + ": " + formatValue(pt.raw.y));
                 });
                 circle.addEventListener("mouseleave", hideTooltip);
+                // Touch-Geräte kennen kein Hover: Antippen zeigt/versteckt den
+                // Tooltip wie ein Klick, damit die Werte auch auf dem Handy
+                // ablesbar sind (nicht nur über die Tabelle daneben).
+                circle.addEventListener("touchstart", function (evt) {
+                    var touch = evt.touches[0];
+                    showTooltip({ clientX: touch.clientX, clientY: touch.clientY }, "<strong>" + (pt.raw.label || "") + "</strong><br>" + s.name + ": " + formatValue(pt.raw.y));
+                }, { passive: true });
                 chart.svg.appendChild(circle);
             });
 
@@ -236,6 +243,10 @@
                     showTooltip(evt, "<strong>" + groupLabel + "</strong><br>" + s.name + ": " + formatValue(value));
                 });
                 rect.addEventListener("mouseleave", hideTooltip);
+                rect.addEventListener("touchstart", function (evt) {
+                    var touch = evt.touches[0];
+                    showTooltip({ clientX: touch.clientX, clientY: touch.clientY }, "<strong>" + groupLabel + "</strong><br>" + s.name + ": " + formatValue(value));
+                }, { passive: true });
                 chart.svg.appendChild(rect);
             });
         });
@@ -243,6 +254,14 @@
         chart.container.appendChild(chart.svg);
         buildLegend(chart.container, series);
     }
+
+    // Tooltip beim Antippen einer anderen Stelle wieder ausblenden (Touch
+    // kennt kein "mouseleave"). Einmalig registriert, egal wie viele
+    // Diagramme auf der Seite gerendert werden.
+    document.addEventListener("touchstart", function (evt) {
+        var tag = evt.target && evt.target.tagName;
+        if (tag !== "circle" && tag !== "rect") hideTooltip();
+    }, { passive: true });
 
     global.KegelCharts = {
         renderLineChart: renderLineChart,

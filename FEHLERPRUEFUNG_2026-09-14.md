@@ -31,7 +31,7 @@ Regression). F1/F2 zusätzlich gezielt mit eigenem Testskript verifiziert.
 | F8 | ✅ behoben | Jahresabschluss blockiert jetzt auch bei "Barzahlung"/"Bahnkosten" hängenden Abenden |
 | F9 | ✅ behoben | 0€-Sollbetrag (z.B. Ehrenmitglied) gilt jetzt als trivial erfüllt statt den Monatsabschluss dauerhaft zu blockieren |
 | F10 | ✅ behoben | Dublettenschutz erkennt jetzt auch überlappende (nicht nur exakt gleiche) Zinsperioden |
-| F11 | ⏸️ zurückgestellt | Storno-Rücksynchronisation zum Strafkonto ist eine größere, funktionsübergreifende Änderung — lieber gezielt einzeln angehen |
+| F11 | ⏸️ zurückgestellt | Geprüft: `CashbookEntry` und `MemberPenaltyTransaction` haben aktuell KEINE gemeinsame ID zum eindeutigen Verknüpfen — bräuchte eine neue Spalte + Schema-Migration (wie seinerzeit bei `source_document_id`), keine sichere Nachrüstung für bereits bestehende Einträge möglich |
 | F12 | ✅ behoben | Startbestände: Revisions-Protokolleintrag ergänzt |
 | T1 | ✅ behoben | Doppelter Benutzername beim Bearbeiten wird jetzt abgefangen |
 | T2 | ✅ behoben | `int()`-Absturz bei manipulierten Formularfeldern abgefangen (admin.py, documents.py) |
@@ -41,8 +41,8 @@ Regression). F1/F2 zusätzlich gezielt mit eigenem Testskript verifiziert.
 | M1 | ✅ behoben | Menüs (Finanzen/Einstellungen/Administration/Auswertungen) jetzt per Klick/Tipp/Tastatur bedienbar, zusätzlich zu Hover |
 | M2 | ✅ behoben | Zähl-Buttons auf Mobile auf ~44px vergrößert |
 | M3 | ✅ behoben | Trefferzahl-Feld zeigt jetzt die Zifferntastatur auf dem Handy |
-| M4 | ⏸️ zurückgestellt | Diagramm-Tooltips ohne Touch: niedrige Priorität, Werte stehen bereits als Tabelle daneben |
-| M5 | ⏸️ zurückgestellt | Kleine Buttons in Tabelle: rein kosmetisch, niedrige Priorität |
+| M4 | ✅ behoben | Diagramme reagieren jetzt zusätzlich auf Antippen (touchstart), nicht mehr nur Maus-Hover |
+| M5 | ✅ behoben | Buttons in der Monatsbeiträge-Tabelle größer (min-height 38px statt ~30px) |
 
 **Bitte unbedingt selbst gegentesten, insbesondere:**
 - M1 am eigenen Handy: öffnen sich die Menüs jetzt per Tippen?

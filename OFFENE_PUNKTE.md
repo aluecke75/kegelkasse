@@ -8,7 +8,7 @@ Chatverlauf mal nicht mehr greifbar ist. Ausgangspunkt war die Prüfliste in
 Wird bei künftigen Zusammenfassungen um neue offene Punkte ergänzt statt neu
 geschrieben — bitte Häkchen setzen/History unten stehen lassen.
 
-## Aktueller Gesamtstand: 25 von 27 Punkten behoben
+## Aktueller Gesamtstand: 27 von 27 Punkten bearbeitet (25 behoben, 2 bewusst offen)
 
 ## Aus Zusammenfassung 1 (2026-09-14, nach Rückfragen zu S2/S8 + F10)
 
@@ -42,25 +42,32 @@ geschrieben — bitte Häkchen setzen/History unten stehen lassen.
 - Nach diesem Stand: 25 von 27 Punkten behoben. Erneut gegen isolierte
   Demo-Datenbank-Kopie getestet: 81/81 Prüfungen grün, keine Regression.
 
-## Noch offen (bewusst nicht weiter bearbeitet)
+## Aus Zusammenfassung 3 (2026-09-15, nach M4 + M5, Prüfung F11/T5)
+
+- [x] **M5** – Aktions-Buttons in der Monatsbeiträge-Tabelle vergrößert
+  (`.small-button`: `min-height:38px`, mehr Padding statt knapp 30px).
+- [x] **M4** – Diagramme (`static/js/charts.js`) reagieren jetzt zusätzlich
+  auf Antippen (`touchstart`) statt nur auf Maus-Hover, inkl. Ausblenden des
+  Tooltips beim Antippen woanders auf der Seite.
+- [ ] **F11 geprüft, weiterhin bewusst offen:** `CashbookEntry` (Kassenbuch)
+  und `MemberPenaltyTransaction` (Strafkonto) haben aktuell KEINE gemeinsame
+  ID, über die man sie beim Stornieren eindeutig verknüpfen könnte. Ein
+  echter Fix bräuchte eine neue Spalte + Schema-Migration (wie seinerzeit
+  `source_document_id` beim CSV-Import) UND würde bereits bestehende, schon
+  gebuchte Einträge nicht rückwirkend verknüpfen können. Kein Quick-Fix.
+- [ ] **T5 nicht angefasst:** Ein Fix müsste auch klären, was eine Seite
+  ohne automatisch angelegte Teilnehmer für eine Rolle wie "auditor"
+  anzeigt (sonst wirkt die Seite kaputt statt nur "sauberer"). Geringer
+  Nutzen für den nötigen Aufwand, daher bewusst nicht angefasst.
+- Nach diesem Stand: 25 von 27 behoben, F11 und T5 bewusst offen gelassen
+  (technische Begründung s.o., keine reine "keine Zeit gehabt"-Vertagung).
+
+## Weiterhin offen: S5
 
 - [ ] **S5 – CSRF-Schutz fehlt projektweit.** Größere, projektweite Änderung
   (Formulare in ~30 Templates betroffen), zu invasiv für eine schnelle
   Zwischenrunde ohne dedizierten Test. Sollte in einer eigenen Sitzung mit
   ausreichend Zeit zum gründlichen Durchtesten gemacht werden.
-- [ ] **F11 – Storno einer automatischen "Barzahlung Strafen"-Buchung
-  synchronisiert das Strafkonto nicht zurück.** Funktionsübergreifend
-  zwischen Kassenbuch und Strafkonten, verdient eigene, gezielte
-  Aufmerksamkeit statt einer Schnellkorrektur.
-- [ ] **T5 – Nebenwirkung bei reinem Lesezugriff:** Beim ersten Öffnen eines
-  Kegelabends (auch per GET, auch durch die reine Leserolle "auditor")
-  werden automatisch Teilnehmer-Datensätze angelegt und committet. Geringe
-  Priorität, kosmetisch/technisch unsauber, aber risikoarm.
-- [ ] **M4 – Diagramm-Tooltips reagieren nur auf Maus-Hover, keine
-  Touch-Unterstützung** (`static/js/charts.js`). Niedrige Priorität, da die
-  Werte zusätzlich als Tabelle neben den Diagrammen stehen.
-- [ ] **M5 – Kleine Aktions-Buttons in einer breiten, scrollbaren Tabelle**
-  (`monthly_contributions.html`). Rein kosmetisch, kein Funktionsverlust.
 
 ## Betrieblich noch offen
 
