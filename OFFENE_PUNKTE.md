@@ -62,6 +62,23 @@ geschrieben — bitte Häkchen setzen/History unten stehen lassen.
 - Nach diesem Stand: 25 von 27 behoben, F11 und T5 bewusst offen gelassen
   (technische Begründung s.o., keine reine "keine Zeit gehabt"-Vertagung).
 
+## Nutzer-Feedback 2026-09-16: S2 grundsätzlich überdenken
+
+Rückmeldung nach Test auf der Demo-Instanz: Da `kegelkasse` (Port 8091) und
+`kegelkasse-demo` (Port 8092) bereits als getrennte Container laufen, ist die
+eingebaute "Testdatenbank vor dem Login umschalten"-Funktion (`/test-database`,
+`switch_database_profile`, `test_database_control`, `DEVELOPER_MODE`)
+eigentlich überflüssig geworden — zum Testen wird ohnehin einfach der andere
+Port benutzt. Statt sie (wie am 2026-09-15 geschehen) nur zusätzlich mit
+einer Admin-Anmeldung abzusichern, könnte sie beim nächsten Aufräumen
+komplett entfernt werden (kleinere Angriffsfläche als jede Absicherung).
+Nicht mehr umgesetzt, um den für heute geplanten Produktiv-Deploy nicht zu
+verzögern.
+
+- [ ] Bei Gelegenheit: Testdatenbank-Umschaltung (`/test-database` und
+  zugehörige Routen/Templates/`DEVELOPER_MODE`) komplett entfernen, da durch
+  den separaten Demo-Container ersetzt.
+
 ## Weiterhin offen: S5
 
 - [ ] **S5 – CSRF-Schutz fehlt projektweit.** Größere, projektweite Änderung
