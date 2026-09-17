@@ -106,7 +106,17 @@ Abende mitgelöscht** — Kassenstand und ggf. bereits erstellte
 Jahresabschlüsse werden dauerhaft falsch, ohne jede Fehlermeldung.
 - [ ] Prüfen/beheben
 
-### F2 — 🟠 „Aktiver Kegelabend“ wird nicht nach Datum gefiltert (4 Fundorte, deckt deine gemeldeten Dashboard-Probleme ab)
+### F2 — ⚠️ ZURÜCKGENOMMEN (2026-09-18): „Aktiver Kegelabend“ wird nicht nach Datum gefiltert (4 Fundorte, deckt deine gemeldeten Dashboard-Probleme ab)
+
+**Update 2026-09-18:** Dieser Fix wurde rückgängig gemacht. Er hat einen
+alltäglichen Arbeitsablauf kaputt gemacht: Kegelabende werden im Verein oft
+schon Tage vorher angelegt, um z.B. bereits bekannte Abmeldungen
+einzutragen — das zählt als aktive Bearbeitung und soll unabhängig vom
+Datum als "Aktiver Kegelabend" mit Status-Hinweis erscheinen, nicht als
+normaler Termin mit Countdown. Die "aktiv"-Erkennung hatte laut Git-Historie
+seit ihrer Einführung (v0.98.38c) nie eine Datumsprüfung — das war also kein
+Bug, sondern gewolltes Verhalten. `get_active_event()` in `routes/events.py`
+prüft jetzt wieder nur den Status, ohne Datumsbedingung (Commit folgt).
 **Schweregrad: mittel, aber Ursache mehrerer von dir gemeldeter Symptome**
 
 Ein im Voraus für ein zukünftiges Datum angelegter Kegelabend bekommt sofort

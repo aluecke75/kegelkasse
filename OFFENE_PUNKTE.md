@@ -62,6 +62,23 @@ geschrieben — bitte Häkchen setzen/History unten stehen lassen.
 - Nach diesem Stand: 25 von 27 behoben, F11 und T5 bewusst offen gelassen
   (technische Begründung s.o., keine reine "keine Zeit gehabt"-Vertagung).
 
+## Nutzer-Feedback 2026-09-18: F2 zurückgenommen
+
+Auf Produktiv gemeldet: Ein Kegelabend war bereits aktiv (erste Person als
+fehlend eingetragen), das Dashboard zeigte trotzdem den Countdown zum
+übernächsten Kegelabend statt "Aktiver Kegelabend"/Status-Hinweis. Ursache:
+mein F2-Fix vom 2026-09-14 (Datumsfilter in `get_active_event()`) hat einen
+alltäglichen Arbeitsablauf gebrochen — Kegelabende werden oft Tage vorher
+angelegt, um bereits bekannte Abmeldungen einzutragen, das soll unabhängig
+vom Datum als aktiv gelten. Laut Git-Historie (v0.98.38c) gab es nie eine
+Datumsprüfung — F2 war also kein eigentlicher Bug, sondern eine Fehleinschätzung
+meinerseits basierend auf der ursprünglichen todo.md-Notiz. Am 2026-09-18
+zurückgenommen: `get_active_event()` prüft wieder nur den Status. Erst auf
+Demo getestet (80/80 grün), Produktiv-Deploy erst nach Nutzer-Bestätigung.
+
+- [ ] Nutzer-Bestätigung abwarten, dann Produktiv-Container ebenfalls auf
+  den Stand ohne Datumsfilter aktualisieren.
+
 ## Nutzer-Feedback 2026-09-16: S2 grundsätzlich überdenken
 
 Rückmeldung nach Test auf der Demo-Instanz: Da `kegelkasse` (Port 8091) und

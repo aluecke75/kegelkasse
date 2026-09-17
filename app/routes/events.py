@@ -837,17 +837,19 @@ def save_event_participants(event):
 
 
 def get_active_event():
-    """Der aktuell laufende Kegelabend: Status offen/Abrechnung/Bahnkosten UND
-    das Datum liegt heute oder in der Vergangenheit. Ein im Voraus für ein
-    zukünftiges Datum angelegter Abend gilt erst ab seinem eigenen Datum als
-    aktiv (vorher zeigen Dashboard/Navigation/"Mein Kegelabend" stattdessen
-    ganz normal den Countdown zum nächsten Termin)."""
+    """Der aktuell laufende Kegelabend: Status offen/Abrechnung/Bahnkosten,
+    unabhängig vom Datum. So funktioniert es seit Einführung dieser Funktion
+    (v0.98.38c) und wird bewusst so beibehalten: Kegelabende werden im Verein
+    oft schon Tage vorher angelegt, um z.B. bereits bekannte Abmeldungen
+    einzutragen - das gilt als aktive Bearbeitung und soll als "Aktiver
+    Kegelabend" mit Status-Hinweis erscheinen, nicht als normaler Termin mit
+    Countdown. (2026-09-14 kurzzeitig auf "Datum <= heute" eingeschränkt, was
+    genau diesen alltäglichen Vorab-Arbeitsablauf kaputt gemacht hat - am
+    2026-09-18 auf Nutzerwunsch wieder auf den historischen Stand zurückgesetzt.)
+    """
     return (
         BowlingEvent.query
-        .filter(
-            BowlingEvent.status.in_(("open", "settlement", "lane_cost")),
-            BowlingEvent.event_date <= datetime.today().date(),
-        )
+        .filter(BowlingEvent.status.in_(("open", "settlement", "lane_cost")))
         .order_by(BowlingEvent.event_date.desc(), BowlingEvent.id.desc())
         .first()
     )
