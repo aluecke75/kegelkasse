@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.99.25
+
+- **Regression aus v0.99.23 behoben:** "Aktiver Kegelabend" wird wieder
+  unabhängig vom Datum erkannt (nur noch nach Status open/settlement/
+  lane_cost). Der in v0.99.23 eingeführte Datumsfilter hatte einen
+  alltäglichen Arbeitsablauf gebrochen - Kegelabende werden oft Tage vorher
+  angelegt, um bereits bekannte Abmeldungen einzutragen, und sollen dabei
+  weiterhin als "Aktiver Kegelabend" mit Status-Hinweis erscheinen statt als
+  normaler Termin mit Countdown zum übernächsten Abend.
+
 ## v0.99.24
 
 - Die versteckte Testdatenbank-Umschaltung (Logo oben links, Testmodus-Banner
