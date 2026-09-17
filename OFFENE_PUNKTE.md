@@ -75,9 +75,9 @@ komplett entfernt werden (kleinere Angriffsfläche als jede Absicherung).
 Nicht mehr umgesetzt, um den für heute geplanten Produktiv-Deploy nicht zu
 verzögern.
 
-- [ ] Bei Gelegenheit: Testdatenbank-Umschaltung (`/test-database` und
-  zugehörige Routen/Templates/`DEVELOPER_MODE`) komplett entfernen, da durch
-  den separaten Demo-Container ersetzt.
+- [x] **Erledigt (2026-09-17, v0.99.24):** Testdatenbank-Umschaltung
+  (`/test-database` und zugehörige Routen/Templates/`DEVELOPER_MODE`)
+  komplett entfernt, da durch den separaten Demo-Container ersetzt.
 
 ## Weiterhin offen: S5
 
