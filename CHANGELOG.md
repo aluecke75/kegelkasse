@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.99.24
+
+- Die versteckte Testdatenbank-Umschaltung (Logo oben links, Testmodus-Banner
+  mit "Zurück zur echten Vereinsdatenbank") wurde komplett entfernt. Sie war
+  seit Einführung des separaten Demo-Containers (Port 8092) redundant und
+  eine unnötige Angriffsfläche. Die Demo-/Testdatenbank ist jetzt
+  ausschließlich über den eigenen Port erreichbar; ein Umschalten zwischen
+  Produktiv- und Testdatenbank innerhalb eines laufenden Containers ist
+  nicht mehr möglich. Der Einrichtungsassistent für neue Installationen
+  ("Demo ausprobieren" bei der Ersteinrichtung) ist davon nicht betroffen.
+
 ## v0.99.23
 
 Größere Fehlerprüfung (technisch, fachlich, Sicherheit, Mobile-Bedienung),

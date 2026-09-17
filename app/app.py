@@ -171,10 +171,8 @@ def inject_database_test_mode():
     return {
         "active_database_profile": active_profile,
         "active_database_info": active_database_info(),
-        "active_database_display": database_profile_display(active_profile),
         "database_profile_displays": database_profile_display_list(),
         "database_profiles": TEST_DATABASE_PROFILES,
-        "developer_mode": app.config.get("DEVELOPER_MODE", False),
         "app_version": APP_VERSION,
     }
 
@@ -252,7 +250,7 @@ def installation_needs_setup():
 
 @app.before_request
 def redirect_to_first_start_setup():
-    if request.endpoint in ("static", "first_start_setup", "login", "switch_database_profile", "test_database_control"):
+    if request.endpoint in ("static", "first_start_setup", "login"):
         return
     if installation_needs_setup():
         return redirect(url_for("first_start_setup"))
@@ -1001,176 +999,15 @@ def reset_or_delete_test_database(profile, mode="delete"):
             test_doc_dir.parent.mkdir(parents=True, exist_ok=True)
             shutil.copytree(seed_documents, test_doc_dir)
 
-@app.route("/test-database", methods=["GET"])
-def test_database_page():
-    if not app.config.get("DEVELOPER_MODE", False):
-        abort(404)
-    """Versteckte Testdatenbank-Auswahl für die Testphase.
-
-    Die Loginseite bleibt für den normalen Vereinsbetrieb aufgeräumt. Wer testen
-    möchte, erreicht die Auswahl bewusst über das Logo bzw. direkt über diese URL.
-    """
-    return render_template("test_database.html")
-
-
-def _verify_admin_credentials(username, password):
-    """Prüft Admin-Zugangsdaten OHNE eine Login-Session anzulegen - genutzt,
-    um die Testdatenbank-Umschaltung weiterhin auch ohne vorheriges Einloggen
-    zu erlauben (bisheriger Admin-Workflow), aber nur für echte Admins der
-    gerade aktiven Datenbank statt komplett offen für jeden Besucher."""
-    username = (username or "").strip()
-    if not username or _login_locked_out(username):
-        return False
-    user = User.query.filter_by(username=username, active=True).first()
-    if user and user.role == "admin" and check_password_hash(user.password_hash, password or ""):
-        _LOGIN_FAILED_ATTEMPTS.pop(username, None)
-        return True
-    _login_record_failed_attempt(username)
-    return False
-
-
-@app.route("/test-database/switch", methods=["POST"])
-def switch_database_profile():
-    if not app.config.get("DEVELOPER_MODE", False):
-        abort(404)
-    """Temporärer Testmodus: aktive Datenbank vor dem Login umschalten.
-
-    Der Wechsel betrifft nur die verwendete SQLite-Datei und den Dokumentenordner.
-    Die echte Vereinsdatenbank bleibt unter /app/database/kegelkasse.db unverändert.
-    Damit SQLAlchemy sauber auf die andere Datei verbindet, wird der Containerprozess
-    kurz beendet. Docker startet ihn wegen restart: unless-stopped automatisch neu.
-
-    Kein @login_required: bewusst auch ohne bestehende Session nutzbar (z.B.
-    um von der Produktivdatenbank aus in eine Testdatenbank zu wechseln, ohne
-    sich vorher einzuloggen). Stattdessen werden Admin-Zugangsdaten direkt in
-    diesem Formular geprüft (siehe _verify_admin_credentials) - schließt den
-    zuvor komplett offenen Zugriff, ohne den bestehenden Arbeitsablauf zu
-    brechen.
-    """
-    if not current_user.is_authenticated and not _verify_admin_credentials(
-        request.form.get("admin_username"), request.form.get("admin_password")
-    ):
-        flash("Admin-Benutzername/Passwort erforderlich, um die Datenbank zu wechseln.", "danger")
-        return redirect(url_for("test_database_page"))
-    if current_user.is_authenticated and current_user.role != "admin":
-        abort(403)
-
-    profile = normalize_database_profile(request.form.get("database_profile"))
-    reset_test_database = request.form.get("reset_test_database") == "1"
-
-    if profile == "production" and reset_test_database:
-        flash("Die echte Vereinsdatenbank kann über den Testmodus nicht zurückgesetzt werden.", "danger")
-        return redirect(url_for("login"))
-
-    if reset_test_database and TEST_DATABASE_PROFILES[profile].get("is_test"):
-        test_db_path = get_database_path(profile)
-        test_doc_dir = get_document_dir(profile)
-        try:
-            if test_db_path.exists():
-                test_db_path.unlink()
-            if test_doc_dir.exists():
-                shutil.rmtree(test_doc_dir)
-        except OSError as exc:
-            flash(f"Testdatenbank konnte nicht zurückgesetzt werden: {exc}", "danger")
-            return redirect(url_for("login"))
-
-    set_active_database_profile(profile)
-
-    restart_kegelkasse_process()
-    return """
-    <!doctype html>
-    <html lang=\"de\">
-    <head>
-        <meta charset=\"utf-8\">
-        <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">
-        <meta http-equiv=\"refresh\" content=\"5;url=/login\">
-        <title>Datenbank wird gewechselt</title>
-        <style>
-            body { font-family: Arial, sans-serif; background:#f5f7fb; color:#18212f; padding:30px; }
-            .box { max-width:620px; margin:60px auto; background:white; border:1px solid #e5e7eb; border-radius:16px; padding:24px; box-shadow:0 10px 30px rgba(15,23,42,.07); }
-        </style>
-    </head>
-    <body><div class=\"box\">
-        <h1>Datenbank wird gewechselt …</h1>
-        <p>Die Kegelkasse startet kurz neu. Danach wird die Loginseite automatisch neu geladen.</p>
-        <p>Falls nichts passiert: <a href=\"/login\">Loginseite neu öffnen</a>.</p>
-    </div></body></html>
-    """
-
-
-@app.route("/test-database/control", methods=["POST"])
-def test_database_control():
-    if not app.config.get("DEVELOPER_MODE", False):
-        abort(404)
-    """Schnellaktionen im Testmodus-Banner.
-
-    Speichern ist bei SQLite automatisch: Beim Zurückwechseln zur echten Datenbank
-    wird die aktive Testdatenbank nicht gelöscht. Reset/Löschen sind nur für Testprofile erlaubt.
-
-    Kein pauschales @login_required: das Banner kann auch auf der Loginseite
-    erscheinen (aktive Testdatenbank ist ein globaler Serverzustand, nicht an
-    eine Session gebunden). "switch_production" bleibt bewusst ungeschützt -
-    es wechselt nur zurück zum sicheren Normalzustand, zeigt keine Testdaten
-    und löscht/verändert nichts. Die eingreifenden Aktionen (Reset/Löschen
-    einer Testdatenbank) verlangen ohne bestehende Admin-Session dagegen wie
-    bei switch_database_profile() eine inline Admin-Anmeldung.
-    """
-    action = (request.form.get("action") or "").strip()
-
-    if action != "switch_production":
-        if not current_user.is_authenticated and not _verify_admin_credentials(
-            request.form.get("admin_username"), request.form.get("admin_password")
-        ):
-            flash("Admin-Benutzername/Passwort erforderlich für diese Aktion.", "danger")
-            return redirect(url_for("login"))
-        if current_user.is_authenticated and current_user.role != "admin":
-            abort(403)
-
-    active_profile = get_active_database_profile()
-
-    if action == "switch_production":
-        set_active_database_profile("production")
-        flash("Aktueller Teststand bleibt gespeichert. Es wird zur echten Vereinsdatenbank gewechselt.", "success")
-        restart_kegelkasse_process()
-        return """
-        <!doctype html><html lang=\"de\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"><meta http-equiv=\"refresh\" content=\"5;url=/login\"><title>Datenbank wird gewechselt</title><style>body{font-family:Arial,sans-serif;background:#f5f7fb;color:#18212f;padding:30px}.box{max-width:620px;margin:60px auto;background:white;border:1px solid #e5e7eb;border-radius:16px;padding:24px;box-shadow:0 10px 30px rgba(15,23,42,.07)}</style></head><body><div class=\"box\"><h1>Zur echten Vereinsdatenbank wechseln …</h1><p>Der aktuelle Teststand bleibt in seiner Testdatenbank gespeichert.</p><p>Falls nichts passiert: <a href=\"/login\">Loginseite neu öffnen</a>.</p></div></body></html>
-        """
-
-    if not TEST_DATABASE_PROFILES.get(active_profile, {}).get("is_test"):
-        flash("Diese Aktion ist nur im Demo-/Testmodus möglich. Die echte Vereinsdatenbank bleibt geschützt.", "danger")
-        return redirect(url_for("login"))
-
-    if action == "reset_current_test":
-        try:
-            reset_or_delete_test_database(active_profile, mode="reset")
-            flash("Testdatenbank wurde auf den vorgesehenen Ausgangsstand zurückgesetzt.", "success")
-        except Exception as exc:
-            flash(f"Testdatenbank konnte nicht zurückgesetzt werden: {exc}", "danger")
-            return redirect(url_for("login"))
-        restart_kegelkasse_process()
-        return """
-        <!doctype html><html lang=\"de\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"><meta http-equiv=\"refresh\" content=\"5;url=/login\"><title>Testdatenbank wird zurückgesetzt</title><style>body{font-family:Arial,sans-serif;background:#f5f7fb;color:#18212f;padding:30px}.box{max-width:620px;margin:60px auto;background:white;border:1px solid #e5e7eb;border-radius:16px;padding:24px;box-shadow:0 10px 30px rgba(15,23,42,.07)}</style></head><body><div class=\"box\"><h1>Testdatenbank wird zurückgesetzt …</h1><p>Die echte Vereinsdatenbank bleibt unverändert.</p><p>Falls nichts passiert: <a href=\"/login\">Loginseite neu öffnen</a>.</p></div></body></html>
-        """
-
-    if action == "delete_current_test":
-        confirm = (request.form.get("confirm_delete") or "").strip().upper()
-        if confirm != "LÖSCHEN" and confirm != "LOESCHEN":
-            flash("Zum vollständigen Löschen der Testdatenbank bitte LÖSCHEN eintragen.", "danger")
-            return redirect(url_for("login"))
-        try:
-            reset_or_delete_test_database(active_profile, mode="delete")
-            flash("Testdatenbank wurde vollständig gelöscht. Beim nächsten Start beginnt sie leer.", "success")
-        except Exception as exc:
-            flash(f"Testdatenbank konnte nicht gelöscht werden: {exc}", "danger")
-            return redirect(url_for("login"))
-        restart_kegelkasse_process()
-        return """
-        <!doctype html><html lang=\"de\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"><meta http-equiv=\"refresh\" content=\"5;url=/setup\"><title>Testdatenbank wird gelöscht</title><style>body{font-family:Arial,sans-serif;background:#f5f7fb;color:#18212f;padding:30px}.box{max-width:620px;margin:60px auto;background:white;border:1px solid #e5e7eb;border-radius:16px;padding:24px;box-shadow:0 10px 30px rgba(15,23,42,.07)}</style></head><body><div class=\"box\"><h1>Testdatenbank wird gelöscht …</h1><p>Danach startet diese Testdatenbank leer mit dem Einrichtungsassistenten.</p><p>Falls nichts passiert: <a href=\"/setup\">Setup öffnen</a>.</p></div></body></html>
-        """
-
-    flash("Unbekannte Testdatenbank-Aktion.", "danger")
-    return redirect(url_for("login"))
-
+# Die frühere Testdatenbank-Umschaltung (/test-database, versteckt hinter dem
+# Logo bzw. dem Testmodus-Banner) wurde am 2026-09-17 komplett entfernt: seit
+# Produktiv (Port 8091) und Demo (Port 8092) als getrennte Container laufen,
+# war sie nur noch eine unnötige, potenziell riskante Angriffsfläche.
+# Die Demo-/Testdatenbank ist jetzt ausschließlich über den eigenen Port
+# 8092 erreichbar, ein Umschalten zwischen den Profilen innerhalb eines
+# laufenden Containers ist nicht mehr vorgesehen. reset_or_delete_test_database()
+# bleibt erhalten, da sie weiterhin vom Einrichtungsassistenten (first_start_setup,
+# "Demo ausprobieren") für neue Installationen genutzt wird.
 
 
 # Einfacher Brute-Force-Schutz beim Login: pro Benutzername gezählt, nur im

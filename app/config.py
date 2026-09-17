@@ -4,7 +4,6 @@ from pathlib import Path
 
 DATABASE_DIR = Path(os.getenv("DATABASE_DIR", "/app/database"))
 ACTIVE_DATABASE_FILE = DATABASE_DIR / "active_database.txt"
-DEVELOPER_MODE = os.getenv("DEVELOPER_MODE", "false").strip().lower() in ("1", "true", "yes", "on")
 
 TEST_DATABASE_PROFILES = {
     "production": {
@@ -74,7 +73,6 @@ def get_document_dir(profile=None):
 
 
 class Config:
-    DEVELOPER_MODE = DEVELOPER_MODE
     SECRET_KEY = os.getenv("SECRET_KEY", "dev-secret-change-me")
 
     # Standardmäßig aus, damit ein Zugriff per reinem HTTP (z.B. direkt per

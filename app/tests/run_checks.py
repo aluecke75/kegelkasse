@@ -40,7 +40,7 @@ def check(name, passed, detail=""):
 
 
 GET_ROUTES = [
-    "/", "/test-database", "/account", "/admin", "/branding/logo",
+    "/", "/account", "/admin", "/branding/logo",
     "/documents", "/documents/download/1", "/documents/preview/1",
     "/verwaltung/backups/", "/import-export", "/members", "/members/new", "/members/1/edit",
     "/settings/rates", "/settings/event-rhythm", "/settings/rates/new",

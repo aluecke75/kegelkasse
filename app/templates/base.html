@@ -207,15 +207,7 @@ border-left:6px solid #22c55e;
     <div class="topbar">
         <div class="brand">
             {% if has_logo and logo_display_mode in ("header", "header_and_login") %}
-                {% if developer_mode %}
-                    <a href="{{ url_for('test_database_page') }}" title="Test-Datenbank-Auswahl">
-                        <img src="{{ url_for('branding_logo') }}?v={{ logo_filename }}" alt="Vereinslogo" class="brand-logo-header">
-                    </a>
-                {% else %}
-                    <img src="{{ url_for('branding_logo') }}?v={{ logo_filename }}" alt="Vereinslogo" class="brand-logo-header">
-                {% endif %}
-            {% elif developer_mode %}
-                <a class="brand-badge" href="{{ url_for('test_database_page') }}" title="Test-Datenbank-Auswahl">🎳</a>
+                <img src="{{ url_for('branding_logo') }}?v={{ logo_filename }}" alt="Vereinslogo" class="brand-logo-header">
             {% else %}
                 <span class="brand-badge" title="Kegelkasse">🎳</span>
             {% endif %}
@@ -225,37 +217,6 @@ border-left:6px solid #22c55e;
             {% if update_available %}
                 <a href="{{ latest_release_url }}" target="_blank" rel="noopener" class="update-badge" title="Neue Version verfügbar, siehe Release-Hinweise auf GitHub">🔔 Update {{ latest_version }}</a>
             {% endif %}
-            {#
-            =====================================================================
-Temporär deaktiviert (30.06.2026)
-
-Der sichtbare Datenbank-Umschalter wurde für die Vereinsversion
-entfernt. Zugriff auf die Demo-Datenbank künftig ausschließlich
-über die versteckte Entwicklerfunktion (🎳-Logo).
-
-Nicht löschen – ggf. für spätere Entwicklungsarbeiten wieder aktivieren.
-=====================================================================
-            {% if developer_mode %}
-                <div class="database-selector" id="databaseSelector">
-                    <button type="button" class="database-badge {% if active_database_display.is_test %}test{% else %}production{% endif %}" id="databaseToggle" aria-haspopup="true" aria-expanded="false">
-                        <span>▰</span>
-                        <span>{{ active_database_display.label }}</span>
-                        <span class="chevron">▾</span>
-                    </button>
-                    <div class="database-menu" id="databaseMenu">
-                        {% for profile in database_profile_displays %}
-                            <form method="post" action="{{ url_for('switch_database_profile') }}">
-                                <input type="hidden" name="database_profile" value="{{ profile.key }}">
-                                <button type="submit" class="database-option {% if profile.is_test %}test{% else %}production{% endif %} {% if profile.key == active_database_profile %}active{% endif %}">
-                                    <span class="db-icon">▰</span>
-                                    <span><strong>{{ profile.label }}</strong><small>{{ profile.description }}</small></span>
-                                </button>
-                            </form>
-                        {% endfor %}
-                    </div>
-                </div>
-            {% endif %}
-            #}
         </div>
 
         {% if current_user.is_authenticated and current_user.role in ["admin", "cashier", "auditor"] %}
@@ -366,25 +327,6 @@ Nicht löschen – ggf. für spätere Entwicklungsarbeiten wieder aktivieren.
         {% endif %}
 </header>
 
-{% if developer_mode and active_database_display and active_database_display.is_test %}
-<div id="test-mode-banner" style="background:#fff1f1;border:1px solid #fecaca;color:#991c12;padding:12px 18px;box-shadow:0 2px 6px rgba(0,0,0,0.08);">
-    <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;max-width:1100px;margin:0 auto;">
-        <div style="display:flex;align-items:center;gap:8px;font-weight:800;font-size:0.92rem;">
-            <span>⚠️</span>
-            <span>Testmodus aktiv: Sie nutzen die <strong>{{ active_database_display.label }}</strong>.</span>
-        </div>
-        <div style="margin-left:auto;font-size:0.85rem;">
-            <form method="post" action="{{ url_for('test_database_control') }}" style="display:inline;">
-                <input type="hidden" name="action" value="switch_production">
-                <button type="submit" class="button btn-success" style="font-size:0.82rem;padding:4px 12px;border-radius:6px;">
-                    Zurück zur echten Vereinsdatenbank
-                </button>
-            </form>
-            <a href="{{ url_for('test_database_page') }}" style="color:#991c1b;text-decoration:underline;font-size:0.82rem;margin-left:12px;">Mehr Testoptionen …</a>
-        </div>
-    </div>
-</div>
-{% endif %}
 
 <main>
     {% with messages = get_flashed_messages(with_categories=true) %}
