@@ -82,10 +82,10 @@ Demo getestet (80/80 grün), Produktiv-Deploy erst nach Nutzer-Bestätigung.
   den Countdown des aktiven Abends selbst ("Heute" / "in N Tagen"), nicht den
   Rhythmus-Termin danach ("nicht übernächsten"). Umgesetzt in v0.99.26
   (`dashboard.html`, `dashboard()` in `app.py`).
-- [ ] v0.99.26 auf der Demo vom Nutzer testen lassen (Abend für ein künftiges
-  Datum anlegen, jemanden als fehlend eintragen).
-- [ ] Erst nach ausdrücklicher Bestätigung: Produktiv-Container von v0.99.24
-  auf v0.99.26 aktualisieren (enthält Revert des Datumsfilters + Countdown).
+- [x] v0.99.26 auf der Demo vom Nutzer getestet ("sieht gut aus").
+- [x] Produktiv-Container am 2026-09-19 von v0.99.24 auf v0.99.26
+  aktualisiert (enthält Revert des Datumsfilters + Countdown), Health
+  "healthy", Version 0.99.26 bestätigt.
 
 ## Nutzer-Feedback 2026-09-16: S2 grundsätzlich überdenken
 
