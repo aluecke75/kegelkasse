@@ -16,6 +16,7 @@
         {% if active_event %}
             <h2>Aktiver Kegelabend</h2>
             <p class="next-event-date">{{ active_event.event_date.strftime('%d.%m.%Y') }}</p>
+            <p class="next-event-label">{% if active_event_label == 'heute' %}<strong>Heute 🎳</strong>{% else %}{{ active_event_label }}{% endif %}</p>
             <p class="next-event-label">
                 {% if active_event.status == "open" %}
                     Strafen erfassen

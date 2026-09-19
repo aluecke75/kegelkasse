@@ -76,8 +76,16 @@ meinerseits basierend auf der ursprünglichen todo.md-Notiz. Am 2026-09-18
 zurückgenommen: `get_active_event()` prüft wieder nur den Status. Erst auf
 Demo getestet (80/80 grün), Produktiv-Deploy erst nach Nutzer-Bestätigung.
 
-- [ ] Nutzer-Bestätigung abwarten, dann Produktiv-Container ebenfalls auf
-  den Stand ohne Datumsfilter aktualisieren.
+- [x] Demo (v0.99.25): "aktiver Abend" wieder ohne Datumsfilter, vom Nutzer
+  mit "sieht gut aus" bestätigt.
+- [x] Countdown-Entscheidung (2026-09-19): Bei aktivem Abend zeigt die Karte
+  den Countdown des aktiven Abends selbst ("Heute" / "in N Tagen"), nicht den
+  Rhythmus-Termin danach ("nicht übernächsten"). Umgesetzt in v0.99.26
+  (`dashboard.html`, `dashboard()` in `app.py`).
+- [ ] v0.99.26 auf der Demo vom Nutzer testen lassen (Abend für ein künftiges
+  Datum anlegen, jemanden als fehlend eintragen).
+- [ ] Erst nach ausdrücklicher Bestätigung: Produktiv-Container von v0.99.24
+  auf v0.99.26 aktualisieren (enthält Revert des Datumsfilters + Countdown).
 
 ## Nutzer-Feedback 2026-09-16: S2 grundsätzlich überdenken
 

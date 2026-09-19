@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.99.26
+
+- Dashboard: Bei einem aktiven Kegelabend zeigt die Karte "Aktiver Kegelabend"
+  jetzt zusätzlich den Countdown zu diesem Abend ("Heute" bzw. "in N Tagen"),
+  statt nur Datum und Status-Hinweis. Es wird bewusst nur der Countdown des
+  aktiven Abends angezeigt, nicht der Termin danach.
+
 ## v0.99.25
 
 - **Regression aus v0.99.23 behoben:** "Aktiver Kegelabend" wird wieder

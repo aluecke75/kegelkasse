@@ -938,6 +938,7 @@ def dashboard():
         next_event_date=next_date,
         next_event_label=next_event_label(next_date),
         active_event=active_event,
+        active_event_label=next_event_label(active_event.event_date) if active_event else None,
         last_closed_event=last_closed_event,
         last_cash_audit=last_cash_audit,
         last_closing=last_closing,
