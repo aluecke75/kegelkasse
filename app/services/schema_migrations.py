@@ -97,6 +97,11 @@ def migrate_schema_extensions():
     add("cashbook_entries", "source_document_id", "source_document_id INTEGER")
     add("cashbook_entries", "source_row_index", "source_row_index INTEGER")
 
+    # Verknüpfung "Barzahlung Strafen" (Kassenbuch) -> Strafkonto-Buchung, damit ein
+    # Storno im Kassenbuch das Strafkonto zurückbuchen kann (siehe routes/cashbook.py,
+    # cashbook_void). Bestehende Einträge bleiben NULL (nicht rückwirkend verknüpfbar).
+    add("cashbook_entries", "penalty_transaction_id", "penalty_transaction_id INTEGER")
+
     # Kassenprüfer-/Bestätigungsfelder für bestehende SQLite-Datenbanken.
     for table_name in ["cash_audits", "annual_closings", "interest_settings", "interest_bookings"]:
         add(table_name, "confirmed_by_user_id", "confirmed_by_user_id INTEGER")

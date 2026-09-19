@@ -156,7 +156,7 @@ def member_payment_summary(selected_year=None):
             db.func.sum(MemberPenaltyTransaction.amount_cents).label("total_cents"),
         )
         .join(MemberPenaltyTransaction, MemberPenaltyTransaction.member_id == Member.id)
-        .filter(MemberPenaltyTransaction.category.in_(["cash_payment", "bank_transfer"]))
+        .filter(MemberPenaltyTransaction.category.in_(["cash_payment", "cash_payment_void", "bank_transfer"]))
     )
 
     if selected_year:
@@ -237,7 +237,7 @@ def build_player_overview_rows(selected_year=None, member_id=None):
         payment_query = (
             MemberPenaltyTransaction.query
             .filter(MemberPenaltyTransaction.member_id == member.id)
-            .filter(MemberPenaltyTransaction.category.in_(["cash_payment", "bank_transfer"]))
+            .filter(MemberPenaltyTransaction.category.in_(["cash_payment", "cash_payment_void", "bank_transfer"]))
         )
         if selected_year:
             payment_query = payment_query.filter(db.extract("year", MemberPenaltyTransaction.booking_date) == selected_year)

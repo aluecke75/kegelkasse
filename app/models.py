@@ -184,6 +184,15 @@ class CashbookEntry(db.Model):
     source_document = db.relationship("Document", foreign_keys=[source_document_id])
     source_row_index = db.Column(db.Integer, nullable=True)
 
+    # Bei automatisch aus der Kegelabend-Abrechnung erzeugten Buchungen
+    # "Barzahlung Strafen": ID der zugehörigen Strafkonto-Buchung
+    # (MemberPenaltyTransaction, category "cash_payment"). Damit kann ein Storno
+    # im Kassenbuch das Strafkonto des Mitglieds wieder zurückbuchen. Bewusst
+    # ohne ForeignKey (die Strafkonto-Buchung kann bei einer erneuten Abrechnung
+    # des Abends gelöscht werden); beim Storno wird deshalb zusätzlich geprüft,
+    # ob die Zielbuchung noch zu diesem Eintrag passt. Ältere Buchungen: NULL.
+    penalty_transaction_id = db.Column(db.Integer, nullable=True)
+
     created_by_user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
     created_by_user = db.relationship("User", foreign_keys=[created_by_user_id])
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
@@ -653,6 +662,7 @@ class MemberPenaltyTransaction(db.Model):
     # event_penalty = offene Strafe aus Kegelabend
     # cash_payment = Barzahlung am Kegelabend
     # bank_transfer = spätere Überweisung
+    # cash_payment_void = Storno einer Barzahlung über das Kassenbuch (positiv)
     # adjustment = manuelle Korrektur
 
     # Positiv = offen / Forderung

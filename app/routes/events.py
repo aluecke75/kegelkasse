@@ -1278,8 +1278,9 @@ def event_detail(event_id):
                 settlement_detail_lines.append(f"{participant.name()}: Strafen {cents_to_euro(penalty_cents)} €, bezahlt {cents_to_euro(paid_cents)} €")
 
                 if paid_cents:
+                    payment_transaction = None
                     if participant.member_id:
-                        db.session.add(MemberPenaltyTransaction(
+                        payment_transaction = MemberPenaltyTransaction(
                             member_id=participant.member_id,
                             event_id=event.id,
                             participant_id=participant.id,
@@ -1287,7 +1288,9 @@ def event_detail(event_id):
                             amount_cents=-paid_cents,
                             booking_date=event.event_date,
                             description=f"Barzahlung {marker}",
-                        ))
+                        )
+                        db.session.add(payment_transaction)
+                        db.session.flush()
 
                     db.session.add(AccountTransaction(
                         account="cash",
@@ -1305,6 +1308,7 @@ def event_detail(event_id):
                         person=participant.name(),
                         reason=f"Barzahlung Strafen Kegelabend {event.event_date}",
                         note=f"Automatisch aus Kegelabend-Abrechnung: {marker}",
+                        penalty_transaction_id=payment_transaction.id if payment_transaction else None,
                         created_by_user_id=current_user.id,
                     ))
 

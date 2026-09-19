@@ -1,5 +1,24 @@
 # Changelog
 
+## v0.99.27
+
+- **Kassenbuch-Storno bucht das Strafkonto zurück (F11):** Wird eine
+  automatisch aus der Kegelabend-Abrechnung erzeugte Buchung "Barzahlung
+  Strafen" im Kassenbuch storniert, führt das Strafkonto des Mitglieds die
+  Zahlung wieder als offen (neue Buchung "Storno Barzahlung", Kategorie
+  `cash_payment_void`). Vorher sank nur der Kassenstand, das Mitglied galt
+  weiter als "bezahlt". Die Zahlungssummen in den Auswertungen rechnen
+  Zahlung und Storno gegeneinander auf.
+- Dafür gibt es eine neue Spalte `cashbook_entries.penalty_transaction_id`
+  (wird beim Start automatisch angelegt). **Nur neue Abrechnungen** werden
+  verknüpft: Bei älteren "Barzahlung Strafen"-Einträgen kann nichts
+  automatisch zurückgebucht werden, das Storno zeigt dann einen deutlichen
+  Hinweis, das Strafkonto manuell zu prüfen. Passt die verknüpfte
+  Strafkonto-Buchung nicht mehr (z. B. nach erneuter Abrechnung), wird
+  ebenfalls nichts zurückgebucht, sondern gewarnt.
+- Testskript: neuer Check für diesen Ablauf, veralteter Hinweis auf die
+  entfernte Testdatenbank-Umschaltung in der Abbruchmeldung korrigiert.
+
 ## v0.99.26
 
 - Dashboard: Bei einem aktiven Kegelabend zeigt die Karte "Aktiver Kegelabend"

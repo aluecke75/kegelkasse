@@ -460,6 +460,92 @@ def check_csv_import_review(client):
         )
 
 
+def check_penalty_payment_void(client):
+    """F11: Storno einer automatischen 'Barzahlung Strafen' im Kassenbuch bucht das Strafkonto zurück.
+
+    Drei Fälle: (1) verknüpfte Buchung -> Strafkonto wird zurückgebucht, (2) alte, nicht
+    verknüpfte Buchung -> kein Rückbuchen, aber deutlicher Warnhinweis, (3) verknüpfte
+    Buchung, deren Zielbuchung nicht mehr passt -> kein Rückbuchen, Warnhinweis."""
+    from datetime import date
+    from models import Member, CashbookEntry, AccountTransaction, MemberPenaltyTransaction
+    from routes.penalty_balances import member_penalty_balance
+
+    marker = "SELBSTTEST-F11"
+    today = date.today()
+    entry_ids = {}
+
+    with app.app_context():
+        member = Member(first_name=marker, last_name="Storno", active=False, joined_at=today)
+        db.session.add(member)
+        db.session.flush()
+        member_id = member.id
+
+        def make(amount, linked, tx_amount=None, key=""):
+            tx = MemberPenaltyTransaction(
+                member_id=member_id, category="cash_payment",
+                amount_cents=-(tx_amount if tx_amount is not None else amount),
+                booking_date=today, description=f"{marker} {key}",
+            )
+            db.session.add(tx)
+            db.session.flush()
+            db.session.add(AccountTransaction(
+                account="cash", category="event_cash_payment", amount_cents=amount,
+                booking_date=today, description=f"{marker} {key}",
+            ))
+            entry = CashbookEntry(
+                booking_date=today, direction="income", account="cash", amount_cents=amount,
+                category="Barzahlung Strafen", person=marker, reason=f"{marker} {key}",
+                note=f"Automatisch aus Kegelabend-Abrechnung: {marker}",
+                penalty_transaction_id=tx.id if linked else None,
+            )
+            db.session.add(entry)
+            db.session.flush()
+            entry_ids[key] = entry.id
+
+        make(500, True, key="verknuepft")
+        make(300, False, key="alt")
+        make(200, True, tx_amount=999, key="abweichend")
+        db.session.commit()
+        balance_start = member_penalty_balance(member_id)
+
+    def void(key):
+        r = client.post(f"/cashbook/{entry_ids[key]}/void", data={"void_reason": "Automatischer Selbsttest"}, follow_redirects=True)
+        return r, r.get_data(as_text=True)
+
+    r, html = void("verknuepft")
+    with app.app_context():
+        balance_1 = member_penalty_balance(member_id)
+        void_rows = MemberPenaltyTransaction.query.filter_by(member_id=member_id, category="cash_payment_void").all()
+    check("Storno (verknüpft): Route ok", r.status_code == 200 and "Internal Server" not in html, f"Status {r.status_code}")
+    check("Storno (verknüpft): Strafkonto um 5,00 € zurückgebucht", balance_1 == balance_start + 500 and len(void_rows) == 1 and void_rows[0].amount_cents == 500, f"Saldo {balance_start} -> {balance_1}")
+    check("Storno (verknüpft): Erfolgshinweis sichtbar", "Strafkonto des Mitglieds wurde entsprechend zurückgebucht" in html)
+
+    r, html = void("alt")
+    with app.app_context():
+        balance_2 = member_penalty_balance(member_id)
+    check("Storno (alt, nicht verknüpft): Strafkonto unverändert", balance_2 == balance_1, f"Saldo {balance_1} -> {balance_2}")
+    check("Storno (alt, nicht verknüpft): Warnhinweis sichtbar", "NICHT automatisch zurückgebucht" in html)
+
+    r, html = void("abweichend")
+    with app.app_context():
+        balance_3 = member_penalty_balance(member_id)
+        void_count = MemberPenaltyTransaction.query.filter_by(member_id=member_id, category="cash_payment_void").count()
+    check("Storno (Zielbuchung passt nicht): keine Rückbuchung", balance_3 == balance_2 and void_count == 1, f"Saldo {balance_2} -> {balance_3}, Rückbuchungen {void_count}")
+    check("Storno (Zielbuchung passt nicht): Warnhinweis sichtbar", "passt nicht mehr" in html)
+
+    with app.app_context():
+        ids = list(entry_ids.values())
+        AuditLog.query.filter(AuditLog.object_type == "CashbookEntry", AuditLog.object_id.in_(ids), AuditLog.action == "cashbook_entry_voided").delete(synchronize_session=False)
+        AccountTransaction.query.filter(AccountTransaction.description.like(f"%{marker}%")).delete(synchronize_session=False)
+        AccountTransaction.query.filter(AccountTransaction.description.like("Storno Kassenbuch #%: Automatischer Selbsttest")).filter(AccountTransaction.category == "cashbook_void").delete(synchronize_session=False)
+        MemberPenaltyTransaction.query.filter_by(member_id=member_id).delete(synchronize_session=False)
+        CashbookEntry.query.filter(CashbookEntry.id.in_(ids)).delete(synchronize_session=False)
+        Member.query.filter_by(id=member_id).delete(synchronize_session=False)
+        db.session.commit()
+        rest = CashbookEntry.query.filter(CashbookEntry.id.in_(ids)).count() + MemberPenaltyTransaction.query.filter_by(member_id=member_id).count()
+    check("Selbsttest-Daten (Storno/Strafkonto) aufgeräumt", rest == 0, f"{rest} Reste")
+
+
 def check_audit_log_cleanup(client):
     """Revisionsprotokoll bereinigen: Aufbewahrungsfrist speichern, alte
     operative Einträge werden gelöscht, geschützte Kategorien bleiben
@@ -530,9 +616,9 @@ def run():
             "ABGEBROCHEN: aktive Datenbank ist 'production' (die echte Vereinsdatenbank), "
             "nicht die Demo-Datenbank. Dieses Skript legt/ändert/löscht testweise echte "
             "Datensätze (auch wenn es sie danach wieder aufräumt) - das soll nur gegen "
-            "die Demo-Datenbank laufen. Bitte im Adminbereich auf die Demo-Datenbank "
-            "umschalten (verstecktes 🎳-Symbol oben links), oder falls das wirklich "
-            "gewollt ist: KEGELKASSE_ALLOW_TEST_ON_PRODUCTION=1 setzen."
+            "die Demo-Datenbank laufen, z. B. im Demo-Container: "
+            "docker exec kegelkasse-demo python3 tests/run_checks.py - oder falls das "
+            "wirklich gewollt ist: KEGELKASSE_ALLOW_TEST_ON_PRODUCTION=1 setzen."
         )
         sys.exit(2)
 
@@ -554,6 +640,7 @@ def run():
         check_backup_lifecycle(client)
         check_event_lifecycle(client)
         check_csv_import_review(client)
+        check_penalty_payment_void(client)
         check_audit_log_cleanup(client)
 
     failed = [r for r in results if not r[1]]

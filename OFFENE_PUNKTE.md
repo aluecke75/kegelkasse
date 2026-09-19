@@ -8,7 +8,7 @@ Chatverlauf mal nicht mehr greifbar ist. Ausgangspunkt war die Prüfliste in
 Wird bei künftigen Zusammenfassungen um neue offene Punkte ergänzt statt neu
 geschrieben — bitte Häkchen setzen/History unten stehen lassen.
 
-## Aktueller Gesamtstand: 27 von 27 Punkten bearbeitet (25 behoben, 2 bewusst offen)
+## Aktueller Gesamtstand: 27 von 27 Punkten bearbeitet (26 behoben, offen: T5 bewusst, S5 für eigene Runde)
 
 ## Aus Zusammenfassung 1 (2026-09-14, nach Rückfragen zu S2/S8 + F10)
 
@@ -49,12 +49,19 @@ geschrieben — bitte Häkchen setzen/History unten stehen lassen.
 - [x] **M4** – Diagramme (`static/js/charts.js`) reagieren jetzt zusätzlich
   auf Antippen (`touchstart`) statt nur auf Maus-Hover, inkl. Ausblenden des
   Tooltips beim Antippen woanders auf der Seite.
-- [ ] **F11 geprüft, weiterhin bewusst offen:** `CashbookEntry` (Kassenbuch)
-  und `MemberPenaltyTransaction` (Strafkonto) haben aktuell KEINE gemeinsame
-  ID, über die man sie beim Stornieren eindeutig verknüpfen könnte. Ein
-  echter Fix bräuchte eine neue Spalte + Schema-Migration (wie seinerzeit
-  `source_document_id` beim CSV-Import) UND würde bereits bestehende, schon
-  gebuchte Einträge nicht rückwirkend verknüpfen können. Kein Quick-Fix.
+- [x] **F11 umgesetzt (2026-09-19, v0.99.27):** Neue Spalte
+  `cashbook_entries.penalty_transaction_id` (Migration beim Start) verknüpft
+  neue "Barzahlung Strafen"-Buchungen mit der Strafkonto-Buchung; das Storno
+  im Kassenbuch bucht das Strafkonto per `cash_payment_void` zurück.
+  **Grenze:** Ältere, schon gebuchte Einträge lassen sich nicht rückwirkend
+  verknüpfen - dort zeigt das Storno einen Warnhinweis, das Strafkonto
+  manuell zu prüfen. Getestet in der Demo-Kopie (88/88, zusätzlich echte
+  Abrechnung + Storno durchgespielt). Demo-Test durch den Nutzer und
+  Produktiv-Update stehen noch aus.
+  - [ ] Nutzer testet auf der Demo: Abend abrechnen (Barzahlung eintragen),
+    im Kassenbuch stornieren, Strafkonto prüfen.
+  - [ ] Nach Bestätigung: Produktiv-Container auf v0.99.27 aktualisieren
+    (vorher frische Sicherung anstoßen, da eine Schema-Änderung mitläuft).
 - [ ] **T5 nicht angefasst:** Ein Fix müsste auch klären, was eine Seite
   ohne automatisch angelegte Teilnehmer für eine Rolle wie "auditor"
   anzeigt (sonst wirkt die Seite kaputt statt nur "sauberer"). Geringer

@@ -7,7 +7,7 @@ from sqlalchemy import or_
 
 from extensions import app
 from auth import role_required
-from models import db, CashbookEntry, AccountTransaction, User
+from models import db, CashbookEntry, AccountTransaction, MemberPenaltyTransaction, User
 from services.money import cents_to_euro, euro_to_cents, form_euro_to_cents
 from services.audit import audit_log
 
@@ -350,14 +350,59 @@ def cashbook_void(entry_id):
             description=f"Storno Kassenbuch #{entry.id}: {reason}",
         ))
 
+    # Automatisch aus der Kegelabend-Abrechnung erzeugte "Barzahlung Strafen":
+    # das Strafkonto des Mitglieds muss die Zahlung wieder als offen führen,
+    # sonst laufen Kassenstand und Strafkonto auseinander.
+    penalty_success = None
+    penalty_warning = None
+    if entry.penalty_transaction_id:
+        original_payment = MemberPenaltyTransaction.query.get(entry.penalty_transaction_id)
+        if (
+            original_payment
+            and original_payment.category == "cash_payment"
+            and original_payment.amount_cents == -(entry.amount_cents or 0)
+        ):
+            db.session.add(MemberPenaltyTransaction(
+                member_id=original_payment.member_id,
+                event_id=original_payment.event_id,
+                participant_id=original_payment.participant_id,
+                category="cash_payment_void",
+                amount_cents=-original_payment.amount_cents,
+                booking_date=datetime.today().date(),
+                description=f"Storno Barzahlung (Kassenbuch #{entry.id}): {reason}",
+            ))
+            penalty_success = "Das Strafkonto des Mitglieds wurde entsprechend zurückgebucht."
+        else:
+            penalty_warning = (
+                "Achtung: Die zugehörige Strafkonto-Buchung wurde nicht mehr gefunden oder passt nicht mehr "
+                "(z. B. weil der Kegelabend erneut abgerechnet wurde). Bitte das Strafkonto des Mitglieds "
+                "unter \"Strafkonten\" manuell prüfen."
+            )
+    elif entry.category == "Barzahlung Strafen" and (entry.note or "").startswith("Automatisch aus Kegelabend-Abrechnung"):
+        penalty_warning = (
+            "Achtung: Diese Barzahlung stammt aus einer Kegelabend-Abrechnung vor der Verknüpfung mit dem "
+            "Strafkonto - das Strafkonto des Mitglieds wurde NICHT automatisch zurückgebucht. Bitte unter "
+            "\"Strafkonten\" manuell prüfen bzw. korrigieren."
+        )
+
+    audit_details = reason
+    if penalty_success:
+        audit_details += f"\n{penalty_success}"
+    elif penalty_warning:
+        audit_details += "\nStrafkonto NICHT automatisch zurückgebucht (siehe Hinweis im Storno)."
+
     audit_log(
         "finance",
         "cashbook_entry_voided",
         f"Kassenbuch-Eintrag #{entry.id} storniert",
-        details=reason,
+        details=audit_details,
         object_type="CashbookEntry",
         object_id=entry.id,
     )
     db.session.commit()
     flash("Kassenbuch-Eintrag wurde storniert.", "success")
+    if penalty_success:
+        flash(penalty_success, "success")
+    if penalty_warning:
+        flash(penalty_warning, "warning")
     return redirect(url_for("cashbook"))
