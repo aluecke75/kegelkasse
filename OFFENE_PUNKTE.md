@@ -8,7 +8,7 @@ Chatverlauf mal nicht mehr greifbar ist. Ausgangspunkt war die Prüfliste in
 Wird bei künftigen Zusammenfassungen um neue offene Punkte ergänzt statt neu
 geschrieben — bitte Häkchen setzen/History unten stehen lassen.
 
-## Aktueller Gesamtstand: 27 von 27 Punkten bearbeitet (26 behoben, offen: T5 bewusst, S5 für eigene Runde)
+## Aktueller Gesamtstand: 26 von 27 Punkten erledigt bzw. entschieden (offen: nur S5 CSRF, für eine eigene Runde)
 
 ## Aus Zusammenfassung 1 (2026-09-14, nach Rückfragen zu S2/S8 + F10)
 
@@ -65,10 +65,16 @@ geschrieben — bitte Häkchen setzen/History unten stehen lassen.
   - [ ] Nutzer testet den Ablauf im echten Betrieb bei der nächsten Abrechnung
     (Barzahlung -> Kassenbuch-Storno -> Strafkonto). Bereits vorhandene
     "Barzahlung Strafen"-Einträge sind nicht verknüpft (Warnhinweis beim Storno).
-- [ ] **T5 nicht angefasst:** Ein Fix müsste auch klären, was eine Seite
-  ohne automatisch angelegte Teilnehmer für eine Rolle wie "auditor"
-  anzeigt (sonst wirkt die Seite kaputt statt nur "sauberer"). Geringer
-  Nutzen für den nötigen Aufwand, daher bewusst nicht angefasst.
+- [x] **T5 umgesetzt (2026-09-21, v0.99.28):** Die automatische
+  Teilnehmer-Anlage beim Öffnen eines Kegelabends greift nur noch für einen
+  **offenen** Abend ohne Teilnehmer und nicht mehr für die Rolle
+  "auditor". Vorher hätte sie auch abgeschlossene Altabende (z. B. Import)
+  rückwirkend mit allen Mitgliedern als "anwesend" befüllt. In der
+  Produktiv-Datenbank war der Pfad nicht aktiv (die zwei Abende ohne
+  Teilnehmer sind ausgefallen und waren ohnehin ausgenommen). Neuer Check in
+  `run_checks.py` (erkennt den alten Fehler nachweislich: 7 erfundene
+  Teilnehmer), 94/94 grün. Ein Altabend ohne Teilnehmer öffnet weiter
+  fehlerfrei (Status 200, leere Teilnehmerliste).
 - Nach diesem Stand: 25 von 27 behoben, F11 und T5 bewusst offen gelassen
   (technische Begründung s.o., keine reine "keine Zeit gehabt"-Vertagung).
 

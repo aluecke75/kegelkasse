@@ -1,5 +1,20 @@
 # Changelog
 
+## v0.99.28
+
+- **Ansehen legt keine Daten mehr an (T5):** Beim Öffnen eines Kegelabends
+  ohne Teilnehmer wurden bisher automatisch alle aktiven Mitglieder als
+  "anwesend" angelegt und gespeichert - auch für abgeschlossene Abende und
+  auch beim Ansehen durch den Kassenprüfer (reine Leserolle). Das passiert
+  jetzt nur noch als Fallback für einen **offenen** Abend und nicht mehr für
+  die Rolle Kassenprüfer. Im Normalbetrieb ändert sich nichts, weil neue
+  Abende ihre Teilnehmer schon beim Anlegen bekommen; in der Produktiv-
+  Datenbank war der Pfad nicht betroffen. Schutz vor einem theoretischen
+  Fall: ein importierter, abgeschlossener Altabend ohne Teilnehmer hätte
+  beim Öffnen rückwirkend alle Mitglieder als anwesend bekommen und die
+  Anwesenheitsstatistik verfälscht.
+- Testskript: neuer Check für diesen Ablauf.
+
 ## v0.99.27
 
 - **Kassenbuch-Storno bucht das Strafkonto zurück (F11):** Wird eine

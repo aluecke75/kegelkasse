@@ -460,6 +460,67 @@ def check_csv_import_review(client):
         )
 
 
+def check_event_view_no_side_effects(client):
+    """T5: Das bloße Ansehen eines Kegelabends legt Teilnehmer nur für einen OFFENEN Abend an
+    (Fallback), nie für abgeschlossene Abende und nie für die Leserolle 'auditor'."""
+    from datetime import date
+    from models import Member, EventEditLock
+
+    marker = "SELBSTTEST-T5"
+    with app.app_context():
+        admin = User.query.filter_by(role="admin", active=True).first()
+        auditor = User.query.filter_by(role="auditor", active=True).first()
+        member_count = Member.query.filter_by(active=True).count()
+        events = {
+            "closed": BowlingEvent(event_date=date(2097, 1, 1), lane_cost_cents=0, status="closed", note=marker),
+            "open_auditor": BowlingEvent(event_date=date(2097, 1, 2), lane_cost_cents=0, status="open", note=marker),
+            "open_admin": BowlingEvent(event_date=date(2097, 1, 3), lane_cost_cents=0, status="open", note=marker),
+        }
+        db.session.add_all(events.values())
+        db.session.commit()
+        ids = {key: ev.id for key, ev in events.items()}
+        admin_id = admin.id
+        auditor_id = auditor.id if auditor else None
+
+    def open_as(user_id, event_id):
+        with client.session_transaction() as sess:
+            sess["_user_id"] = str(user_id)
+            sess["_fresh"] = True
+        return client.get(f"/events/{event_id}")
+
+    def participant_count(event_id):
+        with app.app_context():
+            return EventParticipant.query.filter_by(event_id=event_id).count()
+
+    r = open_as(admin_id, ids["closed"])
+    check("T5: abgeschlossener Abend ohne Teilnehmer wird beim Ansehen lesbar geöffnet", r.status_code == 200, f"Status {r.status_code}")
+    check("T5: abgeschlossener Abend bekommt beim Ansehen KEINE Teilnehmer", participant_count(ids["closed"]) == 0, f"{participant_count(ids['closed'])} Teilnehmer")
+
+    if auditor_id:
+        r = open_as(auditor_id, ids["open_auditor"])
+        check("T5: Kassenprüfer sieht offenen Abend (Status 200)", r.status_code == 200, f"Status {r.status_code}")
+        check("T5: Kassenprüfer-Ansicht legt KEINE Teilnehmer an", participant_count(ids["open_auditor"]) == 0, f"{participant_count(ids['open_auditor'])} Teilnehmer")
+    else:
+        check("T5: Kassenprüfer-Testbenutzer gefunden", False, "keine aktive Rolle 'auditor' in der Demo-Datenbank")
+
+    r = open_as(admin_id, ids["open_admin"])
+    got = participant_count(ids["open_admin"])
+    check("T5: offener Abend ohne Teilnehmer bekommt sie für Admin weiterhin (Fallback)", r.status_code == 200 and got == member_count and got > 0, f"Status {r.status_code}, {got} von {member_count}")
+
+    with client.session_transaction() as sess:
+        sess["_user_id"] = str(admin_id)
+        sess["_fresh"] = True
+
+    with app.app_context():
+        for event_id in ids.values():
+            EventEditLock.query.filter_by(event_id=event_id).delete(synchronize_session=False)
+            EventParticipant.query.filter_by(event_id=event_id).delete(synchronize_session=False)
+        BowlingEvent.query.filter(BowlingEvent.id.in_(list(ids.values()))).delete(synchronize_session=False)
+        db.session.commit()
+        rest = BowlingEvent.query.filter_by(note=marker).count()
+    check("Selbsttest-Daten (T5) aufgeräumt", rest == 0, f"{rest} Reste")
+
+
 def check_penalty_payment_void(client):
     """F11: Storno einer automatischen 'Barzahlung Strafen' im Kassenbuch bucht das Strafkonto zurück.
 
@@ -639,6 +700,7 @@ def run():
         check_admin_setting_toggle(client)
         check_backup_lifecycle(client)
         check_event_lifecycle(client)
+        check_event_view_no_side_effects(client)
         check_csv_import_review(client)
         check_penalty_payment_void(client)
         check_audit_log_cleanup(client)

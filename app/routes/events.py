@@ -1054,8 +1054,14 @@ def event_detail(event_id):
 
     event = BowlingEvent.query.get_or_404(event_id)
 
+    # Nachträgliche Teilnehmer-Anlage nur als Fallback für einen offenen Abend ohne
+    # Teilnehmer (normal legt event_new() sie schon beim Anlegen an). Bewusst nicht
+    # für abgeschlossene/ausgefallene Abende (sonst würden importierte Altabende
+    # rückwirkend alle aktiven Mitglieder als "anwesend" bekommen und die
+    # Anwesenheitsstatistik verfälschen) und nicht für die reine Leserolle
+    # "auditor" (ein bloßes Ansehen darf nichts speichern).
     existing_count = EventParticipant.query.filter_by(event_id=event.id).count()
-    if existing_count == 0 and event.status != "cancelled":
+    if existing_count == 0 and event.status == "open" and current_user.role != "auditor":
         active_members = Member.query.filter_by(active=True).order_by(Member.first_name, Member.last_name).all()
         for member in active_members:
             db.session.add(EventParticipant(
