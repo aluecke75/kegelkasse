@@ -56,12 +56,15 @@ geschrieben — bitte Häkchen setzen/History unten stehen lassen.
   **Grenze:** Ältere, schon gebuchte Einträge lassen sich nicht rückwirkend
   verknüpfen - dort zeigt das Storno einen Warnhinweis, das Strafkonto
   manuell zu prüfen. Getestet in der Demo-Kopie (88/88, zusätzlich echte
-  Abrechnung + Storno durchgespielt). Demo-Test durch den Nutzer und
-  Produktiv-Update stehen noch aus.
-  - [ ] Nutzer testet auf der Demo: Abend abrechnen (Barzahlung eintragen),
-    im Kassenbuch stornieren, Strafkonto prüfen.
-  - [ ] Nach Bestätigung: Produktiv-Container auf v0.99.27 aktualisieren
-    (vorher frische Sicherung anstoßen, da eine Schema-Änderung mitläuft).
+  Abrechnung + Storno durchgespielt).
+  - [x] Produktiv-Container am 2026-09-21 auf v0.99.27 aktualisiert
+    (Freigabe des Nutzers: "Produktiv updaten"). Vorher Sicherung
+    `data/database/kegelkasse_vor_v0.99.27_2026-09-21_20-04.db`
+    (integrity_check ok), danach: Migration lief, Spalte vorhanden,
+    10 Mitglieder / 26 Kegelabende unverändert, Health "healthy".
+  - [ ] Nutzer testet den Ablauf im echten Betrieb bei der nächsten Abrechnung
+    (Barzahlung -> Kassenbuch-Storno -> Strafkonto). Bereits vorhandene
+    "Barzahlung Strafen"-Einträge sind nicht verknüpft (Warnhinweis beim Storno).
 - [ ] **T5 nicht angefasst:** Ein Fix müsste auch klären, was eine Seite
   ohne automatisch angelegte Teilnehmer für eine Rolle wie "auditor"
   anzeigt (sonst wirkt die Seite kaputt statt nur "sauberer"). Geringer
