@@ -10,6 +10,26 @@ geschrieben — bitte Häkchen setzen/History unten stehen lassen.
 
 ## Aktueller Gesamtstand: 26 von 27 Punkten erledigt bzw. entschieden (offen: nur S5 CSRF, für eine eigene Runde)
 
+## Neu (2026-09-22): Statistik-Prüfung — eigenes Dokument
+
+Auf Nutzerwunsch ("prüf bitte alle angaben die auf dem dashboard angezeigt werden auf fehler ...
+kegelkönig und co ... auch die statistiken die man als pdf ausdrucken kann") wurde das komplette
+Dashboard (Mitglieder- und Admin-Sicht), die Statistikseite/Ranglisten und alle PDF/Export-Ausgaben
+geprüft. Details, Schweregrade und Belege stehen in **`STATISTIK_PRUEFUNG_2026-09-22.md`** (eigene
+Datei, gleicher Aufbau wie `FEHLERPRUEFUNG_2026-09-14.md`). Auf Wunsch des Nutzers wurde dabei
+**nichts am Code geändert** — erst dokumentiert, Umsetzung folgt nach separater Entscheidung.
+
+Wichtigste Funde (produktiv bestätigt): Diagramme werden wegen einer Ladereihenfolge im Template nie
+gezeichnet; bei Gleichstand zeigen Dashboard und Statistikseite nur einen "König"; zwei von vier
+Zählstrafen ("Verlorenes Spiel" mit 419 Zählungen, "Alle Neune" mit 62) haben gar keine Rangliste,
+weil nur `penalty_pump`/`penalty_wreath` fest verdrahtet sind.
+
+Zwei Entscheidungen für die Umsetzung stehen bereits fest: Königs-Wertungen künftig automatisch für
+jede Zählstrafe, und bei Gleichstand alle Namen mit geteiltem Platz zeigen.
+
+- [ ] Aus `STATISTIK_PRUEFUNG_2026-09-22.md` auswählen, welche Punkte (D1-D8, K1-K12) umgesetzt
+  werden sollen.
+
 ## Aus Zusammenfassung 1 (2026-09-14, nach Rückfragen zu S2/S8 + F10)
 
 - [x] **F10** – Zinsbuchung: Dublettenschutz erkennt jetzt auch überlappende
