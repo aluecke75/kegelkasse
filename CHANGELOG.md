@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.99.29
+
+- **"Meine Statistik" jetzt für jede Rolle sichtbar:** Die Dashboard-Karte
+  "Meine Statistik" mit dem eigenen offenen Strafkonto bzw. Guthaben wurde
+  bisher nur bei Rolle "Mitglied" angezeigt. Admins, Kassierer/-innen und
+  Kassenprüfer/-innen, die selbst als Vereinsmitglied verknüpft sind, sahen
+  ihren eigenen Saldo nirgends auf dem Dashboard, obwohl er korrekt berechnet
+  wurde. Die Karte erscheint jetzt für jeden angemeldeten Nutzer mit
+  verknüpftem Mitgliedsprofil, unabhängig von der Rolle.
+
 ## v0.99.28
 
 - **Ansehen legt keine Daten mehr an (T5):** Beim Öffnen eines Kegelabends
