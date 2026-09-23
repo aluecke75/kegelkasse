@@ -37,6 +37,38 @@ def report_member_name(member):
     return member.nickname or member.first_name or member.display_name()
 
 
+def _tie_ranks(rows):
+    """Rang je Zeile mit geteiltem Platz bei Gleichstand (1,1,1,4 statt 1,2,3,4).
+
+    `rows` muss absteigend nach "total" sortiert sein (wie build_count_stat_rows
+    und build_absence_stat_rows es liefern).
+    """
+    ranks = []
+    rank = 0
+    previous_total = None
+    for index, row in enumerate(rows):
+        if row["total"] != previous_total:
+            rank = index + 1
+            previous_total = row["total"]
+        ranks.append(rank)
+    return ranks
+
+
+def competition_rank(rows, member_id):
+    """Rang eines einzelnen Mitglieds mit geteiltem Platz bei Gleichstand, oder None."""
+    for row, rank in zip(rows, _tie_ranks(rows)):
+        if row["member_id"] == member_id:
+            return rank
+    return None
+
+
+def annotate_ranks(rows):
+    """Fügt jeder Zeile den Schlüssel 'rank' hinzu (geteilter Platz bei Gleichstand)."""
+    for row, rank in zip(rows, _tie_ranks(rows)):
+        row["rank"] = rank
+    return rows
+
+
 def build_count_stat_rows(selected_year, penalty_key):
     query = (
         db.session.query(
@@ -51,6 +83,7 @@ def build_count_stat_rows(selected_year, penalty_key):
         .join(ParticipantPenalty, ParticipantPenalty.participant_id == EventParticipant.id)
         .join(PenaltyType, PenaltyType.id == ParticipantPenalty.penalty_type_id)
         .filter(BowlingEvent.status == "closed")
+        .filter(EventParticipant.status.in_(("present", "guest")))
         .filter(PenaltyType.key == penalty_key)
     )
 
@@ -522,9 +555,9 @@ def reports():
     if selected_year:
         cancelled_query = cancelled_query.filter(db.extract("year", BowlingEvent.event_date) == selected_year)
 
-    pump_rows = build_count_stat_rows(selected_year, "penalty_pump")
-    wreath_rows = build_count_stat_rows(selected_year, "penalty_wreath")
-    absence_rows = build_absence_stat_rows(selected_year)
+    pump_rows = annotate_ranks(build_count_stat_rows(selected_year, "penalty_pump"))
+    wreath_rows = annotate_ranks(build_count_stat_rows(selected_year, "penalty_wreath"))
+    absence_rows = annotate_ranks(build_absence_stat_rows(selected_year))
     money_rows = build_penalty_money_rows(selected_year)
     payment_rows, payment_total_euro, payment_average_euro = member_payment_summary(selected_year)
     player_rows = build_player_overview_rows(selected_year)

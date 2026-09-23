@@ -607,6 +607,85 @@ def check_penalty_payment_void(client):
     check("Selbsttest-Daten (Storno/Strafkonto) aufgeräumt", rest == 0, f"{rest} Reste")
 
 
+def check_ranking_ties(client):
+    """Rang mit geteiltem Platz bei Gleichstand (1,1,1,4 statt 1,2,3,4) für Pumpen-/
+    Kränze-/Fehltage-Ranglisten, sowohl auf der persönlichen Dashboard-Karte als auch
+    auf /reports."""
+    from routes.reports import _tie_ranks, competition_rank
+
+    rows = [
+        {"member_id": 101, "total": 10},
+        {"member_id": 102, "total": 8},
+        {"member_id": 103, "total": 8},
+        {"member_id": 104, "total": 8},
+        {"member_id": 105, "total": 3},
+    ]
+    ranks = _tie_ranks(rows)
+    check("Gleichstand: geteilter Platz (1,2,2,2,5)", ranks == [1, 2, 2, 2, 5], f"{ranks}")
+    check("Gleichstand: competition_rank für einzelnes Mitglied", competition_rank(rows, 103) == 2, f"{competition_rank(rows, 103)}")
+    check("Gleichstand: competition_rank für unbekanntes Mitglied ist None", competition_rank(rows, 999) is None)
+    check("Gleichstand: leere Liste liefert leere Ranganzahl", _tie_ranks([]) == [])
+
+
+def check_excused_participant_penalty_excluded(client):
+    """Zählstrafen (Pumpen/Kränze) eines nachträglich auf entschuldigt/unentschuldigt
+    gesetzten Teilnehmers dürfen nicht in die Ranglisten-Zählung einfließen, auch wenn
+    im Formular (wie im Browser durch das reine Ausblenden per CSS) noch eine alte,
+    von 'anwesend' stammende Anzahl gespeichert ist. Das Geld war schon vorher sicher
+    (participant_base_penalty_cents gibt für nicht-anwesende Teilnehmer sofort 0 zurück)."""
+    from datetime import date
+    from models import Member, PenaltyType, ParticipantPenalty
+    from routes.reports import build_count_stat_rows
+    from routes.events import participant_base_penalty_cents
+
+    marker = "SELBSTTEST-D7"
+    test_year = 2097
+
+    with app.app_context():
+        pump_type = PenaltyType.query.filter_by(key="penalty_pump").first()
+        if not pump_type:
+            check("D7-Test: Strafart 'penalty_pump' gefunden", False, "keine Strafart mit key=penalty_pump in der Demo-Datenbank")
+            return
+
+        member = Member(first_name=marker, last_name="Fehlend", active=False, joined_at=date(test_year, 1, 1))
+        db.session.add(member)
+        event = BowlingEvent(event_date=date(test_year, 1, 5), lane_cost_cents=0, status="closed", note=marker)
+        db.session.add(event)
+        db.session.flush()
+
+        participant = EventParticipant(event_id=event.id, member_id=member.id, status="present")
+        db.session.add(participant)
+        db.session.flush()
+
+        penalty = ParticipantPenalty(participant_id=participant.id, penalty_type_id=pump_type.id, quantity=3, amount_cents=0)
+        db.session.add(penalty)
+        db.session.commit()
+
+        # Nachträglich als entschuldigt fehlend markiert - die Anzahl 3 bleibt stehen,
+        # genau wie es das reine display:none im Formular beim Absenden tun würde.
+        participant.status = "excused"
+        db.session.commit()
+
+        member_id = member.id
+        event_id = event.id
+        participant_id = participant.id
+
+        money = participant_base_penalty_cents(participant)
+        check("D7: Geld für entschuldigt fehlenden Teilnehmer bleibt 0", money == 0, f"{money} Cent")
+
+        pump_rows = build_count_stat_rows(test_year, "penalty_pump")
+        in_ranking = any(row["member_id"] == member_id for row in pump_rows)
+        check("D7: entschuldigt fehlender Teilnehmer nicht in der Pumpen-Rangliste", not in_ranking, f"pump_rows={pump_rows}")
+
+        ParticipantPenalty.query.filter_by(id=penalty.id).delete(synchronize_session=False)
+        EventParticipant.query.filter_by(id=participant_id).delete(synchronize_session=False)
+        BowlingEvent.query.filter_by(id=event_id).delete(synchronize_session=False)
+        Member.query.filter_by(id=member_id).delete(synchronize_session=False)
+        db.session.commit()
+        rest = Member.query.filter_by(first_name=marker).count() + BowlingEvent.query.filter_by(note=marker).count()
+    check("Selbsttest-Daten (D7) aufgeräumt", rest == 0, f"{rest} Reste")
+
+
 def check_audit_log_cleanup(client):
     """Revisionsprotokoll bereinigen: Aufbewahrungsfrist speichern, alte
     operative Einträge werden gelöscht, geschützte Kategorien bleiben
@@ -703,6 +782,8 @@ def run():
         check_event_view_no_side_effects(client)
         check_csv_import_review(client)
         check_penalty_payment_void(client)
+        check_ranking_ties(client)
+        check_excused_participant_penalty_excluded(client)
         check_audit_log_cleanup(client)
 
     failed = [r for r in results if not r[1]]
