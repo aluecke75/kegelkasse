@@ -161,7 +161,7 @@
                     <thead><tr><th>Platz</th><th>Spieler</th><th>Pumpen</th></tr></thead>
                     <tbody>
                         {% for row in pump_rows %}
-                            <tr><td>{{ loop.index }}</td><td>{{ row.name }}</td><td>{{ row.total }}</td></tr>
+                            <tr><td>{{ row.rank }}</td><td>{{ row.name }}</td><td>{{ row.total }}</td></tr>
                         {% endfor %}
                     </tbody>
                 </table>
@@ -177,7 +177,7 @@
                     <thead><tr><th>Platz</th><th>Spieler</th><th>Kränze</th></tr></thead>
                     <tbody>
                         {% for row in wreath_rows %}
-                            <tr><td>{{ loop.index }}</td><td>{{ row.name }}</td><td>{{ row.total }}</td></tr>
+                            <tr><td>{{ row.rank }}</td><td>{{ row.name }}</td><td>{{ row.total }}</td></tr>
                         {% endfor %}
                     </tbody>
                 </table>
@@ -312,7 +312,7 @@
             <tbody>
                 {% for row in absence_rows %}
                     <tr>
-                        <td>{{ loop.index }}</td><td>{{ row.name }}</td><td>{{ row.excused }}</td><td>{{ row.unexcused }}</td><td>{{ row.total }}</td>
+                        <td>{{ row.rank }}</td><td>{{ row.name }}</td><td>{{ row.excused }}</td><td>{{ row.unexcused }}</td><td>{{ row.total }}</td>
                     </tr>
                 {% endfor %}
             </tbody>

@@ -1,5 +1,22 @@
 # Changelog
 
+## v0.99.30
+
+- **Gleichstand zeigt jetzt einen geteilten Platz:** Bei "Pumpenkönig", "Kranzkönig" und der
+  Fehltage-Rangliste (persönliche Dashboard-Karte "Meine Statistik" und /reports) wurde bei
+  Punktgleichheit einfach durchgezählt (z. B. 1./2./3./4.), obwohl mehrere Mitglieder denselben
+  Wert hatten. Jetzt bekommen alle Gleichstand-Fälle denselben (geteilten) Platz, der nächste
+  Platz wird korrekt übersprungen (z. B. 1,1,1,4 statt 1,2,3,4). Betraf konkret die eigene
+  Fehltage-Rang-Anzeige mehrerer Mitglieder in der laufenden Saison.
+- **Pumpen/Kränze zählen nicht mehr für entschuldigt/unentschuldigt fehlende Teilnehmer:** Wurde
+  für jemanden zuerst eine Strafanzahl eingetragen und der Status danach auf "fehlt" geändert,
+  blieb die Anzahl gespeichert und zählte fälschlich im eigenen "Pumpen"/"Kränze"-Zähler mit -
+  obwohl dafür korrekt kein Geld berechnet wurde. Die Zählung filtert jetzt wie die
+  Geldberechnung nur noch anwesende Teilnehmer und Gäste.
+- Das persönliche "Offene Strafen"/Guthaben auf dem Dashboard wurde geprüft (Gegenrechnung gegen
+  alle Buchungskategorien) und ist bereits korrekt - keine Änderung nötig.
+- Testskript: zwei neue Checks für die geteilten Ränge und die Zählstrafen-Korrektur.
+
 ## v0.99.29
 
 - **"Meine Statistik" jetzt für jede Rolle sichtbar:** Die Dashboard-Karte

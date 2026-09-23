@@ -298,7 +298,7 @@ import routes.penalty_balances  # noqa: E402,F401  registriert /penalty-balances
 from routes.penalty_balances import member_penalty_balance
 
 import routes.reports  # noqa: E402,F401  registriert /reports, /exports*, /audit-log
-from routes.reports import report_member_name, build_count_stat_rows, build_absence_stat_rows, export_year_options
+from routes.reports import report_member_name, build_count_stat_rows, build_absence_stat_rows, competition_rank, export_year_options
 
 import routes.annual_closings  # noqa: E402,F401  registriert /annual-closings*
 from routes.annual_closings import closing_for_year, closed_year_block_message, annual_report_figures, annual_report_export_row, build_annual_report_pdf
@@ -814,8 +814,8 @@ def dashboard():
         member_absence_row = next((row for row in absence_rows if row.get("member_id") == current_member.id), None)
         member_absences = member_absence_row["total"] if member_absence_row else 0
 
-        pump_rank = next((index + 1 for index, row in enumerate(pump_rows) if row["member_id"] == current_member.id), None)
-        absence_rank = next((index + 1 for index, row in enumerate(absence_rows) if row.get("member_id") == current_member.id), None)
+        pump_rank = competition_rank(pump_rows, current_member.id)
+        absence_rank = competition_rank(absence_rows, current_member.id)
 
         member_dashboard = {
             "name": report_member_name(current_member),
