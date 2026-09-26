@@ -1,5 +1,19 @@
 # Changelog
 
+## v0.99.32
+
+- **Gast-Regel wirkte nicht:** Wurde die Regel "Gast: Strafen zusätzlich zur Gastgebühr?" am
+  selben Tag wie ein bestehender Eintrag neu angelegt (z. B. der automatische Startwert),
+  entschied bei gleichem Gültigkeitsdatum ein beliebiger Eintrag - der neue Wert "Nein" blieb
+  wirkungslos. Jetzt gilt bei gleichem Datum immer der zuletzt angelegte Eintrag. Dasselbe gilt
+  nun auch für die Euro-Werte (Gastgebühr, Beiträge, Strafen usw.) und die Anzeige "Aktuelle Werte".
+- **Gast-Regel wird wie die anderen Werte angelegt:** Über "+ Neuen Wert anlegen" in den
+  Grundeinstellungen lässt sich jetzt "Gast: Strafen zusätzlich zur Gastgebühr?" auswählen; statt
+  eines Euro-Betrags erscheint dann die Auswahl Ja/Nein. Der zusätzliche Knopf "Neue Regel für
+  Gast-Strafen anlegen" und die zugehörige Seite entfallen.
+- Testskript: neue Prüfungen für die Gast-Regel (Formular, Gleichstand beim Datum, Berechnung
+  für Gäste mit "Ja" und "Nein").
+
 ## v0.99.31
 
 - **Gastkegler: Barzahlung wird jetzt korrekt verbucht.** Gäste tauchten im Schritt

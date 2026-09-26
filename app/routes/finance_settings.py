@@ -12,6 +12,11 @@ from services.settings import setting_value, set_setting_value
 from services.money import cents_to_euro, form_euro_to_cents
 from services.audit import audit_log, audit_value, audit_diff_lines, penalty_type_audit_snapshot
 
+# Die Gast-Regel (Ja/Nein statt Euro-Betrag) wird im selben Formular "Neuen Wert
+# anlegen" ausgewählt wie die Euro-Werte, liegt aber in einer eigenen Tabelle.
+GUEST_PENALTY_KEY = "guest_penalties"
+GUEST_PENALTY_LABEL = "Gast: Strafen zusätzlich zur Gastgebühr?"
+
 
 @app.route("/settings/rates")
 @login_required
@@ -19,6 +24,7 @@ def rate_settings():
     all_rates = RateSetting.query.order_by(
         RateSetting.key,
         RateSetting.valid_from.desc(),
+        RateSetting.id.desc(),
     ).all()
 
     rate_groups = []
@@ -33,7 +39,10 @@ def rate_settings():
                 "history": history,
             })
 
-    guest_policy_history = GuestPenaltyPolicy.query.order_by(GuestPenaltyPolicy.valid_from.desc()).all()
+    guest_policy_history = GuestPenaltyPolicy.query.order_by(
+        GuestPenaltyPolicy.valid_from.desc(),
+        GuestPenaltyPolicy.id.desc(),
+    ).all()
 
     return render_template(
         "rate_settings.html",
@@ -123,6 +132,35 @@ def rate_new():
         valid_from_raw = request.form.get("valid_from", "").strip()
         note = request.form.get("note", "").strip()
 
+        if key == GUEST_PENALTY_KEY:
+            try:
+                valid_from = datetime.strptime(valid_from_raw, "%Y-%m-%d").date()
+            except ValueError:
+                flash("Bitte ein gültiges Datum eingeben.", "danger")
+                return redirect(url_for("rate_new"))
+
+            choice = request.form.get("charge_penalties", "")
+            if choice not in ("0", "1"):
+                flash("Bitte auswählen, ob Gäste zusätzlich zur Gastgebühr auch Strafen zahlen.", "danger")
+                return redirect(url_for("rate_new"))
+
+            policy = GuestPenaltyPolicy(
+                charge_penalties=choice == "1",
+                valid_from=valid_from,
+                note=note or None,
+            )
+            db.session.add(policy)
+            audit_log(
+                "settings",
+                "guest_penalty_policy_created",
+                "Regel für Gast-Strafen angelegt",
+                new_value=f"{policy.charge_penalties_label()} ab {valid_from_raw}",
+            )
+            db.session.commit()
+
+            flash("Neuer Wert wurde mit Gültigkeitsdatum angelegt.", "success")
+            return redirect(url_for("rate_settings"))
+
         if key not in BASE_RATE_KEYS:
             flash("Ungültiger Einstellungstyp. Strafarten bitte im Modul Strafarten pflegen.", "danger")
             return redirect(url_for("rate_new"))
@@ -156,44 +194,8 @@ def rate_new():
     return render_template(
         "rate_form.html",
         rate_types={key: RATE_TYPES[key] for key in BASE_RATE_KEYS},
-        today=datetime.today().date().isoformat(),
-    )
-
-
-@app.route("/settings/guest-penalty-policy/new", methods=["GET", "POST"])
-@login_required
-@role_required("admin")
-def guest_penalty_policy_new():
-    if request.method == "POST":
-        charge_penalties = request.form.get("charge_penalties") == "1"
-        valid_from_raw = request.form.get("valid_from", "").strip()
-        note = request.form.get("note", "").strip()
-
-        try:
-            valid_from = datetime.strptime(valid_from_raw, "%Y-%m-%d").date()
-        except ValueError:
-            flash("Bitte ein gültiges Datum eingeben.", "danger")
-            return redirect(url_for("guest_penalty_policy_new"))
-
-        policy = GuestPenaltyPolicy(
-            charge_penalties=charge_penalties,
-            valid_from=valid_from,
-            note=note or None,
-        )
-        db.session.add(policy)
-        audit_log(
-            "settings",
-            "guest_penalty_policy_created",
-            "Regel für Gast-Strafen angelegt",
-            new_value=f"{policy.charge_penalties_label()} ab {valid_from_raw}",
-        )
-        db.session.commit()
-
-        flash("Neue Regel für Gast-Strafen wurde mit Gültigkeitsdatum angelegt.", "success")
-        return redirect(url_for("rate_settings"))
-
-    return render_template(
-        "guest_penalty_policy_form.html",
+        guest_penalty_key=GUEST_PENALTY_KEY,
+        guest_penalty_label=GUEST_PENALTY_LABEL,
         today=datetime.today().date().isoformat(),
     )
 

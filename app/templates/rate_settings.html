@@ -101,11 +101,6 @@
             {% endif %}
         </div>
     {% endif %}
-    {% if current_user.role == "admin" %}
-        <div class="modern-card" style="text-align:right;">
-            <a class="button" href="{{ url_for('guest_penalty_policy_new') }}">+ Neue Regel für Gast-Strafen anlegen</a>
-        </div>
-    {% endif %}
 </div>
 
 <style>
