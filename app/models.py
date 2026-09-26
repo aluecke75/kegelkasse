@@ -92,6 +92,26 @@ class RateSetting(db.Model):
         return f"{self.amount_cents / 100:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
 
 
+class GuestPenaltyPolicy(db.Model):
+    """Regelt, ob Gastkegler neben der festen Gastgebühr auch die Strafen des
+    Abends zahlen. Wie bei RateSetting per Datum historisiert."""
+    __tablename__ = "guest_penalty_policies"
+
+    id = db.Column(db.Integer, primary_key=True)
+
+    charge_penalties = db.Column(db.Boolean, nullable=False, default=True)
+    # False = Gast zahlt nur die feste Gastgebühr
+    # True  = Gast zahlt zusätzlich zur Gastgebühr auch die Strafen des Abends
+
+    valid_from = db.Column(db.Date, nullable=False)
+    note = db.Column(db.Text, nullable=True)
+
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    def charge_penalties_label(self):
+        return "Ja, zusätzlich zur Gastgebühr" if self.charge_penalties else "Nein, nur die feste Gastgebühr"
+
+
 class AppSetting(db.Model):
     __tablename__ = "app_settings"
 
