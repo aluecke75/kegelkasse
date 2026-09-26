@@ -284,13 +284,14 @@ def event_average_present_penalty_cents(event):
 
 def participant_penalty_cents(participant, target_date, average_present_cents=0):
     """Berechnet Strafen/Gebühren für einen Teilnehmer in Cent."""
-    from app import current_rate_cents
+    from app import current_rate_cents, guest_penalties_charged
 
     total = 0
 
     if participant.status == "guest":
         total += current_rate_cents("guest_fee", target_date)
-        total += participant_base_penalty_cents(participant)
+        if guest_penalties_charged(target_date):
+            total += participant_base_penalty_cents(participant)
 
     elif participant.status == "present":
         total += participant_base_penalty_cents(participant)
@@ -1281,6 +1282,14 @@ def event_detail(event_id):
                     db.session.rollback()
                     return redirect(url_for("event_detail", event_id=event.id))
 
+                if not participant.member_id and paid_cents != penalty_cents:
+                    db.session.rollback()
+                    flash(
+                        f"Gast {participant.name()}: Der fällige Betrag von {cents_to_euro(penalty_cents)} € muss vollständig bar bezahlt werden (kein Strafkonto für Gäste).",
+                        "danger",
+                    )
+                    return redirect(url_for("event_detail", event_id=event.id))
+
                 settlement_detail_lines.append(f"{participant.name()}: Strafen {cents_to_euro(penalty_cents)} €, bezahlt {cents_to_euro(paid_cents)} €")
 
                 if paid_cents:
@@ -1456,10 +1465,17 @@ def event_detail(event_id):
         # Während der Erfassung/Abrechnung sind die aktuellen Strafen noch nicht endgültig gebucht,
         # deshalb werden sie zum bisherigen Strafkonto addiert. Nach den Barzahlungen bzw. nach
         # endgültigem Abschluss enthält member_penalty_balance() bereits Strafen minus Zahlungen.
-        if participant.member_id and event.status in ("lane_cost", "closed"):
-            balance_cents = previous_balance_cents
+        if participant.member_id:
+            if event.status in ("lane_cost", "closed"):
+                balance_cents = previous_balance_cents
+            else:
+                balance_cents = previous_balance_cents + penalty_cents
+        elif event.status in ("lane_cost", "closed"):
+            # Gäste haben kein Strafkonto: der Abendbetrag muss sofort bar
+            # beglichen werden, danach bleibt kein Saldo offen.
+            balance_cents = 0
         else:
-            balance_cents = previous_balance_cents + penalty_cents if participant.member_id else 0
+            balance_cents = penalty_cents
         participant_rows.append({
             "participant": participant,
             "display_name": participant_display_name(participant),

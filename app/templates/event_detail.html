@@ -967,41 +967,43 @@
                 </thead>
                 <tbody>
                     {% for row in settlement_rows %}
-                        {% if row.participant.member_id %}
-                            <tr class="settlement-row" data-participant-id="{{ row.participant.id }}">
-                                <td data-label="Spieler"><strong>{{ row.display_name }}</strong></td>
-                                <td data-label="Strafkonto gesamt"><span class="settlement-penalty" data-penalty-cents="{{ row.balance_cents }}">{{ row.balance_euro }}</span> €</td>
-                                <td data-label="Bezahlt">
-                                    <input class="form-control paid-input money-input" type="text" inputmode="decimal" autocomplete="off" name="paid_{{ row.participant.id }}" value="{{ row.paid_euro }}" placeholder="Betrag" data-participant-id="{{ row.participant.id }}">
-                                </td>
-                                <td data-label="Rest/Offen"><span class="settlement-rest">{{ row.balance_euro }}</span> €</td>
-                            </tr>
-                        {% endif %}
+                        {% set is_guest = not row.participant.member_id %}
+                        {% set paid_value = row.balance_euro if is_guest else row.paid_euro %}
+                        <tr class="settlement-row" data-participant-id="{{ row.participant.id }}">
+                            <td data-label="Spieler"><strong>{{ row.display_name }}</strong>{% if is_guest %} <span class="status-badge guest">Gast</span>{% endif %}</td>
+                            <td data-label="Strafkonto gesamt"><span class="settlement-penalty" data-penalty-cents="{{ row.balance_cents }}">{{ row.balance_euro }}</span> €</td>
+                            <td data-label="Bezahlt">
+                                <input class="form-control paid-input money-input" type="text" inputmode="decimal" autocomplete="off" name="paid_{{ row.participant.id }}" value="{{ paid_value }}" placeholder="Betrag" data-participant-id="{{ row.participant.id }}">
+                                {% if is_guest %}<small>Gäste haben kein Strafkonto - bitte vollständig bar bezahlen.</small>{% endif %}
+                            </td>
+                            <td data-label="Rest/Offen"><span class="settlement-rest">{{ row.balance_euro }}</span> €</td>
+                        </tr>
                     {% endfor %}
                 </tbody>
             </table>
 
             <div class="settlement-mobile-list mobile-only">
                 {% for row in settlement_rows %}
-                    {% if row.participant.member_id %}
-                        <div class="settlement-mobile-card settlement-row" data-participant-id="{{ row.participant.id }}">
-                            <div class="settlement-mobile-name">{{ row.display_name }}</div>
-                            <div class="settlement-mobile-grid">
-                                <div class="settlement-mobile-field">
-                                    <label>Strafen</label>
-                                    <div class="settlement-mobile-number"><span class="settlement-penalty" data-penalty-cents="{{ row.balance_cents }}">{{ row.balance_euro }}</span> €</div>
-                                </div>
-                                <div class="settlement-mobile-field">
-                                    <label>Bezahlt</label>
-                                    <input class="form-control paid-input money-input" type="text" inputmode="decimal" autocomplete="off" name="paid_{{ row.participant.id }}" value="{{ row.paid_euro }}" placeholder="Betrag" data-participant-id="{{ row.participant.id }}">
-                                </div>
-                                <div class="settlement-mobile-field">
-                                    <label>Rest/Offen</label>
-                                    <div class="settlement-mobile-number"><span class="settlement-rest">{{ row.balance_euro }}</span> €</div>
-                                </div>
+                    {% set is_guest = not row.participant.member_id %}
+                    {% set paid_value = row.balance_euro if is_guest else row.paid_euro %}
+                    <div class="settlement-mobile-card settlement-row" data-participant-id="{{ row.participant.id }}">
+                        <div class="settlement-mobile-name">{{ row.display_name }}{% if is_guest %} <span class="status-badge guest">Gast</span>{% endif %}</div>
+                        <div class="settlement-mobile-grid">
+                            <div class="settlement-mobile-field">
+                                <label>Strafen</label>
+                                <div class="settlement-mobile-number"><span class="settlement-penalty" data-penalty-cents="{{ row.balance_cents }}">{{ row.balance_euro }}</span> €</div>
+                            </div>
+                            <div class="settlement-mobile-field">
+                                <label>Bezahlt</label>
+                                <input class="form-control paid-input money-input" type="text" inputmode="decimal" autocomplete="off" name="paid_{{ row.participant.id }}" value="{{ paid_value }}" placeholder="Betrag" data-participant-id="{{ row.participant.id }}">
+                                {% if is_guest %}<small>Gäste haben kein Strafkonto - bitte vollständig bar bezahlen.</small>{% endif %}
+                            </div>
+                            <div class="settlement-mobile-field">
+                                <label>Rest/Offen</label>
+                                <div class="settlement-mobile-number"><span class="settlement-rest">{{ row.balance_euro }}</span> €</div>
                             </div>
                         </div>
-                    {% endif %}
+                    </div>
                 {% endfor %}
             </div>
 
