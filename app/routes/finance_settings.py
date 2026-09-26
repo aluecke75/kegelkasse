@@ -7,7 +7,7 @@ from flask_login import login_required
 
 from extensions import app, RATE_TYPES, BASE_RATE_KEYS
 from auth import role_required
-from models import db, RateSetting, PenaltyType, ParticipantPenalty, AppSetting
+from models import db, RateSetting, GuestPenaltyPolicy, PenaltyType, ParticipantPenalty, AppSetting
 from services.settings import setting_value, set_setting_value
 from services.money import cents_to_euro, form_euro_to_cents
 from services.audit import audit_log, audit_value, audit_diff_lines, penalty_type_audit_snapshot
@@ -33,10 +33,14 @@ def rate_settings():
                 "history": history,
             })
 
+    guest_policy_history = GuestPenaltyPolicy.query.order_by(GuestPenaltyPolicy.valid_from.desc()).all()
+
     return render_template(
         "rate_settings.html",
         rate_groups=rate_groups,
         rate_types={key: RATE_TYPES[key] for key in BASE_RATE_KEYS},
+        guest_policy_history=guest_policy_history,
+        guest_policy_current=guest_policy_history[0] if guest_policy_history else None,
         event_rhythm_type=setting_value("event_rhythm_type", "weeks"),
         event_rhythm_weeks=setting_value("event_rhythm_weeks", "4"),
         event_rhythm_weekday=setting_value("event_rhythm_weekday", "4"),
@@ -152,6 +156,44 @@ def rate_new():
     return render_template(
         "rate_form.html",
         rate_types={key: RATE_TYPES[key] for key in BASE_RATE_KEYS},
+        today=datetime.today().date().isoformat(),
+    )
+
+
+@app.route("/settings/guest-penalty-policy/new", methods=["GET", "POST"])
+@login_required
+@role_required("admin")
+def guest_penalty_policy_new():
+    if request.method == "POST":
+        charge_penalties = request.form.get("charge_penalties") == "1"
+        valid_from_raw = request.form.get("valid_from", "").strip()
+        note = request.form.get("note", "").strip()
+
+        try:
+            valid_from = datetime.strptime(valid_from_raw, "%Y-%m-%d").date()
+        except ValueError:
+            flash("Bitte ein gültiges Datum eingeben.", "danger")
+            return redirect(url_for("guest_penalty_policy_new"))
+
+        policy = GuestPenaltyPolicy(
+            charge_penalties=charge_penalties,
+            valid_from=valid_from,
+            note=note or None,
+        )
+        db.session.add(policy)
+        audit_log(
+            "settings",
+            "guest_penalty_policy_created",
+            "Regel für Gast-Strafen angelegt",
+            new_value=f"{policy.charge_penalties_label()} ab {valid_from_raw}",
+        )
+        db.session.commit()
+
+        flash("Neue Regel für Gast-Strafen wurde mit Gültigkeitsdatum angelegt.", "success")
+        return redirect(url_for("rate_settings"))
+
+    return render_template(
+        "guest_penalty_policy_form.html",
         today=datetime.today().date().isoformat(),
     )
 

@@ -62,6 +62,50 @@
             {% endif %}
         </div>
     {% endfor %}
+
+    {% if guest_policy_current %}
+        <div class="modern-card setting-item">
+            <button type="button" class="setting-summary" onclick="this.closest('.setting-item').classList.toggle('open')">
+                <span class="setting-icon">🎳</span>
+                <span>
+                    <strong>Gast: Strafen zusätzlich zur Gastgebühr?</strong>
+                    <small>Gültig ab {{ guest_policy_current.valid_from }}{% if guest_policy_current.note %} · {{ guest_policy_current.note }}{% endif %}</small>
+                </span>
+                <span class="setting-value">{{ guest_policy_current.charge_penalties_label() }}</span>
+                {% if guest_policy_history|length > 1 %}
+                    <span class="muted">Verlauf anzeigen</span>
+                {% else %}
+                    <span class="muted">kein Verlauf</span>
+                {% endif %}
+            </button>
+
+            {% if guest_policy_history|length > 1 %}
+                <div class="setting-history">
+                    <div class="mobile-table-wrap">
+                        <table>
+                            <tr>
+                                <th>Regel</th>
+                                <th>Gültig ab</th>
+                                <th>Bemerkung</th>
+                            </tr>
+                            {% for policy in guest_policy_history %}
+                                <tr>
+                                    <td>{{ policy.charge_penalties_label() }}</td>
+                                    <td>{{ policy.valid_from }}</td>
+                                    <td>{{ policy.note or "" }}</td>
+                                </tr>
+                            {% endfor %}
+                        </table>
+                    </div>
+                </div>
+            {% endif %}
+        </div>
+    {% endif %}
+    {% if current_user.role == "admin" %}
+        <div class="modern-card" style="text-align:right;">
+            <a class="button" href="{{ url_for('guest_penalty_policy_new') }}">+ Neue Regel für Gast-Strafen anlegen</a>
+        </div>
+    {% endif %}
 </div>
 
 <style>
