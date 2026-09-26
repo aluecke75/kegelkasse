@@ -378,7 +378,11 @@ def cashbook_void(entry_id):
                 "(z. B. weil der Kegelabend erneut abgerechnet wurde). Bitte das Strafkonto des Mitglieds "
                 "unter \"Strafkonten\" manuell prüfen."
             )
-    elif entry.category == "Barzahlung Strafen" and (entry.note or "").startswith("Automatisch aus Kegelabend-Abrechnung"):
+    elif (
+        entry.category == "Barzahlung Strafen"
+        and (entry.note or "").startswith("Automatisch aus Kegelabend-Abrechnung")
+        and "Gastkegler" not in (entry.note or "")  # Gäste haben kein Strafkonto, nichts zurückzubuchen
+    ):
         penalty_warning = (
             "Achtung: Diese Barzahlung stammt aus einer Kegelabend-Abrechnung vor der Verknüpfung mit dem "
             "Strafkonto - das Strafkonto des Mitglieds wurde NICHT automatisch zurückgebucht. Bitte unter "

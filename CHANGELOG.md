@@ -1,5 +1,18 @@
 # Changelog
 
+## v0.99.34
+
+- **Gastkegler im Kassenbuch erkennbar:** Die Barzahlung eines Gastes steht im Kassenbuch jetzt mit
+  "(Gastkegler)" hinter dem Namen, im Grund als "Barzahlung Gastkegler (Gastgebühr/Strafen) Kegelabend
+  <Datum>" und in der Notiz mit dem Zusatz "Gastkegler, kein Strafkonto". Auch die zugehörige
+  Kontobuchung und die Audit-Zeile der Abrechnung nennen den Gastkegler. Kategorie
+  ("Barzahlung Strafen") und alle Beträge bleiben unverändert, Buchungen von Mitgliedern ebenfalls.
+- **Storno einer Gast-Barzahlung:** Beim Stornieren im Kassenbuch erschien bei Gästen fälschlich der
+  Hinweis, das Strafkonto sei nicht zurückgebucht worden. Gäste haben kein Strafkonto, der Hinweis
+  entfällt jetzt für sie.
+- Testskript: neue Prüfung, die eine Abrechnung mit Gast und Mitglied durchspielt (Kassenbuch-Texte,
+  Kontobuchung, Storno).
+
 ## v0.99.33
 
 - **Grundeinstellungen: neue Reihenfolge der Karten.** "Gastgebühr" und "Gast: Strafen zusätzlich

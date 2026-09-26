@@ -1290,7 +1290,8 @@ def event_detail(event_id):
                     )
                     return redirect(url_for("event_detail", event_id=event.id))
 
-                settlement_detail_lines.append(f"{participant.name()}: Strafen {cents_to_euro(penalty_cents)} €, bezahlt {cents_to_euro(paid_cents)} €")
+                guest_hint = "" if participant.member_id else " (Gastkegler)"
+                settlement_detail_lines.append(f"{participant.name()}{guest_hint}: Strafen {cents_to_euro(penalty_cents)} €, bezahlt {cents_to_euro(paid_cents)} €")
 
                 if paid_cents:
                     payment_transaction = None
@@ -1307,12 +1308,16 @@ def event_detail(event_id):
                         db.session.add(payment_transaction)
                         db.session.flush()
 
+                    # Gastkegler im Kassenbuch kenntlich machen (kein Strafkonto, Gastgebühr
+                    # plus ggf. Strafen). Kategorie und Notiz-Anfang bleiben unverändert,
+                    # daran hängen Storno-Logik und erneutes Verbuchen.
+                    is_guest = not participant.member_id
                     db.session.add(AccountTransaction(
                         account="cash",
                         category="event_cash_payment",
                         amount_cents=paid_cents,
                         booking_date=event.event_date,
-                        description=f"Barzahlung {participant.name()} - {marker}",
+                        description=f"Barzahlung {'Gastkegler ' if is_guest else ''}{participant.name()} - {marker}",
                     ))
                     db.session.add(CashbookEntry(
                         booking_date=event.event_date,
@@ -1320,9 +1325,15 @@ def event_detail(event_id):
                         account="cash",
                         amount_cents=paid_cents,
                         category="Barzahlung Strafen",
-                        person=participant.name(),
-                        reason=f"Barzahlung Strafen Kegelabend {event.event_date}",
-                        note=f"Automatisch aus Kegelabend-Abrechnung: {marker}",
+                        person=f"{participant.name()} (Gastkegler)" if is_guest else participant.name(),
+                        reason=(
+                            f"Barzahlung Gastkegler (Gastgebühr/Strafen) Kegelabend {event.event_date}"
+                            if is_guest else f"Barzahlung Strafen Kegelabend {event.event_date}"
+                        ),
+                        note=(
+                            f"Automatisch aus Kegelabend-Abrechnung (Gastkegler, kein Strafkonto): {marker}"
+                            if is_guest else f"Automatisch aus Kegelabend-Abrechnung: {marker}"
+                        ),
                         penalty_transaction_id=payment_transaction.id if payment_transaction else None,
                         created_by_user_id=current_user.id,
                     ))
