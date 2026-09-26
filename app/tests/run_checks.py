@@ -814,6 +814,105 @@ def check_settings_card_order(client):
     )
 
 
+def check_guest_cashbook_marking(client):
+    """Barzahlung eines Gastkeglers wird im Kassenbuch als 'Gastkegler' kenntlich gemacht
+    (Person, Grund, Notiz sowie Kontobuchung), die eines Mitglieds bleibt unverändert. Das
+    Storno eines Gast-Eintrags zeigt keinen irreführenden 'Strafkonto nicht zurückgebucht'-
+    Hinweis (Gäste haben kein Strafkonto). Der Ablauf läuft über die echte Abrechnung."""
+    from datetime import date
+    from models import (
+        AccountTransaction, CashbookEntry, Member, MemberPenaltyTransaction,
+        ParticipantPenalty, PenaltyType,
+    )
+    from routes.events import participant_penalty_cents
+
+    marker = "SELBSTTEST-GASTKASSE"
+    event_day = date(2098, 6, 1)
+    void_reason = "Selbsttest-Gastkegler"
+
+    with app.app_context():
+        pump_type = PenaltyType.query.filter_by(key="penalty_pump").first()
+        if not pump_type:
+            check("Gast-Kassenbuch: Strafart 'penalty_pump' gefunden", False, "keine Strafart mit key=penalty_pump in der Demo-Datenbank")
+            return
+
+        member = Member(first_name=marker, last_name="Mitglied", active=False, joined_at=event_day)
+        db.session.add(member)
+        event = BowlingEvent(event_date=event_day, lane_cost_cents=0, status="settlement", note=marker)
+        db.session.add(event)
+        db.session.flush()
+
+        member_part = EventParticipant(event_id=event.id, member_id=member.id, status="present")
+        guest_part = EventParticipant(event_id=event.id, member_id=None, guest_name=marker, status="guest")
+        db.session.add_all([member_part, guest_part])
+        db.session.flush()
+        for part in (member_part, guest_part):
+            db.session.add(ParticipantPenalty(participant_id=part.id, penalty_type_id=pump_type.id, quantity=2, amount_cents=0))
+        db.session.commit()
+
+        from routes.events import event_average_present_penalty_cents
+        average = event_average_present_penalty_cents(event)
+        member_due = participant_penalty_cents(member_part, event_day, average)
+        guest_due = participant_penalty_cents(guest_part, event_day, average)
+        ids = {"event": event.id, "member": member.id, "member_part": member_part.id, "guest_part": guest_part.id}
+
+    def euro(cents):
+        return f"{cents / 100:.2f}".replace(".", ",")
+
+    check("Gast-Kassenbuch: Mitglied und Gast haben etwas zu zahlen (sonst wäre die Prüfung wertlos)", member_due > 0 and guest_due > 0, f"Mitglied {member_due}, Gast {guest_due}")
+
+    r = client.post(f"/events/{ids['event']}", data={
+        "action": "save_settlement",
+        f"paid_{ids['member_part']}": euro(member_due),
+        f"paid_{ids['guest_part']}": euro(guest_due),
+    }, follow_redirects=True)
+    check("Gast-Kassenbuch: Abrechnung verbuchen ok", r.status_code == 200 and "Internal Server" not in r.get_data(as_text=True), f"Status {r.status_code}")
+
+    with app.app_context():
+        entries = CashbookEntry.query.filter(CashbookEntry.note.like(f"%Kegelabend #{ids['event']} %")).all()
+        guest_entry = next((e for e in entries if marker in (e.person or "") and "Mitglied" not in (e.person or "")), None)
+        member_entry = next((e for e in entries if "Mitglied" in (e.person or "")), None)
+        guest_tx = AccountTransaction.query.filter(AccountTransaction.description.like(f"%Gastkegler%Kegelabend #{ids['event']} %")).count()
+
+        check("Gast-Kassenbuch: Eintrag für den Gast angelegt", guest_entry is not None and guest_entry.amount_cents == guest_due, f"{len(entries)} Einträge")
+        if guest_entry:
+            check("Gast-Kassenbuch: Person enthält 'Gastkegler'", "(Gastkegler)" in (guest_entry.person or ""), f"{guest_entry.person!r}")
+            check("Gast-Kassenbuch: Grund nennt 'Gastkegler'", "Gastkegler" in (guest_entry.reason or ""), f"{guest_entry.reason!r}")
+            check("Gast-Kassenbuch: Notiz nennt 'Gastkegler', Anfang für Storno-Logik unverändert", (guest_entry.note or "").startswith("Automatisch aus Kegelabend-Abrechnung") and "Gastkegler" in (guest_entry.note or ""), f"{guest_entry.note!r}")
+            check("Gast-Kassenbuch: Kategorie unverändert 'Barzahlung Strafen'", guest_entry.category == "Barzahlung Strafen", f"{guest_entry.category!r}")
+        check("Gast-Kassenbuch: Kontobuchung nennt 'Gastkegler' und behält 'Kegelabend #ID'", guest_tx == 1, f"{guest_tx} Treffer")
+        check("Gast-Kassenbuch: Mitglied bleibt unverändert (kein 'Gastkegler')", member_entry is not None and "Gastkegler" not in ((member_entry.person or "") + (member_entry.reason or "") + (member_entry.note or "")), f"{member_entry and (member_entry.person, member_entry.reason)}")
+        guest_entry_id = guest_entry.id if guest_entry else None
+        entry_ids = [e.id for e in entries]
+
+    if guest_entry_id:
+        r = client.post(f"/cashbook/{guest_entry_id}/void", data={"void_reason": void_reason}, follow_redirects=True)
+        html = r.get_data(as_text=True)
+        check("Gast-Kassenbuch: Storno ok, ohne irreführenden Strafkonto-Hinweis", r.status_code == 200 and "Internal Server" not in html and "NICHT automatisch zurückgebucht" not in html, f"Status {r.status_code}")
+
+    with app.app_context():
+        AuditLog.query.filter(
+            ((AuditLog.object_type == "BowlingEvent") & (AuditLog.object_id == ids["event"]))
+            | ((AuditLog.object_type == "CashbookEntry") & (AuditLog.object_id.in_(entry_ids)))
+        ).delete(synchronize_session=False)
+        AccountTransaction.query.filter(AccountTransaction.description.like(f"%Kegelabend #{ids['event']} %")).delete(synchronize_session=False)
+        AccountTransaction.query.filter(AccountTransaction.category == "cashbook_void", AccountTransaction.description.like(f"Storno Kassenbuch #%: {void_reason}")).delete(synchronize_session=False)
+        MemberPenaltyTransaction.query.filter_by(event_id=ids["event"]).delete(synchronize_session=False)
+        CashbookEntry.query.filter(CashbookEntry.id.in_(entry_ids)).delete(synchronize_session=False)
+        ParticipantPenalty.query.filter(ParticipantPenalty.participant_id.in_([ids["member_part"], ids["guest_part"]])).delete(synchronize_session=False)
+        EventParticipant.query.filter_by(event_id=ids["event"]).delete(synchronize_session=False)
+        BowlingEvent.query.filter_by(id=ids["event"]).delete(synchronize_session=False)
+        Member.query.filter_by(id=ids["member"]).delete(synchronize_session=False)
+        db.session.commit()
+        rest = (
+            CashbookEntry.query.filter(CashbookEntry.id.in_(entry_ids)).count()
+            + BowlingEvent.query.filter_by(note=marker).count()
+            + Member.query.filter_by(first_name=marker).count()
+            + EventParticipant.query.filter_by(guest_name=marker).count()
+        )
+    check("Selbsttest-Daten (Gast-Kassenbuch) aufgeräumt", rest == 0, f"{rest} Reste")
+
+
 def check_audit_log_cleanup(client):
     """Revisionsprotokoll bereinigen: Aufbewahrungsfrist speichern, alte
     operative Einträge werden gelöscht, geschützte Kategorien bleiben
@@ -914,6 +1013,7 @@ def run():
         check_excused_participant_penalty_excluded(client)
         check_guest_penalty_policy(client)
         check_settings_card_order(client)
+        check_guest_cashbook_marking(client)
         check_audit_log_cleanup(client)
 
     failed = [r for r in results if not r[1]]
