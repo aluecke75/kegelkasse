@@ -367,7 +367,7 @@ def current_rate_cents(key, target_date):
         RateSetting.query
         .filter(RateSetting.key == key)
         .filter(RateSetting.valid_from <= target_date)
-        .order_by(RateSetting.valid_from.desc())
+        .order_by(RateSetting.valid_from.desc(), RateSetting.id.desc())
         .first()
     )
 
@@ -380,7 +380,7 @@ def guest_penalties_charged(target_date):
     policy = (
         GuestPenaltyPolicy.query
         .filter(GuestPenaltyPolicy.valid_from <= target_date)
-        .order_by(GuestPenaltyPolicy.valid_from.desc())
+        .order_by(GuestPenaltyPolicy.valid_from.desc(), GuestPenaltyPolicy.id.desc())
         .first()
     )
     return policy.charge_penalties if policy else True

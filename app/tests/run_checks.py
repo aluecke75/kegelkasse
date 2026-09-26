@@ -686,6 +686,117 @@ def check_excused_participant_penalty_excluded(client):
     check("Selbsttest-Daten (D7) aufgeräumt", rest == 0, f"{rest} Reste")
 
 
+def check_guest_penalty_policy(client):
+    """Gast-Regel (zahlt der Gast neben der Gastgebühr auch die Strafen?): wird im selben
+    Formular wie die Euro-Werte angelegt, wirkt sich auf die Berechnung aus, und bei
+    gleichem Gültigkeitsdatum gewinnt der zuletzt angelegte Eintrag (zuvor entschied
+    bei Gleichstand ein beliebiger Eintrag - "Nein" blieb wirkungslos)."""
+    from datetime import date
+    from models import AuditLog, GuestPenaltyPolicy, RateSetting, PenaltyType, ParticipantPenalty
+    from app import guest_penalties_charged, current_rate_cents
+    from routes.events import participant_penalty_cents, participant_base_penalty_cents
+    from routes.finance_settings import GUEST_PENALTY_KEY
+
+    marker = "SELBSTTEST-GAST"
+    test_day = date(2098, 1, 1)
+    check_day = date(2098, 6, 1)
+
+    def post_policy(choice):
+        return client.post("/settings/rates/new", data={
+            "key": GUEST_PENALTY_KEY,
+            "charge_penalties": choice,
+            "valid_from": test_day.isoformat(),
+            "note": marker,
+        }, follow_redirects=True)
+
+    def policy_count():
+        with app.app_context():
+            return GuestPenaltyPolicy.query.filter_by(valid_from=test_day).count()
+
+    r = client.get("/settings/rates/new")
+    check(
+        "Gast-Regel: 'Neuen Wert anlegen' bietet sie zur Auswahl an (Ja/Nein statt Betrag)",
+        r.status_code == 200 and GUEST_PENALTY_KEY.encode() in r.data and "Nein, nur die feste Gastgebühr".encode() in r.data,
+    )
+
+    with app.app_context():
+        before_any_rule = guest_penalties_charged(date(1990, 1, 1))
+    check("Gast-Regel: ohne gültige Regel gilt das bisherige Verhalten (Gast zahlt Strafen)", before_any_rule is True)
+
+    post_policy("1")
+    post_policy("0")
+    check("Gast-Regel: zwei Einträge über das Formular angelegt", policy_count() == 2, f"{policy_count()} Einträge")
+    with app.app_context():
+        charged = guest_penalties_charged(check_day)
+    check("Gast-Regel: bei gleichem Datum gilt der zuletzt angelegte Eintrag ('Nein')", charged is False, f"{charged}")
+
+    post_policy("vielleicht")
+    check("Gast-Regel: ungültige Auswahl legt nichts an", policy_count() == 2, f"{policy_count()} Einträge")
+
+    with app.app_context():
+        pump_type = PenaltyType.query.filter_by(key="penalty_pump").first()
+        if not pump_type:
+            check("Gast-Regel: Strafart 'penalty_pump' gefunden", False, "keine Strafart mit key=penalty_pump in der Demo-Datenbank")
+        else:
+            event = BowlingEvent(event_date=check_day, lane_cost_cents=0, status="closed", note=marker)
+            db.session.add(event)
+            db.session.flush()
+            guest = EventParticipant(event_id=event.id, member_id=None, guest_name=marker, status="guest")
+            db.session.add(guest)
+            db.session.flush()
+            db.session.add(ParticipantPenalty(participant_id=guest.id, penalty_type_id=pump_type.id, quantity=3, amount_cents=0))
+            db.session.commit()
+
+            guest_fee = current_rate_cents("guest_fee", check_day)
+            base = participant_base_penalty_cents(guest)
+            check("Gast-Regel: Testgast hat Strafen (sonst wäre die Prüfung wertlos)", base > 0, f"{base} Cent")
+            check(
+                "Gast-Regel 'Nein': Gast zahlt nur die feste Gastgebühr",
+                participant_penalty_cents(guest, check_day) == guest_fee,
+                f"{participant_penalty_cents(guest, check_day)} statt {guest_fee} Cent",
+            )
+
+    post_policy("1")
+    with app.app_context():
+        guest = EventParticipant.query.filter_by(guest_name=marker).first()
+        if guest:
+            guest_fee = current_rate_cents("guest_fee", check_day)
+            base = participant_base_penalty_cents(guest)
+            check("Gast-Regel: neuerer Eintrag 'Ja' überstimmt 'Nein' bei gleichem Datum", guest_penalties_charged(check_day) is True)
+            check(
+                "Gast-Regel 'Ja': Gast zahlt Gastgebühr plus Strafen",
+                participant_penalty_cents(guest, check_day) == guest_fee + base,
+                f"{participant_penalty_cents(guest, check_day)} statt {guest_fee + base} Cent",
+            )
+
+    # Gleiche Logik für die Euro-Werte: zwei Werte mit gleichem Datum, der neuere gilt.
+    for amount in ("7,00", "9,00"):
+        client.post("/settings/rates/new", data={
+            "key": "guest_fee", "amount": amount, "valid_from": test_day.isoformat(), "note": marker,
+        }, follow_redirects=True)
+    with app.app_context():
+        fee = current_rate_cents("guest_fee", check_day)
+    check("Euro-Wert: bei gleichem Datum gilt der zuletzt angelegte Eintrag (9,00 €)", fee == 900, f"{fee} Cent")
+
+    with app.app_context():
+        ParticipantPenalty.query.filter(ParticipantPenalty.participant_id.in_(
+            db.session.query(EventParticipant.id).filter_by(guest_name=marker)
+        )).delete(synchronize_session=False)
+        EventParticipant.query.filter_by(guest_name=marker).delete(synchronize_session=False)
+        BowlingEvent.query.filter_by(note=marker).delete(synchronize_session=False)
+        GuestPenaltyPolicy.query.filter_by(valid_from=test_day).delete(synchronize_session=False)
+        RateSetting.query.filter_by(valid_from=test_day).delete(synchronize_session=False)
+        AuditLog.query.filter(AuditLog.category == "settings", AuditLog.new_value.like("%2098-01-01%")).delete(synchronize_session=False)
+        db.session.commit()
+        rest = (
+            GuestPenaltyPolicy.query.filter_by(valid_from=test_day).count()
+            + RateSetting.query.filter_by(valid_from=test_day).count()
+            + EventParticipant.query.filter_by(guest_name=marker).count()
+            + BowlingEvent.query.filter_by(note=marker).count()
+        )
+    check("Selbsttest-Daten (Gast-Regel) aufgeräumt", rest == 0, f"{rest} Reste")
+
+
 def check_audit_log_cleanup(client):
     """Revisionsprotokoll bereinigen: Aufbewahrungsfrist speichern, alte
     operative Einträge werden gelöscht, geschützte Kategorien bleiben
@@ -784,6 +895,7 @@ def run():
         check_penalty_payment_void(client)
         check_ranking_ties(client)
         check_excused_participant_penalty_excluded(client)
+        check_guest_penalty_policy(client)
         check_audit_log_cleanup(client)
 
     failed = [r for r in results if not r[1]]

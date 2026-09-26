@@ -12,16 +12,24 @@
 <div class="modern-card" style="max-width:780px;">
     <form method="post" class="form-grid">
         <label>Typ
-            <select name="key" required>
+            <select name="key" id="rateKey" required>
                 {% for key, label in rate_types.items() %}
                     <option value="{{ key }}">{{ label }}</option>
                 {% endfor %}
+                <option value="{{ guest_penalty_key }}">{{ guest_penalty_label }}</option>
             </select>
         </label>
 
-        <label>Betrag in Euro
-            <input class="money-input" type="text" name="amount" placeholder="z. B. 20,00" inputmode="decimal" autocomplete="off" required>
+        <label id="amountField">Betrag in Euro
+            <input class="money-input" type="text" name="amount" id="amountInput" placeholder="z. B. 20,00" inputmode="decimal" autocomplete="off" required>
             <small>Eingaben wie 5, 5,5 oder ,30 werden automatisch formatiert.</small>
+        </label>
+
+        <label id="guestPolicyField" style="display:none;">Zahlt der Gast neben der Gastgebühr auch die Strafen des Abends?
+            <select name="charge_penalties" id="guestPolicyInput" disabled required>
+                <option value="1">Ja, zusätzlich zur Gastgebühr</option>
+                <option value="0">Nein, nur die feste Gastgebühr</option>
+            </select>
         </label>
 
         <label>Gültig ab
@@ -64,6 +72,23 @@
         input.addEventListener('focus', function () { if (input.value === '0,00') input.value = ''; });
         input.addEventListener('blur', function () { normalizeMoneyInput(input); });
     });
+
+    // Gast-Regel: statt Euro-Betrag wird Ja/Nein abgefragt. Das nicht benötigte
+    // Feld wird deaktiviert, damit es weder validiert noch mitgeschickt wird.
+    const keySelect = document.getElementById('rateKey');
+    const amountField = document.getElementById('amountField');
+    const amountInput = document.getElementById('amountInput');
+    const guestField = document.getElementById('guestPolicyField');
+    const guestInput = document.getElementById('guestPolicyInput');
+    function syncRateType() {
+        const isGuestRule = keySelect.value === {{ guest_penalty_key|tojson }};
+        amountField.style.display = isGuestRule ? 'none' : '';
+        amountInput.disabled = isGuestRule;
+        guestField.style.display = isGuestRule ? '' : 'none';
+        guestInput.disabled = !isGuestRule;
+    }
+    keySelect.addEventListener('change', syncRateType);
+    syncRateType();
 })();
 </script>
 {% endblock %}
