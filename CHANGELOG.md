@@ -1,5 +1,18 @@
 # Changelog
 
+## v0.99.31
+
+- **Gastkegler: Barzahlung wird jetzt korrekt verbucht.** Gäste tauchten im Schritt
+  "Barzahlungen erfassen" gar nicht auf (Template und Verbuchung filterten hart auf
+  Mitglieder), wodurch Gastgebühr und Strafen eines Gastes nirgends in Barkasse,
+  Kassenbuch oder Auswertungen ankamen. Gäste erscheinen jetzt in der Barzahlungs-Tabelle,
+  müssen den fälligen Betrag vollständig bar bezahlen (kein Strafkonto für Gäste), und die
+  Zahlung wird korrekt gebucht.
+- **Neu:** In den Beitragseinstellungen kann jetzt festgelegt werden, ob Gäste neben der
+  festen Gastgebühr auch die Strafen des Abends zahlen (datumsversioniert, wie
+  Gastgebühr/Grundbeiträge). Voreingestellt ist "Ja" (bisheriges Verhalten), für vergangene
+  Abende ändert sich dadurch nichts.
+
 ## v0.99.30
 
 - **Gleichstand zeigt jetzt einen geteilten Platz:** Bei "Pumpenkönig", "Kranzkönig" und der
