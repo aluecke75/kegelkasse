@@ -49,6 +49,7 @@ from models import (
     User,
     Member,
     RateSetting,
+    GuestPenaltyPolicy,
     AccountTransaction,
     BowlingEvent,
     EventParticipant,
@@ -373,6 +374,18 @@ def current_rate_cents(key, target_date):
     return rate.amount_cents if rate else 0
 
 
+def guest_penalties_charged(target_date):
+    """True = Gast zahlt neben der Gastgebühr auch die Strafen des Abends.
+    Ohne gepflegte Regel gilt True (bisheriges, fest einprogrammiertes Verhalten)."""
+    policy = (
+        GuestPenaltyPolicy.query
+        .filter(GuestPenaltyPolicy.valid_from <= target_date)
+        .order_by(GuestPenaltyPolicy.valid_from.desc())
+        .first()
+    )
+    return policy.charge_penalties if policy else True
+
+
 def create_default_rates():
     defaults = {
         "monthly_fee": 2000,
@@ -401,6 +414,13 @@ def create_default_rates():
                 note="Automatisch angelegter Startwert",
             )
             db.session.add(rate)
+
+    if not GuestPenaltyPolicy.query.first():
+        db.session.add(GuestPenaltyPolicy(
+            charge_penalties=True,
+            valid_from=default_date,
+            note="Automatisch angelegter Startwert (bisheriges Verhalten beibehalten)",
+        ))
 
     db.session.commit()
 
