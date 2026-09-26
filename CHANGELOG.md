@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.99.33
+
+- **Grundeinstellungen: neue Reihenfolge der Karten.** "Gastgebühr" und "Gast: Strafen zusätzlich
+  zur Gastgebühr?" stehen jetzt (in dieser Reihenfolge) zwischen "Fehlen unentschuldigt" und
+  "Bahnkosten Standard"; die Gast-Regel steht nicht mehr am Ende der Seite. Nur die Anzeige
+  ändert sich, Werte und Berechnung bleiben unverändert.
+- Testskript: neue Prüfung der Kartenreihenfolge.
+
 ## v0.99.32
 
 - **Gast-Regel wirkte nicht:** Wurde die Regel "Gast: Strafen zusätzlich zur Gastgebühr?" am

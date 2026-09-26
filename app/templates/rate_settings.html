@@ -23,7 +23,45 @@
 </div>
 
 <div class="settings-list">
-    {% for group in rate_groups %}
+    {% for group in setting_cards %}
+        {% if group.key == guest_penalty_key %}
+            <div class="modern-card setting-item">
+                <button type="button" class="setting-summary" onclick="this.closest('.setting-item').classList.toggle('open')">
+                    <span class="setting-icon">🎳</span>
+                    <span>
+                        <strong>Gast: Strafen zusätzlich zur Gastgebühr?</strong>
+                        <small>Gültig ab {{ guest_policy_current.valid_from }}{% if guest_policy_current.note %} · {{ guest_policy_current.note }}{% endif %}</small>
+                    </span>
+                    <span class="setting-value">{{ guest_policy_current.charge_penalties_label() }}</span>
+                    {% if guest_policy_history|length > 1 %}
+                        <span class="muted">Verlauf anzeigen</span>
+                    {% else %}
+                        <span class="muted">kein Verlauf</span>
+                    {% endif %}
+                </button>
+
+                {% if guest_policy_history|length > 1 %}
+                    <div class="setting-history">
+                        <div class="mobile-table-wrap">
+                            <table>
+                                <tr>
+                                    <th>Regel</th>
+                                    <th>Gültig ab</th>
+                                    <th>Bemerkung</th>
+                                </tr>
+                                {% for policy in guest_policy_history %}
+                                    <tr>
+                                        <td>{{ policy.charge_penalties_label() }}</td>
+                                        <td>{{ policy.valid_from }}</td>
+                                        <td>{{ policy.note or "" }}</td>
+                                    </tr>
+                                {% endfor %}
+                            </table>
+                        </div>
+                    </div>
+                {% endif %}
+            </div>
+        {% else %}
         {% set current = group.current %}
         <div class="modern-card setting-item">
             <button type="button" class="setting-summary" onclick="this.closest('.setting-item').classList.toggle('open')">
@@ -61,46 +99,8 @@
                 </div>
             {% endif %}
         </div>
+        {% endif %}
     {% endfor %}
-
-    {% if guest_policy_current %}
-        <div class="modern-card setting-item">
-            <button type="button" class="setting-summary" onclick="this.closest('.setting-item').classList.toggle('open')">
-                <span class="setting-icon">🎳</span>
-                <span>
-                    <strong>Gast: Strafen zusätzlich zur Gastgebühr?</strong>
-                    <small>Gültig ab {{ guest_policy_current.valid_from }}{% if guest_policy_current.note %} · {{ guest_policy_current.note }}{% endif %}</small>
-                </span>
-                <span class="setting-value">{{ guest_policy_current.charge_penalties_label() }}</span>
-                {% if guest_policy_history|length > 1 %}
-                    <span class="muted">Verlauf anzeigen</span>
-                {% else %}
-                    <span class="muted">kein Verlauf</span>
-                {% endif %}
-            </button>
-
-            {% if guest_policy_history|length > 1 %}
-                <div class="setting-history">
-                    <div class="mobile-table-wrap">
-                        <table>
-                            <tr>
-                                <th>Regel</th>
-                                <th>Gültig ab</th>
-                                <th>Bemerkung</th>
-                            </tr>
-                            {% for policy in guest_policy_history %}
-                                <tr>
-                                    <td>{{ policy.charge_penalties_label() }}</td>
-                                    <td>{{ policy.valid_from }}</td>
-                                    <td>{{ policy.note or "" }}</td>
-                                </tr>
-                            {% endfor %}
-                        </table>
-                    </div>
-                </div>
-            {% endif %}
-        </div>
-    {% endif %}
 </div>
 
 <style>

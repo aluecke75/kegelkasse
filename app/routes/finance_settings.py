@@ -17,6 +17,17 @@ from services.audit import audit_log, audit_value, audit_diff_lines, penalty_typ
 GUEST_PENALTY_KEY = "guest_penalties"
 GUEST_PENALTY_LABEL = "Gast: Strafen zusätzlich zur Gastgebühr?"
 
+# Reihenfolge der Karten auf der Seite "Grundeinstellungen". Nicht aufgeführte
+# Einstellungen werden am Ende angehängt.
+SETTINGS_DISPLAY_ORDER = [
+    "monthly_fee",
+    "absence_excused",
+    "absence_unexcused",
+    "guest_fee",
+    GUEST_PENALTY_KEY,
+    "lane_cost_default",
+]
+
 
 @app.route("/settings/rates")
 @login_required
@@ -44,9 +55,16 @@ def rate_settings():
         GuestPenaltyPolicy.id.desc(),
     ).all()
 
+    cards_by_key = {group["key"]: group for group in rate_groups}
+    if guest_policy_history:
+        cards_by_key[GUEST_PENALTY_KEY] = {"key": GUEST_PENALTY_KEY}
+    setting_cards = [cards_by_key[key] for key in SETTINGS_DISPLAY_ORDER if key in cards_by_key]
+    setting_cards += [card for key, card in cards_by_key.items() if key not in SETTINGS_DISPLAY_ORDER]
+
     return render_template(
         "rate_settings.html",
-        rate_groups=rate_groups,
+        setting_cards=setting_cards,
+        guest_penalty_key=GUEST_PENALTY_KEY,
         rate_types={key: RATE_TYPES[key] for key in BASE_RATE_KEYS},
         guest_policy_history=guest_policy_history,
         guest_policy_current=guest_policy_history[0] if guest_policy_history else None,

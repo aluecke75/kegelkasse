@@ -797,6 +797,23 @@ def check_guest_penalty_policy(client):
     check("Selbsttest-Daten (Gast-Regel) aufgeräumt", rest == 0, f"{rest} Reste")
 
 
+def check_settings_card_order(client):
+    """Reihenfolge der Karten auf /settings/rates: Gastgebühr und die Gast-Regel stehen
+    zwischen 'Fehlen unentschuldigt' und 'Bahnkosten Standard' (erst Gastgebühr, dann Regel)."""
+    html = client.get("/settings/rates").get_data(as_text=True)
+    labels = [
+        "Monatsbeitrag", "Fehlen entschuldigt", "Fehlen unentschuldigt",
+        "Gastgebühr", "Gast: Strafen zusätzlich zur Gastgebühr?", "Bahnkosten Standard",
+    ]
+    positions = [html.find(f"<strong>{label}</strong>") for label in labels]
+    check("Grundeinstellungen: alle sechs Karten vorhanden", all(p >= 0 for p in positions), f"{positions}")
+    check(
+        "Grundeinstellungen: Reihenfolge Monatsbeitrag, Fehlen (2x), Gastgebühr, Gast-Regel, Bahnkosten",
+        all(p >= 0 for p in positions) and positions == sorted(positions),
+        f"{positions}",
+    )
+
+
 def check_audit_log_cleanup(client):
     """Revisionsprotokoll bereinigen: Aufbewahrungsfrist speichern, alte
     operative Einträge werden gelöscht, geschützte Kategorien bleiben
@@ -896,6 +913,7 @@ def run():
         check_ranking_ties(client)
         check_excused_participant_penalty_excluded(client)
         check_guest_penalty_policy(client)
+        check_settings_card_order(client)
         check_audit_log_cleanup(client)
 
     failed = [r for r in results if not r[1]]
