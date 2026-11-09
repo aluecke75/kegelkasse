@@ -164,21 +164,47 @@ def parse_bank_statement_csv(document, max_rows=20):
 
     raw = file_path.read_bytes()
 
-    try:
-        text = raw.decode("utf-8-sig")
-    except UnicodeDecodeError:
-        text = raw.decode("cp1252", errors="replace")
+    text = None
+    for enc in ("utf-8-sig", "utf-8", "cp1252", "latin-1", "iso-8859-15"):
+        try:
+            text = raw.decode(enc)
+            break
+        except UnicodeDecodeError:
+            continue
+    if text is None:
+        text = raw.decode("utf-8", errors="replace")
 
     reader = csv.DictReader(StringIO(text), delimiter=";")
     rows = []
     income_total_cents = 0
     expense_total_cents = 0
 
+    _DATE_COLUMNS = ("Datum", "Buchungstag", "Buchungsdatum", "Valutadatum")
+    _TEXT_COLUMNS = ("Buchungstext", "BuchungText", "Text", "Beschreibung", "Verwendungszweck / Notizen")
+    _PURPOSE_COLUMNS = ("Verwendungszweck", "VerwendungsZweck", "Zweck", "Buchungstext", "Text")
+    _AMOUNT_COLUMNS = ("Betrag", "Umsatz", "Betrag (€)", "Wert")
+    _RECIPIENT_COLUMNS = (
+        "Beguenstigter/Zahlungspflichtiger",
+        "Beguenstigter",
+        "Zahlungspflichtiger",
+        "Auftraggeber",
+        "Empfänger",
+        "Zahlungsempfänger",
+    )
+
+    def _first_value(row, columns):
+        for col in columns:
+            val = row.get(col)
+            if val is not None and str(val).strip():
+                return str(val).strip()
+        return ""
+
     for index, row in enumerate(reader, start=1):
-        date_raw = (row.get("Datum") or "").strip()
-        text_raw = (row.get("Buchungstext") or "").strip()
-        purpose_raw = (row.get("Verwendungszweck") or "").strip()
-        amount_raw = (row.get("Betrag") or "0").strip()
+        date_raw = _first_value(row, _DATE_COLUMNS)
+        text_raw = _first_value(row, _TEXT_COLUMNS)
+        purpose_raw = _first_value(row, _PURPOSE_COLUMNS)
+        amount_raw = _first_value(row, _AMOUNT_COLUMNS) or "0"
+        recipient_raw = _first_value(row, _RECIPIENT_COLUMNS)
 
         try:
             sign = -1 if amount_raw.startswith("-") else 1
@@ -190,6 +216,7 @@ def parse_bank_statement_csv(document, max_rows=20):
                 "date": date_raw,
                 "text": text_raw,
                 "purpose": purpose_raw,
+                "recipient": recipient_raw,
                 "amount_cents": 0,
                 "amount_euro": "0,00",
                 "type": "Fehler",
@@ -208,6 +235,7 @@ def parse_bank_statement_csv(document, max_rows=20):
                 "date": date_raw,
                 "text": text_raw,
                 "purpose": purpose_raw,
+                "recipient": recipient_raw,
                 "amount_cents": amount_cents,
                 "amount_euro": cents_to_euro(amount_cents),
                 "type": "Eingang" if amount_cents >= 0 else "Ausgang",
@@ -277,6 +305,7 @@ def build_csv_import_review_rows(document):
             "date_iso": row_date.isoformat() if row_date else "",
             "text": row["text"],
             "purpose": row["purpose"],
+            "recipient": row.get("recipient", ""),
             "amount_cents": row["amount_cents"],
             "amount_euro": row["amount_euro"],
             "type": row["type"],
@@ -295,10 +324,10 @@ def build_csv_import_review_rows(document):
                 "duplicate_hint": None,
             })
         else:
-            suggestion = suggest_for_row(row["text"], row["purpose"], row["amount_cents"])
+            suggestion = suggest_for_row(row["text"], row["purpose"], row["amount_cents"], row.get("recipient", ""))
             entry.update(suggestion)
             entry["duplicate_hint"] = monthly_contribution_duplicate_hint(
-                row_date, row["amount_cents"], row["text"], row["purpose"]
+                row_date, row["amount_cents"], row["text"], row["purpose"], row.get("recipient", "")
             )
 
         review_rows.append(entry)

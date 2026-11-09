@@ -123,6 +123,7 @@
                         <tr>
                             <th>Datum</th>
                             <th>Text / Verwendungszweck</th>
+                            <th>Empfänger / Zahlungspflichtiger</th>
                             <th>Betrag</th>
                             <th>Kategorie &amp; Person</th>
                             <th>Übernehmen</th>
@@ -136,6 +137,9 @@
                                     {% if row.text %}<div class="row-source-text">{{ row.text }}</div>{% endif %}
                                     <div>{{ row.purpose or "-" }}</div>
                                     {% if row.error %}<div class="row-error-text">{{ row.error }}</div>{% endif %}
+                                </td>
+                                <td>
+                                    {% if row.recipient %}<div class="row-source-text">{{ row.recipient }}</div>{% else %}<span class="muted">-</span>{% endif %}
                                 </td>
                                 <td class="amount-cell {{ 'amount-income' if row.amount_cents >= 0 else 'amount-expense' }}">{{ row.amount_euro }} €</td>
                                 <td class="suggestion-cell">
@@ -163,6 +167,7 @@
 
                                             <label class="visually-hidden" for="person_{{ row.index }}">Person für Buchung vom {{ row.date_raw }} über {{ row.amount_euro }} €</label>
                                             <input id="person_{{ row.index }}" class="person-input" type="text" name="person_{{ row.index }}" value="{{ row.person }}" placeholder="Person (optional)">
+                                            {% if row.multi_member_hint %}<div class="row-error-text" style="color:#9a3412;">{{ row.multi_member_hint }}</div>{% endif %}
                                         {% else %}
                                             <div>{{ row.category or "-" }}</div>
                                             {% if row.person %}<div class="muted">{{ row.person }}</div>{% endif %}
