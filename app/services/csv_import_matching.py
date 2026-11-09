@@ -38,30 +38,66 @@ def normalize_learning_key(text, purpose):
     return combined[:255]
 
 
+def _matching_active_members(haystack_lower):
+    """Sucht unter aktiven Mitgliedern alle Namenstreffer (Teilstring,
+    case-insensitive) im Buchungstext/Verwendungszweck/Zahlungsempfänger.
+
+    Gibt eine Liste von (Mitglied, Länge_des_gefundenen_NamensTeils) zurück,
+    sortiert nach Länge absteigend. Bei Namen wie "Ulrich und Heike Dieckmann"
+    werden beide Mitglieder erkannt.
+    """
+    found = []
+    seen_ids = set()
+    for member in Member.query.filter_by(active=True).all():
+        if member.id in seen_ids:
+            continue
+        best_len = 0
+        for name_part in (member.first_name, member.last_name):
+            if not name_part or len(name_part) < MIN_NAME_MATCH_LENGTH:
+                continue
+            if name_part.lower() in haystack_lower and len(name_part) > best_len:
+                best_len = len(name_part)
+        if best_len > 0:
+            found.append((member, best_len))
+            seen_ids.add(member.id)
+    found.sort(key=lambda x: x[1], reverse=True)
+    return found
+
+
 def _matching_active_member(haystack_lower):
     """Sucht unter aktiven Mitgliedern den besten Namenstreffer (Teilstring,
     case-insensitive) im Buchungstext/Verwendungszweck. Bei mehreren
     Treffern gewinnt der längste (spezifischste) Namensteil."""
-    best_member = None
-    best_length = 0
-    for member in Member.query.filter_by(active=True).all():
-        for name_part in (member.first_name, member.last_name):
-            if not name_part or len(name_part) < MIN_NAME_MATCH_LENGTH:
-                continue
-            if name_part.lower() in haystack_lower and len(name_part) > best_length:
-                best_member = member
-                best_length = len(name_part)
-    return best_member
+    found = _matching_active_members(haystack_lower)
+    return found[0][0] if found else None
 
 
-def suggest_for_row(text, purpose, amount_cents):
+# Schlüsselwörter, die auf eine Zinsgutschrift hindeuten (case-insensitive,
+# als Teilstring geprüft). Wird vor der Mitglieds-Erkennung geprüft, damit
+# Zinsen nicht fälschlich als Mitgliedsbeitrag kategorisiert werden.
+_INTEREST_KEYWORDS = ("zins", "guthabenzins", "verzinsung", "zinsgutschrift")
+
+
+def _is_interest_booking(text, purpose, recipient):
+    """Prüft, ob die CSV-Zeile eine Zinsgutschrift ist.
+
+    Gibt True zurück, wenn im Buchungstext, Verwendungszweck oder
+    Zahlungsempfänger ein Zins-Schlüsselwort vorkommt.
+    """
+    haystack = f"{text or ''} {purpose or ''} {recipient or ''}".lower()
+    return any(kw in haystack for kw in _INTEREST_KEYWORDS)
+
+
+def suggest_for_row(text, purpose, amount_cents, recipient=""):
     """Liefert einen Vorschlag (Konfidenz/Kategorie/Person) für eine CSV-Zeile.
 
     Konfidenz "gelernt" (grün): exakter Treffer im normalisierten
     Lernschlüssel gegen eine zuvor gespeicherte CsvImportRule.
     Konfidenz "vermutet" (gelb): kein gelernter Treffer, aber ein Vor- oder
-    Nachname eines aktiven Mitglieds kommt im Text vor - Vorschlag
-    "Mitgliedsbeitrag" mit diesem Mitglied.
+    Nachname eines aktiven Mitglieds kommt im Buchungstext, Verwendungszweck
+    oder Zahlungsempfänger vor - Vorschlag "Mitgliedsbeitrag" mit diesem Mitglied.
+    Bei Erkennung von Zinsen (Schlüsselwort "zins") wird die Kategorie
+    "Zinsen" vorgeschlagen, ohne ein Mitglied zuzuordnen.
     Sonst "kein Treffer" (grau): keine Vorbefüllung außer einer
     Standardkategorie passend zum Vorzeichen.
     """
@@ -77,14 +113,31 @@ def suggest_for_row(text, purpose, amount_cents):
                 "learning_key": learning_key,
             }
 
-    haystack_lower = f"{text or ''} {purpose or ''}".lower()
-    member = _matching_active_member(haystack_lower)
-    if member:
+    # Zins-Erkennung vor der Mitglieds-Erkennung: Zinsen sollen nicht als
+    # Mitgliedsbeitrag falsch kategorisiert werden.
+    if _is_interest_booking(text, purpose, recipient):
+        return {
+            "confidence": CONFIDENCE_GUESSED,
+            "category": "Zinsen",
+            "person": "",
+            "learning_key": learning_key,
+        }
+
+    haystack_lower = f"{text or ''} {purpose or ''} {recipient or ''}".lower()
+    members = _matching_active_members(haystack_lower)
+    if members:
+        # Bei mehreren Mitgliedern (z. B. "Ulrich und Heike Dieckmann") alle
+        # in das Person-Feld eintragen, getrennt durch " und "
+        person_names = " und ".join(m.display_name() for m, _ in members)
+        multi_hint = ""
+        if len(members) > 1:
+            multi_hint = f" (Achtung: {len(members)} Mitglieder erkannt – bitte prüfen, ob Betrag aufgeteilt werden muss)"
         return {
             "confidence": CONFIDENCE_GUESSED,
             "category": "Mitgliedsbeitrag",
-            "person": member.display_name(),
+            "person": person_names,
             "learning_key": learning_key,
+            "multi_member_hint": multi_hint,
         }
 
     return {
@@ -138,17 +191,17 @@ def _period_candidates(row_date):
     return periods
 
 
-def monthly_contribution_duplicate_hint(row_date, amount_cents, text, purpose):
+def monthly_contribution_duplicate_hint(row_date, amount_cents, text, purpose, recipient=""):
     """Weicher Dubletten-Hinweis (nur Anzeige, kein automatischer Ausschluss):
     könnte diese CSV-Zeile zu einem bereits gebuchten Monatsbeitrag passen
     (gleicher Betrag, ähnlicher Zeitraum, Name im Verwendungszweck/
-    Buchungstext erkennbar)? Der Kassierer/Admin entscheidet pro Zeile
-    selbst, ob trotzdem gebucht wird.
+    Buchungstext oder Zahlungsempfänger erkennbar)? Der Kassierer/Admin
+    entscheidet pro Zeile selbst, ob trotzdem gebucht wird.
     """
     if not row_date or not amount_cents or amount_cents <= 0:
         return None
 
-    haystack_lower = f"{text or ''} {purpose or ''}".lower()
+    haystack_lower = f"{text or ''} {purpose or ''} {recipient or ''}".lower()
     periods = _period_candidates(row_date)
 
     candidates = (
