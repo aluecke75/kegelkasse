@@ -5,6 +5,15 @@
     <title>Kegelkasse</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
 
+    <!-- PWA: installierbar auf dem Handy-Startbildschirm -->
+    <link rel="manifest" href="{{ url_for('pwa_manifest') }}">
+    <meta name="theme-color" content="#122017">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-title" content="Kegelkasse">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <link rel="apple-touch-icon" href="{{ url_for('static', filename='pwa/apple-touch-icon.png') }}">
+
     <style>
         :root {
             --bg: #f5f7fb;
@@ -28,6 +37,8 @@
         .brand-badge { width:32px; height:32px; border-radius:10px; display:flex; align-items:center; justify-content:center; background:#1f7a3a; color:white; text-decoration:none; }
         .brand-badge:hover { filter:brightness(1.08); transform:translateY(-1px); }
         .brand-logo-header { height:32px; width:auto; max-width:120px; border-radius:6px; }
+        .install-btn { display:none; font-size:0.72rem; font-weight:700; color:#fff; background:#1f7a3a; border:1px solid rgba(255,255,255,0.25); border-radius:999px; padding:4px 10px; cursor:pointer; white-space:nowrap; }
+        .install-btn.visible { display:inline-flex; }
         .brand-version { font-size:0.72rem; font-weight:700; color:#b8d7c1; background:rgba(255,255,255,0.10); border:1px solid rgba(255,255,255,0.12); border-radius:999px; padding:3px 7px; white-space:nowrap; }
         .database-selector { position:relative; display:inline-flex; align-items:center; }
         .database-badge { display:inline-flex; align-items:center; gap:6px; border-radius:999px; padding:5px 10px; border:1px solid rgba(255,255,255,.16); font-size:.78rem; font-weight:800; white-space:nowrap; cursor:pointer; }
@@ -214,6 +225,7 @@ border-left:6px solid #22c55e;
 
             <span>Kegelkasse</span>
             <span class="brand-version">v{{ app_version }}</span>
+            <button type="button" id="installBtn" class="install-btn" title="Kegelkasse als App auf dem Handy installieren">📲 App installieren</button>
             {% if update_available %}
                 <a href="{{ latest_release_url }}" target="_blank" rel="noopener" class="update-badge" title="Neue Version verfügbar, siehe Release-Hinweise auf GitHub">🔔 Update {{ latest_version }}</a>
             {% endif %}
@@ -493,6 +505,55 @@ border-left:6px solid #22c55e;
             field.removeEventListener("focus", handler);
         }, { once: true });
     });
+})();
+
+// PWA: Service Worker registrieren (nur über HTTPS oder localhost möglich).
+if ("serviceWorker" in navigator) {
+    window.addEventListener("load", function () {
+        navigator.serviceWorker.register("{{ url_for('pwa_service_worker') }}").catch(function () {});
+    });
+}
+
+// PWA: Button "App installieren". Chrome/Edge/Samsung Internet liefern einen
+// echten Installationsdialog (beforeinstallprompt). Firefox und Safari kennen
+// dieses Ereignis nicht: dort zeigt der Button eine Anleitung zum manuellen
+// Installieren. Nur auf Touch-Geräten und nicht in der schon installierten App.
+(function () {
+    var btn = document.getElementById("installBtn");
+    if (!btn) { return; }
+    var standalone = window.matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
+    var ua = navigator.userAgent;
+    var isIOS = /iPhone|iPad|iPod/.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1);  // iPadOS meldet sich als "Mac"
+    var isMobile = isIOS || /Android/.test(ua);
+    var touch = window.matchMedia("(pointer: coarse)").matches;
+    // Am PC (auch Touch-Laptop mit Maus) bleibt der Button unsichtbar.
+    if (standalone || !isMobile || !touch) { return; }
+
+    var deferred = null;
+    window.addEventListener("beforeinstallprompt", function (e) {
+        e.preventDefault();
+        deferred = e;
+    });
+    window.addEventListener("appinstalled", function () {
+        deferred = null;
+        btn.classList.remove("visible");
+    });
+
+    btn.addEventListener("click", function () {
+        if (deferred) {
+            deferred.prompt();
+            deferred.userChoice.then(function () { deferred = null; });
+            return;
+        }
+        if (isIOS) {
+            alert("Zum Installieren: das Teilen-Symbol (Quadrat mit Pfeil nach oben, in Safari unten bzw. bei iPad oben, in Chrome/Firefox oben rechts) antippen und \"Zum Home-Bildschirm\" wählen.");
+        } else if (/Firefox/.test(ua)) {
+            alert("Zum Installieren: oben rechts das Menü (⋮) öffnen und \"Installieren\" wählen.");
+        } else {
+            alert("Zum Installieren: im Browsermenü \"App installieren\" bzw. \"Zum Startbildschirm hinzufügen\" wählen.");
+        }
+    });
+    btn.classList.add("visible");
 })();
 </script>
 </body>
