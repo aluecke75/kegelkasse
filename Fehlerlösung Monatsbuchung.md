@@ -184,3 +184,39 @@ Alle Beträge sind positiv (Eingänge). Die Mitglieder sollten automatisch anhan
   - **Template angepasst**: `monthly_bank_closing_csv_import.html` zeigt jetzt die Empfänger-Spalte und den Multi-Member-Hinweis an.
 
 - Der Docker-Build auf Version 0.99.35 konnte nicht abgeschlossen werden (Build bleibt bei Schritt "COPY . ." hängen). Die gepatchten Dateien wurden stattdessen direkt in den laufenden Container kopiert (`docker cp`). Für einen offiziellen Image-Build muss der Docker-Daemon-Problem behoben werden.
+
+## 7. PDF-Kontoauszug-Import (neue Funktion)
+
+### Problem
+Kontoauszüge werden häufig als PDF von der Bank bereitgestellt. Bisher konnte die Kegelkasse nur CSV-Dateien im Monatsabschluss-Assistenten verarbeiten. PDF-Kontoauszüge konnten nur als Dokument hochgeladen, aber nicht automatisch in Buchungen umgewandelt werden.
+
+### Lösung
+
+**Datei:** `/workspace/kegelkasse/app/services/pdf_import.py` (neu)
+**Datei:** `/workspace/kegelkasse/app/routes/monthly_contributions.py` (erweitert)
+**Datei:** `/workspace/kegelkasse/app/requirements.txt` (erweitert)
+
+**Abhängigkeit:** `pdfplumber` zu `requirements.txt` hinzugefügt (für PDF-Textextraktion und Tabellenerkennung).
+
+Der PDF-Extraktor (`parse_bank_statement_pdf()`) unterstützt zwei Extraktionsverfahren:
+
+1. **Tabellen-Extraktion** (`pdfplumber.extract_tables()`): Erkennt Tabellenzeilen mit Datum, Betrag, Empfänger und Verwendungszweck in beliebiger Spaltenreihenfolge.
+2. **Zeilen-basierte Extraktion** (Regulärer Ausdruck): Fallback für textbasierte PDFs ohne erkennbare Tabellenstruktur, zeilenweise im Format `TT.MM.JJJJ Betrag Empfänger Verwendungszweck`.
+
+Unterstützte Datumsformate: `TT.MM.JJJJ`, `TT.MM.JJ`, `JJJJ-MM-TT`
+Unterstützte Betragsformate: Deutsches Dezimalkomma (z. B. `1.234,56`)
+
+Die Route `monthly_bank_closing_csv_import()` akzeptiert nun sowohl Dokumente mit Kategorie `"Kontoauszug CSV"` als auch `"Kontoauszug PDF"` und ruft je nach Typ den passenden Parser auf. Die Review-Tabelle und die Übernahme-Logik sind identisch für beide Formate.
+
+### Checkliste PDF-Import
+
+- [ ] `pdfplumber` zu `app/requirements.txt` hinzugefügt
+- [ ] Neues Modul `app/services/pdf_import.py` erstellt mit `parse_bank_statement_pdf()`
+- [ ] `monthly_contributions.py`: Import von `parse_bank_statement_pdf` hinzugefügt
+- [ ] `build_csv_import_review_rows()` prüft `document.category` und ruft den passenden Parser auf
+- [ ] Dokumentenabfrage filtert beide Kategorien (`Kontoauszug PDF`, `Kontoauszug CSV`)
+- [ ] Übernahme-Logik und Audit-Log generisch (nicht mehr CSV-spezifisch, sondern "Kontoauszug-Import")
+- [ ] Template zeigt Empfänger-Spalte für PDF-Extraktionen an
+- [ ] PDF-Datei `Konto_0023016758-Auszug_2026_0010.pdf` im Kegelkasse-Root liegt vor
+- [ ] Container neu gestartet und gesund (healthy)
+- [ ] PDF-Import im Monatsabschluss-Assistenten testen: PDF hochladen → Review anzeigen → Buchungen übernehmen
