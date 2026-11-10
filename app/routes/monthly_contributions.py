@@ -6,7 +6,7 @@ from datetime import datetime, date, timedelta
 from io import StringIO
 from pathlib import Path
 
-from flask import request, flash, redirect, url_for, render_template
+from flask import request, flash, redirect, url_for, render_template, session
 from flask_login import login_required, current_user
 from werkzeug.utils import secure_filename
 
@@ -578,14 +578,51 @@ def monthly_bank_closing_csv_import():
     month_value = f"{year:04d}-{month:02d}"
     period_start = date(year, month, 1)
 
-    document = (
+    csv_document = (
         Document.query
-        .filter(Document.category.in_(["Kontoauszug PDF", "Kontoauszug CSV"]))
+        .filter(Document.category == "Kontoauszug CSV")
         .filter(Document.document_date == period_start)
         .filter(Document.deleted_at.is_(None))
         .order_by(Document.uploaded_at.desc())
         .first()
     )
+
+    pdf_document = (
+        Document.query
+        .filter(Document.category == "Kontoauszug PDF")
+        .filter(Document.document_date == period_start)
+        .filter(Document.deleted_at.is_(None))
+        .order_by(Document.uploaded_at.desc())
+        .first()
+    )
+
+    if not csv_document and not pdf_document:
+        flash("Für diesen Monat ist keine Kontoauszug-Datei (PDF oder CSV) hochgeladen.", "warning")
+        return redirect(url_for("monthly_bank_closing", month=month_value))
+
+    # Präferenz aus Session (welche Dateiart zuletzt gewählt wurde)
+    pref_key = f"statement_pref_{year}_{month}"
+    pref = session.get(pref_key)
+
+    # Bei POST: neue Auswahl speichern
+    if request.method == "POST":
+        new_pref = request.form.get("statement_type")
+        if new_pref in ("csv", "pdf"):
+            session[pref_key] = new_pref
+            pref = new_pref
+
+    # Dokument anhand der Präferenz auswählen
+    document = None
+    if pref == "pdf" and pdf_document:
+        document = pdf_document
+    elif pref == "csv" and csv_document:
+        document = csv_document
+    elif pdf_document:
+        document = pdf_document
+        session[pref_key] = "pdf"
+    elif csv_document:
+        document = csv_document
+        session[pref_key] = "csv"
 
     if not document:
         flash("Für diesen Monat ist keine Kontoauszug-Datei (PDF oder CSV) hochgeladen.", "warning")
@@ -718,6 +755,9 @@ def monthly_bank_closing_csv_import():
         month=month,
         month_value=month_value,
         document=document,
+        csv_document=csv_document,
+        pdf_document=pdf_document,
+        statement_pref=pref,
         parsed=parsed,
         review_rows=review_rows,
         categories=cashbook_category_options(),
