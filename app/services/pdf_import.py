@@ -19,6 +19,7 @@ Gibt Zeilen im gleichen Format zurück wie parse_bank_statement_csv():
 
 import re
 from datetime import datetime
+from pathlib import Path
 
 import pdfplumber
 
@@ -98,7 +99,7 @@ def parse_bank_statement_pdf(document, max_rows: int = 5000) -> dict:
     from app import active_database_info
 
     info = active_database_info()
-    documents_path = info["documents_path"]
+    documents_path = Path(info["documents_path"])
     target = documents_path / document.stored_filename
 
     if not target.exists():
