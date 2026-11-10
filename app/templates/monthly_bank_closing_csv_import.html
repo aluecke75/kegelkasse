@@ -70,6 +70,30 @@
     <a class="button secondary" href="{{ url_for('monthly_bank_closing', month=month_value) }}">← Zurück zum Monatsabschluss</a>
 </div>
 
+{% if csv_document and pdf_document %}
+<div class="modern-card" style="margin-bottom:16px;">
+    <div class="modern-header">
+        <div class="modern-icon">📄</div>
+        <div>
+            <h3>Kontoauszug-Datei auswählen</h3>
+            <p>Wählen Sie, welche Datei für die Übernahme verwendet werden soll. Ihre Wahl wird für diesen Monat gespeichert.</p>
+        </div>
+    </div>
+    <form method="post" style="display:inline;">
+        <input type="hidden" name="statement_type" value="">
+        <label style="margin-right:16px;">
+            <input type="radio" name="statement_type" value="csv" {% if statement_pref == 'csv' %}checked{% endif %}>
+            CSV ({{ csv_document.original_filename }})
+        </label>
+        <label style="margin-right:16px;">
+            <input type="radio" name="statement_type" value="pdf" {% if statement_pref == 'pdf' %}checked{% endif %}>
+            PDF ({{ pdf_document.original_filename }})
+        </label>
+        <button type="submit" class="button small-button">Auswahl übernehmen</button>
+    </form>
+</div>
+{% endif %}
+
 {% if not parsed.ok %}
     <div class="modern-card">
         <p>{{ parsed.message }}</p>
