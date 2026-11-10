@@ -1,5 +1,30 @@
 # Changelog
 
+## v0.99.35
+
+- **Kegelkasse als App aufs Handy (PWA):** Die Weboberfläche lässt sich jetzt auf dem Startbildschirm
+  installieren und startet dann im eigenen Fenster ohne Browserleiste, mit Kegel-Icon und
+  dunkelgrüner Statusleiste. Android/Chrome: Menü → "App installieren" bzw. "Zum Startbildschirm
+  hinzufügen". iPhone/Safari: Teilen → "Zum Home-Bildschirm". Voraussetzung ist ein Zugriff über
+  HTTPS (z. B. über den Reverse Proxy), im reinen Heimnetz per `http://<nas-ip>:<port>` bietet der
+  Browser die Installation nicht an.
+- **Bewusst ohne Offline-Daten:** Seiten mit Vereins- und Finanzdaten werden nie auf dem Handy
+  zwischengespeichert, sie kommen immer vom Server (Rechte, Abmeldung, Datenschutz). Ohne
+  Verbindung erscheint eine Hinweisseite mit "Erneut versuchen". Zwischengespeichert werden nur
+  statische Dateien (Icons, Diagramm-Skript); der Cache wird bei jedem Versionswechsel erneuert.
+- Neu: `routes/pwa.py` (`/manifest.webmanifest`, `/service-worker.js`, `/offline`, alle ohne
+  Anmeldung erreichbar, auch vor der Ersteinrichtung), Vorlagen `service_worker.js` und
+  `offline.html`, Icons unter `static/pwa/` (erzeugbar mit `scripts/erzeuge_pwa_icons.py`),
+  Einbindung in `base.html`.
+- **Button "App installieren"** in der Kopfzeile (auch auf der Login-Seite). Er erscheint nur auf
+  Handys und Tablets (Android, iPhone, iPad) und nur, solange die App noch nicht installiert ist;
+  am PC bleibt er unsichtbar. Chrome, Edge und Samsung Internet auf Android öffnen direkt den
+  Installationsdialog. Firefox (Android) sowie alle Browser auf iPhone/iPad kennen diesen Dialog
+  nicht, dort zeigt der Button eine kurze Anleitung (Firefox: Menü → "Installieren"; iOS:
+  Teilen-Symbol → "Zum Home-Bildschirm").
+- Testskript: neue Prüfungen `check_pwa` (Manifest, Icons, Service-Worker-Scope, Offline-Seite,
+  Einbindung in die Seiten, Button standardmäßig ausgeblendet).
+
 ## v0.99.34
 
 - **Gastkegler im Kassenbuch erkennbar:** Die Barzahlung eines Gastes steht im Kassenbuch jetzt mit

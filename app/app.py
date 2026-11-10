@@ -251,7 +251,7 @@ def installation_needs_setup():
 
 @app.before_request
 def redirect_to_first_start_setup():
-    if request.endpoint in ("static", "first_start_setup", "login"):
+    if request.endpoint in ("static", "first_start_setup", "login", "pwa_manifest", "pwa_service_worker", "pwa_offline"):
         return
     if installation_needs_setup():
         return redirect(url_for("first_start_setup"))
@@ -294,6 +294,8 @@ import routes.cashbook  # noqa: E402,F401  registriert /cashbook*
 from routes.cashbook import account_balance, cashbook_export_rows, cashbook_category_options
 
 import routes.search  # noqa: E402,F401  registriert /search
+
+import routes.pwa  # noqa: E402,F401  registriert /manifest.webmanifest, /service-worker.js, /offline
 
 import routes.penalty_balances  # noqa: E402,F401  registriert /penalty-balances
 from routes.penalty_balances import member_penalty_balance

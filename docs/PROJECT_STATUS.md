@@ -24,7 +24,7 @@ Kegelkasse ist von einer einfachen Vereinskasse zu einer vollständigen Vereinsv
 - SQLite (Vereinsversion)
 - Docker, betrieben z. B. auf einem Synology NAS
 - Läuft hinter einem beliebigen Reverse Proxy
-- Responsive Weboberfläche, mobile first, spätere PWA geplant
+- Responsive Weboberfläche, mobile first, als PWA auf dem Handy installierbar (seit v0.99.35, ohne Offline-Daten)
 
 ## Design-Standard
 

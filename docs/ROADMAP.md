@@ -85,4 +85,4 @@ Inspiriert durch einen Funktionsvergleich mit einem anderen, technisch komplett 
 - Frei konfigurierbare Dashboards per Drag & Drop
 - Tiefe Integration von Zahlungsanbietern
 - Integration mit Paperless-ngx für Dokumentenverknüpfung
-- Progressive Web App (PWA) mit Offline-Unterstützung
+- Offline-Nutzung der PWA (Daten auf dem Handy zwischenspeichern, Buchungen offline erfassen und später synchronisieren). Die installierbare PWA selbst (Startbildschirm-Icon, Vollbild, Offline-Hinweisseite) gibt es seit v0.99.35; Vereinsdaten werden bewusst nicht offline vorgehalten (personenbezogene Finanzdaten).

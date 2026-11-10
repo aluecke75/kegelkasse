@@ -974,6 +974,53 @@ def check_audit_log_cleanup(client):
         check("Aufbewahrungsfrist zurückgesetzt", restored == (old_retention or "0"))
 
 
+def check_pwa():
+    """PWA: Manifest, Service Worker und Offline-Seite sind ohne Anmeldung abrufbar, der
+    Service Worker deckt die ganze App ab und die Seiten enthalten die Einbindung."""
+    import json
+
+    anon = app.test_client()  # bewusst ohne Anmeldung
+
+    r = anon.get("/manifest.webmanifest")
+    manifest = json.loads(r.get_data(as_text=True)) if r.status_code == 200 else {}
+    check("PWA: Manifest ohne Anmeldung abrufbar", r.status_code == 200 and "manifest+json" in r.headers.get("Content-Type", ""))
+    sizes = {icon.get("sizes") for icon in manifest.get("icons", [])}
+    check(
+        "PWA: Manifest installierbar (standalone, Icons 192+512)",
+        manifest.get("display") == "standalone" and {"192x192", "512x512"} <= sizes and bool(manifest.get("start_url")),
+        f"{manifest.get('display')} {sizes}",
+    )
+    icons_ok = all(anon.get(icon["src"]).status_code == 200 for icon in manifest.get("icons", []))
+    check("PWA: alle Manifest-Icons ladbar", bool(manifest.get("icons")) and icons_ok)
+
+    r = anon.get("/service-worker.js")
+    js = r.get_data(as_text=True)
+    check(
+        "PWA: Service Worker unter / mit Scope-Freigabe",
+        r.status_code == 200 and "javascript" in r.headers.get("Content-Type", "") and r.headers.get("Service-Worker-Allowed") == "/",
+        f"{r.status_code} {r.headers.get('Service-Worker-Allowed')}",
+    )
+    check(
+        "PWA: Service Worker speichert keine Seiten (nur /static/ + Offline-Seite)",
+        'request.mode === "navigate"' in js and "cache.put" in js and js.count("cache.put") == 1 and "STATIC_PREFIX" in js,
+    )
+
+    r = anon.get("/offline")
+    check("PWA: Offline-Seite abrufbar", r.status_code == 200 and "Keine Verbindung" in r.get_data(as_text=True))
+
+    html = anon.get("/login", follow_redirects=True).get_data(as_text=True)
+    check(
+        "PWA: Seiten binden Manifest, Apple-Icon und Service-Worker-Registrierung ein",
+        'rel="manifest"' in html and "apple-touch-icon" in html and "serviceWorker.register" in html,
+    )
+    # Der Button ist standardmäßig unsichtbar (am PC bleibt er es) und wird nur per Skript auf
+    # Handys/Tablets eingeblendet.
+    check(
+        "PWA: Button 'App installieren' standardmäßig ausgeblendet, Einblenden nur auf Mobilgeräten",
+        'id="installBtn"' in html and ".install-btn { display:none" in html and "if (standalone || !isMobile || !touch) { return; }" in html,
+    )
+
+
 def run():
     from config import get_active_database_profile
 
@@ -1015,6 +1062,8 @@ def run():
         check_settings_card_order(client)
         check_guest_cashbook_marking(client)
         check_audit_log_cleanup(client)
+
+    check_pwa()
 
     failed = [r for r in results if not r[1]]
     print()
