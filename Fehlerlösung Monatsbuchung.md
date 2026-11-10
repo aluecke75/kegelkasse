@@ -220,3 +220,40 @@ Die Route `monthly_bank_closing_csv_import()` akzeptiert nun sowohl Dokumente mi
 - [ ] PDF-Datei `Konto_0023016758-Auszug_2026_0010.pdf` im Kegelkasse-Root liegt vor
 - [ ] Container neu gestartet und gesund (healthy)
 - [ ] PDF-Import im Monatsabschluss-Assistenten testen: PDF hochladen → Review anzeigen → Buchungen übernehmen
+
+## 8. Auswahl zwischen CSV und PDF Kontoauszug
+
+### Problem
+Wenn sowohl eine CSV- als auch eine PDF-Datei für denselben Monat hochgeladen wurden, wurde bisher automatisch nur das neueste Dokument verwendet. Der Kassierer konnte nicht wählen, welche Datei übernommen werden soll.
+
+### Lösung
+
+**Datei:** `/workspace/kegelkasse/app/routes/monthly_contributions.py` (erweitert)
+**Datei:** `/workspace/kegelkasse/app/templates/monthly_bank_closing_csv_import.html` (erweitert)
+
+**Funktionsweise:**
+- Beide Dokumenttypen (CSV und PDF) werden für den Monat separat geladen
+- Sind beide vorhanden, wird eine Auswahl angezeigt (Radio-Buttons: CSV oder PDF)
+- Die gewählte Dateiart wird in der Flask-Session pro Monat gespeichert (`statement_pref_JJJJ_MM`)
+- Beim nächsten Aufruf desselben Monats ist die letzte Auswahl vorausgewählt
+- Ist nur ein Dateityp vorhanden, wird dieser automatisch verwendet (keine Auswahl nötig)
+
+### Verhalten
+
+| Situation | Was passiert |
+|-----------|-------------|
+| Nur CSV vorhanden | CSV wird automatisch verwendet, keine Auswahl angezeigt |
+| Nur PDF vorhanden | PDF wird automatisch verwendet, keine Auswahl angezeigt |
+| Beide vorhanden | Auswahl wird angezeigt, letzte Session-Auswahl vorausgewählt |
+| Auswahl geändert | Wird in Session gespeichert, Seite neu geladen mit neuer Datei |
+
+### Checkliste Auswahl-Funktion
+
+- [ ] `session` Import zu `monthly_contributions.py` hinzugefügt
+- [ ] Beide Dokumente (CSV und PDF) separat geladen
+- [ ] Session-Präferenz pro Monat (`statement_pref_JJJJ_MM`) implementiert
+- [ ] Template zeigt Auswahl nur an, wenn beide Dateien vorhanden sind
+- [ ] Radio-Buttons mit gespeicherter Auswahl vorausgewählt
+- [ ] Button „Auswahl übernehmen“ speichert Präferenz und lädt Seite neu
+- [ ] Container neu gestartet und gesund (healthy)
+- [ ] Auswahl zwischen CSV und PDF im Monatsabschluss-Assistenten testen
