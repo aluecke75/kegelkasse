@@ -2,6 +2,7 @@ flask
 flask_sqlalchemy
 flask_login
 werkzeug
+pdfplumber
 
 # DeveloperKit (Benutzerverwaltung, Rollen, Theme, Logging, Datensicherung)
 # wird NICHT hier installiert, sondern in einer separaten Build-Stage im

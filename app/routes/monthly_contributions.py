@@ -17,6 +17,7 @@ from services.dates import parse_month_param, month_label, first_day_of_month, s
 from services.money import cents_to_euro, euro_to_cents
 from services.audit import audit_log
 from services.csv_import_matching import suggest_for_row, learn_from_confirmation, monthly_contribution_duplicate_hint
+from services.pdf_import import parse_bank_statement_pdf
 from routes.cashbook import cashbook_category_options
 
 # Deutlich über dem, was ein Kegelklub-Konto in einem Monat realistisch an
@@ -271,10 +272,13 @@ def parse_bank_statement_row_date(date_raw):
 
 def build_csv_import_review_rows(document):
     """Baut die Review-Zeilen für den Buchungen-prüfen-Assistenten:
-    geparste CSV-Zeile + Konfidenz-Vorschlag (gelernt/vermutet/kein
+    geparste CSV/PDF-Zeile + Konfidenz-Vorschlag (gelernt/vermutet/kein
     Treffer), weicher Monatsbeitrags-Dubletten-Hinweis und Markierung
     bereits übernommener Zeilen (source_document_id + source_row_index)."""
-    parsed = parse_bank_statement_csv(document, max_rows=CSV_IMPORT_ROW_LIMIT)
+    if document.category == "Kontoauszug PDF":
+        parsed = parse_bank_statement_pdf(document, max_rows=CSV_IMPORT_ROW_LIMIT)
+    else:
+        parsed = parse_bank_statement_csv(document, max_rows=CSV_IMPORT_ROW_LIMIT)
     if not parsed["ok"]:
         return parsed, []
 
@@ -576,7 +580,7 @@ def monthly_bank_closing_csv_import():
 
     document = (
         Document.query
-        .filter(Document.category == "Kontoauszug CSV")
+        .filter(Document.category.in_(["Kontoauszug PDF", "Kontoauszug CSV"]))
         .filter(Document.document_date == period_start)
         .filter(Document.deleted_at.is_(None))
         .order_by(Document.uploaded_at.desc())
@@ -584,7 +588,7 @@ def monthly_bank_closing_csv_import():
     )
 
     if not document:
-        flash("Für diesen Monat ist keine Kontoauszug-CSV-Datei hochgeladen.", "warning")
+        flash("Für diesen Monat ist keine Kontoauszug-Datei (PDF oder CSV) hochgeladen.", "warning")
         return redirect(url_for("monthly_bank_closing", month=month_value))
 
     if request.method == "POST":
@@ -636,7 +640,7 @@ def monthly_bank_closing_csv_import():
                 note_lines.append(f"Buchungstext: {row['text']}")
             if row["purpose"] and row["purpose"] != reason:
                 note_lines.append(f"Verwendungszweck: {row['purpose']}")
-            note_lines.append(f"CSV-Import: {document.original_filename}, Zeile {index}")
+            note_lines.append(f"Kontoauszug-Import: {document.original_filename}, Zeile {index}")
 
             entry = CashbookEntry(
                 booking_date=booking_date,
@@ -666,7 +670,7 @@ def monthly_bank_closing_csv_import():
                 category="csv_import",
                 amount_cents=signed_amount,
                 booking_date=booking_date,
-                description=f"CSV-Import: {category} - {reason}" + (f" ({person})" if person else ""),
+                description=f"Kontoauszug-Import: {category} - {reason}" + (f" ({person})" if person else ""),
             ))
 
             learn_from_confirmation(row["text"], row["purpose"], category, person)
@@ -687,8 +691,8 @@ def monthly_bank_closing_csv_import():
 
             audit_log(
                 "finance",
-                "csv_import_booked",
-                f"CSV-Import gebucht: {booked_count} Buchungen ({month_label(year, month)})",
+                "bank_statement_import_booked",
+                f"Kontoauszug-Import gebucht: {booked_count} Buchungen ({month_label(year, month)})",
                 details=details,
                 object_type="Document",
                 object_id=document.id,
