@@ -435,6 +435,188 @@ def check_csv_import_review(client):
             active_row2_count == 1, f"gefunden: {active_row2_count}",
         )
 
+    # PDF-Kontoauszug im Sparkassen-Stil: Regression - pdfplumber lieferte eine
+    # einzige Tabellenzeile mit mehrzeiligen Zellen, die Auswertung fand 0 Zeilen.
+    # Geprüft wird der Text-Parser mit synthetischem Seitentext (keine echten Daten).
+    from services.pdf_import import _parse_statement_text
+    pdf_rows = _parse_statement_text([
+        "\n".join([
+            "Datum Erläuterung Betrag EUR",
+            "Kontostand am 30.09.2099, Auszug Nr. 9 100,00",
+            "01.01.2099Überw.-Gutschrift 1.020,50",
+            "Max Mustermann Kegelkasse Januar",
+            "02.01.2099Lastschrift 45,00-",
+            "Halle Kegelbahn",
+            "Re-Nr 000555",
+            "03.01.2099Abrechnung 03.01.2099 / Wert: 05.01.2099 1,70",
+            "siehe Anlage Nr. 1",
+            "Kontostand am 03.01.2099 um 20:05 Uhr 1.077,20",
+            "Kreissparkasse Beispielstadt",
+        ]),
+    ], 5000)
+    check("PDF-Text-Parser findet 3 Buchungen", len(pdf_rows) == 3, f"gefunden: {len(pdf_rows)}")
+    if len(pdf_rows) == 3:
+        check(
+            "PDF-Text-Parser: Beträge und Vorzeichen",
+            [r["amount_cents"] for r in pdf_rows] == [102050, -4500, 170],
+            f"gefunden: {[r['amount_cents'] for r in pdf_rows]}",
+        )
+        check(
+            "PDF-Text-Parser: Detailzeilen als Verwendungszweck, Seitenfuß nicht",
+            pdf_rows[0]["purpose"] == "Max Mustermann Kegelkasse Januar"
+            and pdf_rows[1]["purpose"] == "Halle Kegelbahn Re-Nr 000555"
+            and pdf_rows[2]["purpose"] == "siehe Anlage Nr. 1",
+            f"gefunden: {[r['purpose'] for r in pdf_rows]}",
+        )
+        check("PDF-Text-Parser: Datum als ISO", pdf_rows[0]["date"] == "2099-01-01", pdf_rows[0]["date"])
+
+    # Zinsen: Kontoabschluss-Buchung der Bank ("Abrechnung … siehe Anlage" bzw.
+    # "ABSCHLUSS") wird als Zinsen erkannt und als echte Zinsbuchung gebucht.
+    from services.pdf_import import _parse_interest_breakdown
+    from routes.interest import resolve_interest_breakdown
+    from services.csv_import_matching import suggest_for_row as _suggest_for_row
+    with app.app_context():
+        for label, args, expected_cat in (
+            ("PDF-Text", ("Abrechnung 30.10.2099 / Wert: 01.11.2099", "siehe Anlage Nr. 1", 170, ""), "Zinsen"),
+            ("CSV ABSCHLUSS", ("ABSCHLUSS", "Abrechnung 30.10.2099 siehe Anlage", 170, ""), "Zinsen"),
+            ("Belastung zum Abschluss nicht raten", ("ABSCHLUSS", "Abrechnung 30.10.2099 siehe Anlage", -500, ""), "Sonstige Ausgabe"),
+        ):
+            got = _suggest_for_row(args[0], args[1], args[2], args[3])
+            check(f"Zinsen-Erkennung: {label}", got["category"] == expected_cat, f"{got['category']}")
+
+    breakdown = _parse_interest_breakdown(["\n".join([
+        "Rechnungsabschluss: Anlage 1",
+        "Zinsen für Guthaben 2,31+",
+        "Kapitalertragsteuer 0,58-",
+        "Solidaritätszuschlag 0,03-",
+        "Abrechnung 31.10.2099 1,70+",
+    ])])
+    check("Rechnungsabschluss: Brutto und Steuern werden gelesen",
+          breakdown == {"gross_cents": 231, "capital_gains_tax_cents": 58, "solidarity_tax_cents": 3, "church_tax_cents": 0},
+          f"{breakdown}")
+    with app.app_context():
+        resolved = resolve_interest_breakdown(170, breakdown)
+        check("Zinsaufschlüsselung aus dem Auszug wird übernommen",
+              resolved["source"] == "statement" and resolved["gross_cents"] == 231, f"{resolved}")
+        resolved = resolve_interest_breakdown(170, {"gross_cents": 999, "capital_gains_tax_cents": 0,
+                                                    "solidarity_tax_cents": 0, "church_tax_cents": 0})
+        check("Nicht zum Netto passende Aufschlüsselung wird verworfen", resolved["source"] != "statement", f"{resolved}")
+        resolved = resolve_interest_breakdown(170, None)
+        check("Netto-Zinsen ergeben Brutto minus Steuern (rückgerechnet)",
+              resolved["gross_cents"] - resolved["capital_gains_tax_cents"] - resolved["solidarity_tax_cents"]
+              - resolved["church_tax_cents"] == 170, f"{resolved}")
+
+    # Namenserkennung: Mitglieder mit gleichem Nachnamen dürfen sich nicht
+    # gegenseitig als Treffer "mitziehen" (Regression: bei Empfänger "Timo Wessel"
+    # wurde auch Melanie Wessel vorgeschlagen). Temporäre Testmitglieder.
+    from services.csv_import_matching import suggest_for_row as _suggest_for_row, _norm
+    check("Namensvergleich: Umlaut, ß und Akzent werden vereinheitlicht",
+          _norm("Weßel LÜCKE Luecke Andrè") == "wessel luecke luecke andre", _norm("Weßel LÜCKE Luecke Andrè"))
+    with app.app_context():
+        test_members = [
+            Member(first_name="Selbsttesta", last_name="Nachnamentest", active=True),
+            Member(first_name="Selbsttestb", last_name="Nachnamentest", active=True),
+        ]
+        db.session.add_all(test_members)
+        db.session.commit()
+        try:
+            only_a = _suggest_for_row("GUTSCHR", "monatl. Beitrag", 2000, "Selbsttesta Nachnamentest")
+            check("Namenserkennung: Vor- und Nachname trifft nur dieses Mitglied",
+                  len(only_a["suggested_persons"]) == 1 and "Selbsttesta" in only_a["suggested_persons"][0],
+                  f"{only_a['suggested_persons']}")
+            both = _suggest_for_row("Überw.", "Selbsttesta und Selbsttestb Nachnamentest Beitrag", 2000, "")
+            check("Namenserkennung: beide Vornamen genannt = beide Mitglieder",
+                  len(both["suggested_persons"]) == 2, f"{both['suggested_persons']}")
+            family = _suggest_for_row("Überw.", "Familie Nachnamentest Beitrag", 2000, "")
+            check("Namenserkennung: nur gemeinsamer Nachname = alle Träger des Namens",
+                  len(family["suggested_persons"]) == 2, f"{family['suggested_persons']}")
+        finally:
+            for test_member in test_members:
+                db.session.delete(test_member)
+            db.session.commit()
+
+    # Betrag auf mehrere Mitglieder aufteilen (Prüftabelle "Buchungen prüfen"):
+    # Aufteilungs-Hilfen und Validierung der Anteile (synthetische Werte).
+    from werkzeug.datastructures import MultiDict
+    from routes.monthly_contributions import split_amount_evenly, collect_booking_parts, member_person_options
+
+    check("Aufteilung 40,00 € auf 2 = 20,00 + 20,00", split_amount_evenly(4000, 2) == [2000, 2000])
+    check("Aufteilung 10,01 € auf 2: Rest-Cent an den ersten, Summe stimmt",
+          split_amount_evenly(1001, 2) == [501, 500])
+    check("Aufteilung 1,00 € auf 3 ergibt genau 1,00 €", sum(split_amount_evenly(100, 3)) == 100)
+
+    parts, err = collect_booking_parts(MultiDict([
+        ("person_9_1", "Anna Test"), ("amount_9_1", "25,00"),
+        ("person_9_2", "Bernd Test"), ("amount_9_2", "15,00"),
+    ]), 9, 4000)
+    check("Anteile 25,00 + 15,00 von 40,00 € werden angenommen",
+          err is None and parts == [("Anna Test", 2500), ("Bernd Test", 1500)], f"{parts} / {err}")
+
+    parts, err = collect_booking_parts(MultiDict([
+        ("person_9_1", "Anna Test"), ("amount_9_1", "20,00"),
+        ("person_9_2", "Bernd Test"), ("amount_9_2", "10,00"),
+    ]), 9, 4000)
+    check("Anteile, die nicht die Summe ergeben, werden abgelehnt", parts is None and bool(err), f"{parts} / {err}")
+
+    parts, err = collect_booking_parts(MultiDict([
+        ("person_9_1", "Anna Test"), ("amount_9_1", "20,00"),
+        ("person_9_2", ""), ("amount_9_2", "20,00"),
+    ]), 9, 4000)
+    check("Anteil ohne Person wird abgelehnt", parts is None and bool(err), f"{parts} / {err}")
+
+    parts, err = collect_booking_parts(MultiDict([
+        ("person_9_1", "__other__"), ("other_9_1", "Gast Meier"), ("amount_9_1", "1,00"),
+    ]), 9, 4000)
+    check("Ein Anteil: voller Betrag, 'Andere Person' nutzt den Freitext",
+          err is None and parts == [("Gast Meier", 4000)], f"{parts} / {err}")
+
+    parts, err = collect_booking_parts(MultiDict([("person_9", "Anna Test")]), 9, 4000)
+    check("Altes Feld person_<zeile> gilt weiterhin als ein Anteil",
+          err is None and parts == [("Anna Test", 4000)], f"{parts} / {err}")
+
+    with app.app_context():
+        options = member_person_options()
+        first_names = [name.split(" ")[0].lower() for name in options]
+        check("Personen-Dropdown: aktive Mitglieder alphabetisch nach Vorname",
+              first_names == sorted(first_names), f"{options[:5]}")
+
+    # Auswahl CSV/PDF ("Auswahl übernehmen"): Regression - das frühere leere
+    # Hidden-Feld "statement_type" überlagerte die Radio-Auswahl, die Wahl wurde
+    # nie gespeichert. Die Auswahl darf außerdem nichts buchen.
+    with app.app_context():
+        pdf_document = Document(
+            title="Selbsttest Kontoauszug PDF",
+            category="Kontoauszug PDF",
+            document_date=datetime(test_year, test_month, 1).date(),
+            description="Automatischer Selbsttest - bitte ignorieren",
+            original_filename="selftest.pdf",
+            stored_filename="selftest_csv_import_missing.pdf",
+            mime_type="application/pdf",
+            file_size=0,
+        )
+        db.session.add(pdf_document)
+        db.session.commit()
+        pdf_document_id = pdf_document.id
+        entries_before = CashbookEntry.query.count()
+
+    pref_key = f"statement_pref_{test_year}_{test_month}"
+    for choice in ("pdf", "csv"):
+        client.post(
+            f"/finance/monthly-bank-closing/csv-import?month={month_value}",
+            data={"action": "select_statement", "statement_type": choice},
+            follow_redirects=True,
+        )
+        with client.session_transaction() as flask_session:
+            stored_choice = flask_session.get(pref_key)
+        check(f"Auswahl '{choice}' im Kontoauszug-Import wird gespeichert", stored_choice == choice, f"gespeichert: {stored_choice!r}")
+    with app.app_context():
+        check(
+            "Auswahl CSV/PDF bucht nichts",
+            CashbookEntry.query.count() == entries_before,
+        )
+        Document.query.filter_by(id=pdf_document_id).delete(synchronize_session=False)
+        db.session.commit()
+
     # Aufräumen.
     with app.app_context():
         CashbookEntry.query.filter_by(source_document_id=document_id).delete(synchronize_session=False)
@@ -974,6 +1156,280 @@ def check_audit_log_cleanup(client):
         check("Aufbewahrungsfrist zurückgesetzt", restored == (old_retention or "0"))
 
 
+def check_import_monthly_contributions(client):
+    """Kontoauszug-Import -> Schritt 2 "Monatsbeiträge": übernommene Mitgliedsbeiträge
+    zählen dort als bezahlt; ein voll bezahlter Monat wird abgeschlossen, OHNE die
+    Beiträge ein zweites Mal ins Kassenbuch zu buchen; ein Abschluss in Schritt 2 bucht
+    nur den nicht importierten Rest; importierte Beträge lassen sich dort nicht
+    herabsetzen; ein Storno im Kassenbuch führt den Beitrag wieder als offen;
+    Altbuchungen ohne Verknüpfung lassen sich per Knopf nachträglich übernehmen.
+    Testdaten liegen im Jahr 2098 und werden am Ende wieder entfernt."""
+    from pathlib import Path
+    from models import (
+        Document, CashbookEntry, AccountTransaction, CsvImportRule,
+        Member, MonthlyContributionBatch, MonthlyContributionPayment,
+    )
+
+    marker = "SELBSTTESTBEITRAG"
+    test_year = 2098
+    start, end = datetime(test_year, 1, 1).date(), datetime(test_year, 12, 31).date()
+    document_ids, stored_files, voided_entry_ids = [], [], []
+
+    with app.app_context():
+        from app import active_database_info, current_rate_cents
+
+        members = Member.query.filter_by(active=True).order_by(Member.id).all()
+        names = [m.display_name() for m in members]
+        if len(members) < 2 or len(set(names)) != len(names):
+            check("Monatsbeiträge-Import: mind. 2 aktive Mitglieder mit eindeutigem Namen", False, f"{len(members)} Mitglieder")
+            return
+        member_ids = [m.id for m in members]
+        member_names = dict(zip(member_ids, names))
+        value_days = {m.id: m.monthly_value_day for m in members}
+        rate = current_rate_cents("monthly_fee", datetime(test_year, 2, 1).date())
+        if not rate or rate <= 0:
+            check("Monatsbeiträge-Import: Monatsbeitrag > 0 hinterlegt", False, f"Satz: {rate}")
+            return
+        documents_dir = Path(active_database_info()["documents_path"])
+        documents_dir.mkdir(parents=True, exist_ok=True)
+
+    def euro(cents):
+        return f"{cents // 100},{cents % 100:02d}"
+
+    def make_statement(month, ids):
+        """Kontoauszug-CSV für den Monat mit je einer Beitragszeile (2. des Monats)."""
+        lines = ["Datum;Buchungstext;Verwendungszweck;Betrag"]
+        for member_id in ids:
+            lines.append(f"02.{month:02d}.{test_year};Gutschrift;{marker} Beitrag {member_names[member_id]};{euro(rate)}")
+        with app.app_context():
+            stored = f"selftest_beitrag_{test_year}_{month:02d}.csv"
+            target = documents_dir / stored
+            target.write_text("\n".join(lines) + "\n", encoding="utf-8")
+            stored_files.append(target)
+            document = Document(
+                title="Selbsttest Kontoauszug Beiträge", category="Kontoauszug CSV",
+                document_date=datetime(test_year, month, 1).date(),
+                description="Automatischer Selbsttest - bitte ignorieren",
+                original_filename=f"selftest_beitrag_{month:02d}.csv", stored_filename=stored,
+                mime_type="text/csv", file_size=target.stat().st_size,
+            )
+            db.session.add(document)
+            db.session.commit()
+            document_ids.append(document.id)
+            return document.id
+
+    def import_all_rows(month, ids):
+        data = {"month": f"{test_year:04d}-{month:02d}", "take": [str(i) for i in range(1, len(ids) + 1)]}
+        for i, member_id in enumerate(ids, start=1):
+            data[f"category_{i}"] = "Mitgliedsbeitrag"
+            data[f"person_{i}"] = member_names[member_id]
+        return client.post("/finance/monthly-bank-closing/csv-import", data=data, follow_redirects=True)
+
+    def month_state(month):
+        """(batch, {member_id: payment}, Mitgliedsbeitrag-Einträge, monthly_contribution-Transaktionen)"""
+        m_start = datetime(test_year, month, 1).date()
+        m_end = datetime(test_year, month, 28).date()
+        batch = MonthlyContributionBatch.query.filter_by(year=test_year, month=month).first()
+        payments = {p.member_id: p for p in (batch.payments if batch else [])}
+        entries = CashbookEntry.query.filter(
+            CashbookEntry.category == "Mitgliedsbeitrag", CashbookEntry.is_void == False,  # noqa: E712
+            CashbookEntry.booking_date.between(m_start, m_end),
+        ).all()
+        transactions = AccountTransaction.query.filter(
+            AccountTransaction.category == "monthly_contribution",
+            AccountTransaction.booking_date.between(m_start, m_end),
+        ).all()
+        return batch, payments, entries, transactions
+
+    try:
+        # A) Alle Mitglieder zahlen per Überweisung -> Monat abgeschlossen, keine Doppelbuchung.
+        make_statement(2, member_ids)
+        r = import_all_rows(2, member_ids)
+        check("Monatsbeiträge-Import A: Übernahme ohne Fehler", r.status_code == 200 and b"Internal Server" not in r.data, f"Status {r.status_code}")
+        with app.app_context():
+            batch, payments, entries, transactions = month_state(2)
+            check("Monatsbeiträge-Import A: Monat automatisch abgeschlossen", batch is not None and batch.status == "finalized",
+                  f"{batch.status if batch else 'kein Batch'}")
+            check("Monatsbeiträge-Import A: jedes Mitglied als bezahlt eingetragen (Betrag, Wertstellung)",
+                  all(member_id in payments and payments[member_id].paid_cents == rate
+                      and payments[member_id].paid_date == datetime(test_year, 2, 2).date() for member_id in member_ids))
+            check("Monatsbeiträge-Import A: genau eine Kassenbuchung je Mitglied (keine Doppelbuchung)",
+                  len(entries) == len(member_ids), f"{len(entries)} statt {len(member_ids)}")
+            check("Monatsbeiträge-Import A: alle Kassenbuchungen mit der Zahlung verknüpft",
+                  all(e.monthly_contribution_payment_id == payments[m_id].id
+                      for e in entries for m_id in member_ids if e.person == member_names[m_id]))
+            check("Monatsbeiträge-Import A: keine zusätzliche Kontobuchung beim Abschluss", len(transactions) == 0, f"{len(transactions)}")
+        body = client.get(f"/finance/monthly-bank-closing?month={test_year}-02").get_data(as_text=True)
+        check("Monatsbeiträge-Import A: Monatsabschluss zeigt alle Beiträge erledigt",
+              f"{len(member_ids)} / {len(member_ids)} erledigt" in body)
+
+        # B) Alle bis auf einen per Überweisung, der Letzte wird in Schritt 2 bestätigt.
+        last_id, first_id = member_ids[-1], member_ids[0]
+        make_statement(3, member_ids[:-1])
+        import_all_rows(3, member_ids[:-1])
+        with app.app_context():
+            batch, payments, entries, _ = month_state(3)
+            check("Monatsbeiträge-Import B: Monat bleibt offen, solange einer fehlt",
+                  batch is not None and batch.status == "draft" and payments[last_id].paid_cents == 0)
+        form = {"month": f"{test_year}-03", "account": "bank", "action": f"confirm_{last_id}"}
+        for member_id in member_ids:
+            form[f"expected_{member_id}"] = euro(rate)
+            form[f"paid_{member_id}"] = "0" if member_id in (last_id, first_id) else euro(rate)  # first_id: Herabsetzen-Versuch
+            form[f"paid_date_{member_id}"] = f"{test_year}-03-02"
+        r = client.post("/finance/monthly-contributions", data=form, follow_redirects=True)
+        check("Monatsbeiträge-Import B: Bestätigen in Schritt 2 ohne Fehler", r.status_code == 200 and b"Internal Server" not in r.data)
+        with app.app_context():
+            batch, payments, entries, transactions = month_state(3)
+            check("Monatsbeiträge-Import B: Monat nach Bestätigung abgeschlossen", batch.status == "finalized", batch.status)
+            check("Monatsbeiträge-Import B: importierter Betrag lässt sich nicht herabsetzen",
+                  payments[first_id].paid_cents == rate, f"{payments[first_id].paid_cents}")
+            check("Monatsbeiträge-Import B: nur der Rest wird gebucht (eine Kassenbuchung je Mitglied)",
+                  len(entries) == len(member_ids), f"{len(entries)} statt {len(member_ids)}")
+            check("Monatsbeiträge-Import B: genau eine Kontobuchung für den in Schritt 2 bestätigten Beitrag",
+                  len(transactions) == 1 and transactions[0].amount_cents == rate, f"{[t.amount_cents for t in transactions]}")
+            new_entry = next((e for e in entries if e.source_document_id is None), None)
+            check("Monatsbeiträge-Import B: neue Kassenbuchung ist mit der Zahlung verknüpft",
+                  new_entry is not None and new_entry.monthly_contribution_payment_id == payments[last_id].id)
+
+        # C) Storno einer importierten Beitragsbuchung -> Beitrag wieder offen.
+        make_statement(4, [first_id])
+        import_all_rows(4, [first_id])
+        with app.app_context():
+            _, payments, entries, _ = month_state(4)
+            entry_id = entries[0].id if entries else None
+            check("Monatsbeiträge-Import C: Beitrag nach Import bezahlt", payments.get(first_id) is not None and payments[first_id].paid_cents == rate)
+        if entry_id:
+            voided_entry_ids.append(entry_id)
+            client.post(f"/cashbook/{entry_id}/void", data={"void_reason": f"{marker} Storno-Test"}, follow_redirects=True)
+        with app.app_context():
+            batch, payments, _, _ = month_state(4)
+            payment = payments.get(first_id)
+            check("Monatsbeiträge-Import C: nach Storno wieder offen (0 €, ohne Datum)",
+                  payment is not None and payment.paid_cents == 0 and payment.paid_date is None and batch.status == "draft",
+                  f"{payment.paid_cents if payment else None} / {payment.paid_date if payment else None}")
+
+        # D) Altbuchung (Import ohne Verknüpfung) per Knopf in Schritt 2 übernehmen.
+        doc_id = make_statement(5, [first_id])
+        with app.app_context():
+            db.session.add(CashbookEntry(
+                booking_date=datetime(test_year, 5, 2).date(), direction="income", account="bank",
+                amount_cents=rate, category="Mitgliedsbeitrag", person=member_names[first_id],
+                reason=f"{marker} Altbuchung", source_document_id=doc_id, source_row_index=1,
+            ))
+            db.session.commit()
+        body = client.get(f"/finance/monthly-contributions?month={test_year}-05").get_data(as_text=True)
+        check("Monatsbeiträge-Import D: Schritt 2 bietet 'Aus Kontoauszug übernehmen' an",
+              "Aus Kontoauszug übernehmen" in body and 'value="link_imported"' in body)
+        client.post("/finance/monthly-contributions", data={"month": f"{test_year}-05", "action": "link_imported"}, follow_redirects=True)
+        with app.app_context():
+            batch, payments, entries, _ = month_state(5)
+            check("Monatsbeiträge-Import D: Altbuchung als bezahlt eingetragen und verknüpft",
+                  payments.get(first_id) is not None and payments[first_id].paid_cents == rate
+                  and len(entries) == 1 and entries[0].monthly_contribution_payment_id == payments[first_id].id)
+        body = client.get(f"/finance/monthly-contributions?month={test_year}-05").get_data(as_text=True)
+        check("Monatsbeiträge-Import D: Knopf danach nicht mehr angeboten", 'value="link_imported"' not in body)
+
+        def step2_post(month, paid_ids, action="save"):
+            form = {"month": f"{test_year}-{month:02d}", "account": "bank", "action": action}
+            for member_id in member_ids:
+                form[f"expected_{member_id}"] = euro(rate)
+                form[f"paid_{member_id}"] = euro(rate) if member_id in paid_ids else "0"
+                form[f"paid_date_{member_id}"] = f"{test_year}-{month:02d}-03"
+            return client.post("/finance/monthly-contributions", data=form, follow_redirects=True)
+
+        def add_legacy_entry(month, person):
+            """Import-Buchung ohne Verknüpfung (wie vor dieser Version übernommen)."""
+            doc = make_statement(month, [first_id])
+            with app.app_context():
+                db.session.add(CashbookEntry(
+                    booking_date=datetime(test_year, month, 2).date(), direction="income", account="bank",
+                    amount_cents=rate, category="Mitgliedsbeitrag", person=person,
+                    reason=f"{marker} Altbuchung", source_document_id=doc, source_row_index=1,
+                ))
+                db.session.commit()
+
+        # E) Ohne Import: Abschluss in Schritt 2 wie bisher (je Mitglied eine Kassen- und Kontobuchung).
+        r = step2_post(6, member_ids)
+        with app.app_context():
+            batch, _, entries, transactions = month_state(6)
+            check("Monatsbeiträge ohne Import E: Abschluss bucht wie bisher je Mitglied einmal",
+                  batch is not None and batch.status == "finalized" and len(entries) == len(member_ids)
+                  and len(transactions) == len(member_ids) and all(t.amount_cents == rate for t in transactions),
+                  f"{batch.status if batch else None}, {len(entries)} Einträge, {len(transactions)} Kontobuchungen")
+
+        # F) Altbuchung ohne Verknüpfung + "Prüfung speichern" statt Knopf: wird automatisch
+        #    eingetragen, KEINE Doppelbuchung (Prüfbericht H1).
+        add_legacy_entry(7, member_names[first_id])
+        r = step2_post(7, member_ids)
+        with app.app_context():
+            batch, payments, entries, transactions = month_state(7)
+            check("Monatsbeiträge-Import F: Speichern trägt Altbuchung automatisch ein, keine Doppelbuchung",
+                  batch.status == "finalized" and len(entries) == len(member_ids) and len(transactions) == len(member_ids) - 1,
+                  f"{batch.status}, {len(entries)} Einträge, {len(transactions)} Kontobuchungen")
+
+        # G) Nicht zuordenbare Import-Buchung blockiert den Abschluss in Schritt 2.
+        add_legacy_entry(8, f"{marker} Unbekannte Person")
+        r = step2_post(8, member_ids)
+        with app.app_context():
+            batch, _, entries, transactions = month_state(8)
+            check("Monatsbeiträge-Import G: nicht zuordenbare Buchung verhindert den Abschluss",
+                  batch.status == "draft" and len(entries) == 1 and len(transactions) == 0,
+                  f"{batch.status}, {len(entries)} Einträge, {len(transactions)} Kontobuchungen")
+        check("Monatsbeiträge-Import G: deutlicher Hinweis", "Monat nicht abgeschlossen" in r.get_data(as_text=True))
+
+        # H) Von Hand eingetragener Betrag + Import desselben Mitglieds: Hinweis, kein
+        #    automatischer Abschluss; erst das nächste Speichern schließt ab.
+        step2_post(9, member_ids[:-1])
+        make_statement(9, [first_id, last_id])
+        r = import_all_rows(9, [first_id, last_id])
+        html = r.get_data(as_text=True)
+        with app.app_context():
+            batch, payments, _, _ = month_state(9)
+            check("Monatsbeiträge-Import H: Hinweis 'als dieselbe Zahlung gewertet'", "als dieselbe Zahlung gewertet" in html)
+            check("Monatsbeiträge-Import H: Monat trotz vollständiger Zahlung nicht automatisch abgeschlossen",
+                  batch.status == "draft" and payments[last_id].paid_cents == rate, batch.status)
+        step2_post(9, member_ids)
+        with app.app_context():
+            batch, _, entries, transactions = month_state(9)
+            check("Monatsbeiträge-Import H: Speichern schließt ab, keine Doppelbuchung",
+                  batch.status == "finalized" and len(entries) == len(member_ids) and len(transactions) == len(member_ids) - 2,
+                  f"{batch.status}, {len(entries)} Einträge, {len(transactions)} Kontobuchungen")
+    finally:
+        with app.app_context():
+            from models import AuditLog
+
+            batch_ids = [b.id for b in MonthlyContributionBatch.query.filter_by(year=test_year).all()]
+            payment_ids = [p.id for p in MonthlyContributionPayment.query.filter(MonthlyContributionPayment.batch_id.in_(batch_ids)).all()] if batch_ids else []
+            entry_ids = [e.id for e in CashbookEntry.query.filter(CashbookEntry.booking_date.between(start, end)).all()]
+            for object_type, ids in (
+                ("MonthlyContributionBatch", batch_ids), ("MonthlyContributionPayment", payment_ids),
+                ("CashbookEntry", entry_ids), ("Document", document_ids),
+            ):
+                if ids:
+                    AuditLog.query.filter(AuditLog.object_type == object_type, AuditLog.object_id.in_(ids)).delete(synchronize_session=False)
+            if batch_ids:
+                MonthlyContributionPayment.query.filter(MonthlyContributionPayment.batch_id.in_(batch_ids)).delete(synchronize_session=False)
+                MonthlyContributionBatch.query.filter(MonthlyContributionBatch.id.in_(batch_ids)).delete(synchronize_session=False)
+            CashbookEntry.query.filter(CashbookEntry.booking_date.between(start, end)).delete(synchronize_session=False)
+            AccountTransaction.query.filter(AccountTransaction.booking_date.between(start, end)).delete(synchronize_session=False)
+            for entry_id in voided_entry_ids:
+                AccountTransaction.query.filter(
+                    AccountTransaction.category == "cashbook_void",
+                    AccountTransaction.description.like(f"Storno Kassenbuch #{entry_id}:%"),
+                ).delete(synchronize_session=False)
+            CsvImportRule.query.filter(CsvImportRule.learning_key.like(f"%{marker}%")).delete(synchronize_session=False)
+            if document_ids:
+                Document.query.filter(Document.id.in_(document_ids)).delete(synchronize_session=False)
+            for member in Member.query.filter(Member.id.in_(list(value_days))).all():
+                member.monthly_value_day = value_days[member.id]
+            db.session.commit()
+        for target in stored_files:
+            try:
+                target.unlink()
+            except OSError:
+                pass
+
+
 def check_pwa():
     """PWA: Manifest, Service Worker und Offline-Seite sind ohne Anmeldung abrufbar, der
     Service Worker deckt die ganze App ab und die Seiten enthalten die Einbindung."""
@@ -1055,6 +1511,7 @@ def run():
         check_event_lifecycle(client)
         check_event_view_no_side_effects(client)
         check_csv_import_review(client)
+        check_import_monthly_contributions(client)
         check_penalty_payment_void(client)
         check_ranking_ties(client)
         check_excused_participant_penalty_excluded(client)

@@ -102,6 +102,11 @@ def migrate_schema_extensions():
     # cashbook_void). Bestehende Einträge bleiben NULL (nicht rückwirkend verknüpfbar).
     add("cashbook_entries", "penalty_transaction_id", "penalty_transaction_id INTEGER")
 
+    # Verknüpfung "Mitgliedsbeitrag" (Kassenbuch) -> Monatsbeitrags-Zahlung, damit aus dem
+    # Kontoauszug übernommene Beiträge in Schritt 2 zählen und nicht doppelt gebucht werden
+    # (siehe routes/monthly_contributions.py, link_imported_contributions).
+    add("cashbook_entries", "monthly_contribution_payment_id", "monthly_contribution_payment_id INTEGER")
+
     # Kassenprüfer-/Bestätigungsfelder für bestehende SQLite-Datenbanken.
     for table_name in ["cash_audits", "annual_closings", "interest_settings", "interest_bookings"]:
         add(table_name, "confirmed_by_user_id", "confirmed_by_user_id INTEGER")

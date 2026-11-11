@@ -37,6 +37,24 @@
 
     {% if batch and batch.status == "finalized" %}
         <div class="info-box"><span>✅</span><div>Dieser Monat ist bereits verbucht.{% if batch.finalized_by_user %} Verbucht von {{ batch.finalized_by_user.username }}.{% endif %}</div></div>
+        {% if imported_pending_count %}
+            <div class="info-box imported-warning"><span>⚠️</span><div>
+                {{ imported_pending_count }} Mitgliedsbeitrag-Buchung(en) aus dem Kontoauszug ({{ imported_pending_total }} €: {{ imported_pending_names }})
+                stehen zusätzlich im Kassenbuch, obwohl dieser Monat schon verbucht ist. Bitte auf Doppelbuchung prüfen und ggf. im Kassenbuch stornieren.
+            </div></div>
+        {% endif %}
+    {% elif imported_pending_count %}
+        <div class="info-box"><span>🏦</span><div>
+            {{ imported_pending_count }} Mitgliedsbeitrag-Buchung(en) aus dem Kontoauszug ({{ imported_pending_total }} €: {{ imported_pending_names }})
+            stehen schon im Kassenbuch, sind hier aber noch nicht eingetragen. Beim Übernehmen werden sie als bezahlt eingetragen,
+            ohne sie ein zweites Mal ins Kassenbuch zu buchen.
+            {% if current_user.role != "auditor" %}
+                <form method="post" class="imported-link-form">
+                    <input type="hidden" name="month" value="{{ month_value }}">
+                    <button type="submit" name="action" value="link_imported" class="small-button">Aus Kontoauszug übernehmen</button>
+                </form>
+            {% endif %}
+        </div></div>
     {% endif %}
 
     <form method="post" id="monthlyContributionForm">

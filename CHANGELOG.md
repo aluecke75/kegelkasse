@@ -1,5 +1,48 @@
 # Changelog
 
+## v0.99.36
+
+Kontoauszug-Import im Monatsabschluss ("Buchungen aus Kontoauszug prüfen & übernehmen"):
+
+- **Übernommene Mitgliedsbeiträge zählen jetzt in Schritt 2 "Monatsbeiträge":** Bisher legte der
+  Import nur Kassenbuch- und Kontobuchungen an; Schritt 2 blieb auf "0 / n erledigt", und ein
+  späterer Abschluss dort hätte die Beiträge ein zweites Mal ins Kassenbuch und aufs Bankkonto
+  gebucht. Jetzt wird jede übernommene Zeile "Mitgliedsbeitrag" zusätzlich als bezahlter
+  Monatsbeitrag des Mitglieds eingetragen (Betrag, Wertstellung) und mit der Kassenbuchung
+  verknüpft. Haben danach alle aktiven Mitglieder bezahlt, wird der Monat automatisch
+  abgeschlossen, ohne erneute Kassenbuchung - aber nur im eindeutigen Fall. Gab es Hinweise
+  (schon von Hand eingetragener Betrag, mehr als der Sollbetrag, Buchung ohne zuordenbares
+  Mitglied), bleibt der Monat offen und wird nach Prüfung in Schritt 2 gespeichert.
+- **Abschluss in Schritt 2 ohne Doppelbuchung:** Beim Abschluss wird je Mitglied nur noch der Teil
+  gebucht, der nicht schon per Kontoauszug im Kassenbuch steht. Noch nicht eingetragene Beiträge
+  aus dem Kontoauszug werden beim Speichern/Bestätigen automatisch eingetragen. Steht ein
+  Beitrag aus dem Kontoauszug ohne zuordenbares Mitglied im Kassenbuch, wird der Monat nicht
+  abgeschlossen (Hinweis mit Namen). Per Kontoauszug gebuchte Beträge lassen sich in Schritt 2
+  nicht herabsetzen (dafür die Buchung im Kassenbuch stornieren).
+- **Storno:** Wird ein übernommener Beitrag im Kassenbuch storniert, steht er in Schritt 2 wieder
+  als offen, solange der Monat noch nicht verbucht ist; bei einem verbuchten Monat erscheint ein
+  deutlicher Hinweis.
+- **Bereits früher übernommene Beiträge:** Schritt 2 zeigt sie an und bietet "Aus Kontoauszug
+  übernehmen" an; ist der Monat schon verbucht, erscheint stattdessen ein Hinweis auf eine
+  mögliche Doppelbuchung.
+- **Zinsgutschrift als echte Zinsbuchung:** Die Zinsgutschrift der Bank (auch "Abrechnung … siehe
+  Anlage" bzw. "ABSCHLUSS") wird als Zinsbuchung mit Brutto, Kapitalertragsteuer, Soli,
+  Kirchensteuer und Netto erfasst (aus dem Rechnungsabschluss des Auszugs oder zurückgerechnet),
+  mit Schutz gegen Doppelbuchung; Schritt 3 "Zinsen" gilt damit als erledigt.
+- **PDF-Kontoauszüge im Sparkassen-Stil** werden aus dem Seitentext gelesen (Datum direkt am
+  Buchungstext, Folgezeilen als Verwendungszweck); vorher wurden dort oft keine Zeilen gefunden.
+- **Betrag auf mehrere Mitglieder aufteilen** (z. B. Ehepaar überweist gemeinsam): bis zu acht
+  Anteile je Zeile, gleichmäßig vorbelegt; gebucht wird nur, wenn die Summe stimmt.
+- **Namenserkennung:** Umlaute, ß und Akzente werden vereinheitlicht ("Lücke"/"Luecke",
+  "Weßel"/"Wessel"); Vor- und Nachname zusammen haben Vorrang vor einem gleichen Nachnamen.
+- Die Auswahl zwischen CSV und PDF bucht nichts mehr, sie speichert nur die Wahl.
+- `.gitignore`: echte Kontoauszüge (CSV/PDF) gelangen nicht ins Repository.
+- Testskript: neue Prüfungen zum Import der Monatsbeiträge (voller Monat, Rest in Schritt 2,
+  Herabsetzen, Storno, Altbuchungen per Knopf und beim Speichern, nicht zuordenbare Buchung,
+  Handbetrag + Import, Abschluss ohne Import wie bisher), zum PDF-Text-Parser, zur
+  Zinsaufschlüsselung, zur Namenserkennung und zur Aufteilung. Die Prüfungen räumen ihre
+  Einträge im Revisionsprotokoll wieder auf.
+
 ## v0.99.35
 
 - **Kegelkasse als App aufs Handy (PWA):** Die Weboberfläche lässt sich jetzt auf dem Startbildschirm

@@ -117,10 +117,26 @@ def parse_bank_statement_pdf(document, max_rows: int = 5000) -> dict:
     rows = []
     income_total_cents = 0
     expense_total_cents = 0
+    interest_breakdown = None
 
     try:
         with pdfplumber.open(str(target)) as pdf:
-            for page_index, page in enumerate(pdf.pages, start=1):
+            # Versuch 0: Kontoauszug im Sparkassen-Stil ("TT.MM.JJJJText Betrag"
+            # mit Detailzeilen darunter). pdfplumber liefert hier oft EINE
+            # Tabellenzeile mit mehrzeiligen Zellen - die zeilenweise
+            # Tabellen-Auswertung unten findet dann nichts.
+            page_texts = [(page.extract_text() or "") for page in pdf.pages]
+            rows = _parse_statement_text(page_texts, max_rows)
+            interest_breakdown = _parse_interest_breakdown(page_texts)
+            for parsed_row in rows:
+                if parsed_row["amount_cents"] >= 0:
+                    income_total_cents += parsed_row["amount_cents"]
+                else:
+                    expense_total_cents += abs(parsed_row["amount_cents"])
+
+            # Nur wenn der Text-Parser nichts gefunden hat: bisherige Verfahren.
+            pages_to_scan = [] if rows else pdf.pages
+            for page_index, page in enumerate(pages_to_scan, start=1):
                 if len(rows) >= max_rows:
                     break
 
@@ -181,6 +197,129 @@ def parse_bank_statement_pdf(document, max_rows: int = 5000) -> dict:
         "expense_total_cents": expense_total_cents,
         "income_total_euro": cents_to_euro(income_total_cents),
         "expense_total_euro": cents_to_euro(expense_total_cents),
+        # Brutto-Zinsen und Steuern aus dem Rechnungsabschluss (oder None).
+        "interest_breakdown": interest_breakdown,
+    }
+
+
+# Buchungsbeginn im Sparkassen-Stil: "01.10.2026Überw.-Gutschrift 40,00" (Datum
+# direkt am Text, Betrag am Zeilenende, Vorzeichen als Suffix "-"/"+" oder S/H,
+# manchmal auch als Präfix "-").
+_STATEMENT_BOOKING_RE = re.compile(
+    r"^(?P<date>\d{2}\.\d{2}\.\d{4})\s*(?P<text>.*?)\s+"
+    r"(?P<neg_prefix>-)?(?P<amount>\d{1,3}(?:\.\d{3})*,\d{2})\s*(?P<sign>[+-]|[SH])?$"
+)
+
+# Zeilen, nach denen keine Detailzeilen einer Buchung mehr folgen (Kontostand,
+# Seitenfuß, Hinweise).
+_STATEMENT_STOP_RE = re.compile(
+    r"^(kontostand|der kontostand|anzahl anlagen|übertrag|seite|kontoauszug|"
+    r"kreissparkasse|sparkasse|bitte beachten|hinweise|rechnungsabschluss|datum\b)",
+    re.IGNORECASE,
+)
+
+_STATEMENT_MAX_DETAIL_LINES = 6
+
+
+def _parse_statement_text(page_texts: list[str], max_rows: int) -> list[dict]:
+    """Liest Buchungen aus dem Seitentext eines Kontoauszugs.
+
+    Eine Buchung beginnt mit einer Zeile "TT.MM.JJJJ Buchungstext Betrag".
+    Die folgenden Zeilen (Name, Verwendungszweck) gehören bis zur nächsten
+    Buchung oder bis zu einer Stopp-Zeile (Kontostand, Seitenfuß) dazu.
+    Gibt eine leere Liste zurück, wenn der Text nicht diesem Muster entspricht.
+    """
+    rows: list[dict] = []
+
+    for page_text in page_texts:
+        current = None
+        detail_lines: list[str] = []
+
+        def flush():
+            nonlocal current, detail_lines
+            if current is not None:
+                current["purpose"] = " ".join(detail_lines).strip()
+                rows.append(current)
+            current = None
+            detail_lines = []
+
+        for raw_line in page_text.split("\n"):
+            if len(rows) >= max_rows:
+                break
+            line = raw_line.strip()
+            if not line:
+                continue
+
+            m = _STATEMENT_BOOKING_RE.match(line)
+            if m:
+                flush()
+                date_iso = _parse_date(m.group("date"))
+                amount_cents = _parse_amount(m.group("amount"))
+                if not date_iso or amount_cents is None:
+                    continue
+                if m.group("neg_prefix") or m.group("sign") in ("-", "S"):
+                    amount_cents = -amount_cents
+                current = {
+                    "index": 0,  # wird später vergeben
+                    "date": date_iso,
+                    "text": m.group("text").strip(),
+                    "purpose": "",
+                    "recipient": "",
+                    "amount_cents": amount_cents,
+                    "amount_euro": cents_to_euro(amount_cents),
+                    "type": "Eingang" if amount_cents >= 0 else "Ausgang",
+                    "error": None,
+                }
+                continue
+
+            if current is None:
+                continue
+            if _STATEMENT_STOP_RE.match(line) or len(detail_lines) >= _STATEMENT_MAX_DETAIL_LINES:
+                flush()
+                continue
+            detail_lines.append(line)
+
+        flush()
+
+    return rows
+
+
+_AMOUNT = r"(?P<a>\d{1,3}(?:\.\d{3})*,\d{2})"
+# Rechnungsabschluss (Anlage zum Kontoauszug), z. B. Sparkasse:
+#   "Zinsen für Guthaben 2,31+", "Kapitalertragsteuer 0,58-",
+#   "Solidaritätszuschlag 0,03-", "Kirchensteuer 0,00-"
+_INTEREST_GROSS_RE = re.compile(rf"^Zinsen(?:\s+f(?:ü|ue)r\s+Guthaben)?\s+{_AMOUNT}\s*\+", re.IGNORECASE)
+_INTEREST_CGT_RE = re.compile(rf"^Kapitalertrag(?:s)?steuer\s+{_AMOUNT}\s*-", re.IGNORECASE)
+_INTEREST_SOLI_RE = re.compile(rf"^Solidarit(?:ä|ae)tszuschlag\s+{_AMOUNT}\s*-", re.IGNORECASE)
+_INTEREST_CHURCH_RE = re.compile(rf"^Kirchensteuer\s+{_AMOUNT}\s*-", re.IGNORECASE)
+
+
+def _parse_interest_breakdown(page_texts: list[str]) -> dict | None:
+    """Liest Brutto-Zinsen und Steuerabzüge aus dem Rechnungsabschluss.
+
+    Gibt {"gross_cents", "capital_gains_tax_cents", "solidarity_tax_cents",
+    "church_tax_cents"} zurück oder None, wenn kein Zinsbetrag gefunden wurde.
+    """
+    found = {"gross": None, "cgt": 0, "soli": 0, "church": 0}
+    for page_text in page_texts:
+        for raw_line in page_text.split("\n"):
+            line = raw_line.strip()
+            for key, regex in (
+                ("gross", _INTEREST_GROSS_RE), ("cgt", _INTEREST_CGT_RE),
+                ("soli", _INTEREST_SOLI_RE), ("church", _INTEREST_CHURCH_RE),
+            ):
+                m = regex.match(line)
+                if m:
+                    cents = _parse_amount(m.group("a"))
+                    if cents is not None and (key != "gross" or found["gross"] is None):
+                        found[key] = cents
+    if not found["gross"]:
+        return None
+    return {
+        "gross_cents": found["gross"],
+        "capital_gains_tax_cents": found["cgt"],
+        "solidarity_tax_cents": found["soli"],
+        "church_tax_cents": found["church"],
     }
 
 
