@@ -213,6 +213,14 @@ class CashbookEntry(db.Model):
     # ob die Zielbuchung noch zu diesem Eintrag passt. Ältere Buchungen: NULL.
     penalty_transaction_id = db.Column(db.Integer, nullable=True)
 
+    # Buchungen "Mitgliedsbeitrag" (aus dem Kontoauszug-Import oder dem Abschluss
+    # der Monatsbeiträge): ID der zugehörigen MonthlyContributionPayment. Damit
+    # zählt Schritt 2 "Monatsbeiträge" eine importierte Zahlung als bezahlt, bucht
+    # sie beim Abschluss nicht ein zweites Mal ins Kassenbuch, und ein Storno im
+    # Kassenbuch führt den Beitrag wieder als offen. Bewusst ohne ForeignKey (wie
+    # penalty_transaction_id). Ältere Buchungen: NULL.
+    monthly_contribution_payment_id = db.Column(db.Integer, nullable=True)
+
     created_by_user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
     created_by_user = db.relationship("User", foreign_keys=[created_by_user_id])
     created_at = db.Column(db.DateTime, default=datetime.utcnow)

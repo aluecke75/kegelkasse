@@ -115,3 +115,11 @@ docker-compose.override.yml
 # Daten / Uploads / Backups
 data/database_backup_*/
 data/uploads/
+
+# Echte Kontoauszüge (IBAN, Namen) - nie ins Repository, auch nicht aus
+# Versehen im Projektordner (z. B. zum Testen des PDF-/CSV-Imports)
+Konto_*.pdf
+Konto_*.csv
+Kontoauszug*.pdf
+Kontoauszug*.csv
+Umsatz*.csv

@@ -543,3 +543,178 @@ def interest_booking_cancel(booking_id):
     db.session.commit()
     flash("Zinsbuchung wurde storniert und als Gegenbuchung im Kassenbuch erfasst.", "success")
     return redirect(url_for("interest_module"))
+
+
+def active_interest_booking_for_period(period_start, period_end):
+    """Aktive (nicht stornierte) Zinsbuchung, die den Zeitraum überschneidet."""
+    return (
+        InterestBooking.query
+        .filter(InterestBooking.period_start <= period_end)
+        .filter(InterestBooking.period_end >= period_start)
+        .filter(InterestBooking.is_cancelled == False)  # noqa: E712
+        .first()
+    )
+
+
+def resolve_interest_breakdown(net_cents, statement_breakdown=None):
+    """Bestimmt Brutto-Zinsen und Steuerabzüge zu einer Netto-Zinsgutschrift
+    aus dem Kontoauszug (die Bank bucht nur den Netto-Betrag).
+
+    Reihenfolge: 1. Aufschlüsselung aus dem Rechnungsabschluss des Auszugs, sofern
+    sie rechnerisch zum Netto-Betrag passt; 2. Rückrechnung aus dem Netto-Betrag
+    mit den hinterlegten Steuersätzen, sofern das Ergebnis eindeutig ist;
+    3. sonst Brutto = Netto ohne Steuerabzug. Das Ergebnis enthält "source":
+    "statement", "calculated" oder "net_only".
+    """
+    if statement_breakdown:
+        taxes = (
+            statement_breakdown["capital_gains_tax_cents"]
+            + statement_breakdown["solidarity_tax_cents"]
+            + statement_breakdown["church_tax_cents"]
+        )
+        if statement_breakdown["gross_cents"] - taxes == net_cents:
+            return {
+                "gross_cents": statement_breakdown["gross_cents"],
+                "capital_gains_tax_cents": statement_breakdown["capital_gains_tax_cents"],
+                "solidarity_tax_cents": statement_breakdown["solidarity_tax_cents"],
+                "church_tax_cents": statement_breakdown["church_tax_cents"],
+                "source": "statement",
+            }
+
+    candidates = []
+    for gross in range(net_cents, int(net_cents * 1.6) + 3):
+        taxes = calculate_interest_taxes(gross)
+        if taxes["net"] == net_cents:
+            candidates.append((gross, taxes))
+    if len(candidates) == 1:
+        gross, taxes = candidates[0]
+        return {
+            "gross_cents": gross,
+            "capital_gains_tax_cents": taxes["capital_tax"],
+            "solidarity_tax_cents": taxes["solidarity_tax"],
+            "church_tax_cents": taxes["church_tax"],
+            "source": "calculated",
+        }
+
+    return {
+        "gross_cents": net_cents,
+        "capital_gains_tax_cents": 0,
+        "solidarity_tax_cents": 0,
+        "church_tax_cents": 0,
+        "source": "net_only",
+    }
+
+
+_BREAKDOWN_SOURCE_NOTE = {
+    "statement": "Brutto und Steuern aus dem Rechnungsabschluss des Kontoauszugs übernommen.",
+    "calculated": "Brutto und Steuern aus dem Netto-Betrag mit den hinterlegten Steuersätzen zurückgerechnet.",
+    "net_only": "Brutto und Steuern nicht ermittelbar (nur der Netto-Betrag steht im Auszug); Brutto = Netto gesetzt.",
+}
+
+
+def book_interest_from_statement(*, booking_date, period_start, period_end, net_cents,
+                                 statement_breakdown, document, row_index, row_text,
+                                 row_purpose, user_id):
+    """Bucht eine Zinsgutschrift aus dem Kontoauszug-Import als echte Zinsbuchung
+    (InterestBooking + Kassenbuch-Eintrag "Zinsen" + Kontobuchung) - genau wie das
+    Zinsmodul, damit der Monatsabschluss "Zinsen gebucht" erkennt.
+
+    Rückgabe: (InterestBooking, None) bei Erfolg, sonst (None, Fehlertext).
+    Committet nicht selbst; Jahresabschluss-Sperre prüft der Aufrufer.
+    """
+    if net_cents <= 0:
+        return None, "Der Zinsbetrag muss größer als 0,00 € sein."
+
+    if active_interest_booking_for_period(period_start, period_end):
+        return None, (
+            f"Für {period_start.strftime('%d.%m.%Y')} bis {period_end.strftime('%d.%m.%Y')} "
+            "ist bereits eine aktive Zinsgutschrift gebucht (keine Doppelbuchung)."
+        )
+
+    setting = (
+        InterestSetting.query.filter_by(active=True)
+        .order_by(InterestSetting.valid_from.desc(), InterestSetting.created_at.desc())
+        .first()
+    )
+    # Bankbestand vor dieser Buchung (sonst würde sie sich selbst mitzählen).
+    basis_balance_cents = account_balance_as_of("bank", period_end)
+    expected_cents = calculate_expected_interest_cents(
+        basis_balance_cents,
+        setting.annual_rate_basis_points if setting else 0,
+        period_start,
+        period_end,
+    )
+
+    breakdown = resolve_interest_breakdown(net_cents, statement_breakdown)
+    tax_cents = (
+        breakdown["capital_gains_tax_cents"]
+        + breakdown["solidarity_tax_cents"]
+        + breakdown["church_tax_cents"]
+    )
+
+    note_lines = []
+    if row_text:
+        note_lines.append(f"Buchungstext: {row_text}")
+    if row_purpose:
+        note_lines.append(f"Verwendungszweck: {row_purpose}")
+    note_lines.append(f"Kontoauszug-Import: {document.original_filename}, Zeile {row_index}")
+    note_lines.append(_BREAKDOWN_SOURCE_NOTE[breakdown["source"]])
+    note = "\n".join(note_lines)
+
+    period_label = f"{period_start.strftime('%d.%m.%Y')} - {period_end.strftime('%d.%m.%Y')}"
+    cashbook_entry = CashbookEntry(
+        booking_date=booking_date,
+        direction="income",
+        account="bank",
+        amount_cents=net_cents,
+        category="Zinsen",
+        person="Bank",
+        reason=f"Netto-Zinsgutschrift {period_label}",
+        note=note,
+        created_by_user_id=user_id,
+        source_document_id=document.id,
+        source_row_index=row_index,
+    )
+    db.session.add(cashbook_entry)
+    db.session.flush()
+
+    db.session.add(AccountTransaction(
+        account="bank",
+        category="interest",
+        amount_cents=net_cents,
+        booking_date=booking_date,
+        description=f"Netto-Zinsgutschrift {period_start.isoformat()} bis {period_end.isoformat()}",
+    ))
+
+    booking = InterestBooking(
+        booking_date=booking_date,
+        period_start=period_start,
+        period_end=period_end,
+        setting_id=setting.id if setting else None,
+        basis_balance_cents=basis_balance_cents,
+        expected_interest_cents=expected_cents,
+        actual_interest_cents=breakdown["gross_cents"],
+        capital_gains_tax_cents=breakdown["capital_gains_tax_cents"],
+        solidarity_tax_cents=breakdown["solidarity_tax_cents"],
+        church_tax_cents=breakdown["church_tax_cents"],
+        tax_cents=tax_cents,
+        net_interest_cents=net_cents,
+        cashbook_entry_id=cashbook_entry.id,
+        note=note,
+        created_by_user_id=user_id,
+    )
+    db.session.add(booking)
+    db.session.flush()
+
+    details = "\n".join(f"{key}: {value}" for key, value in interest_booking_snapshot(booking).items())
+    details += f"\nSteuern: {cents_to_euro(tax_cents)} €; Netto: {cents_to_euro(net_cents)} €"
+    audit_log(
+        "interest",
+        "interest_booking_created",
+        f"Zinsgutschrift {cents_to_euro(breakdown['gross_cents'])} € aus Kontoauszug gebucht",
+        details=details,
+        object_type="InterestBooking",
+        object_id=booking.id,
+        new_value=details,
+    )
+    return booking, None

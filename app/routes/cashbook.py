@@ -7,7 +7,7 @@ from sqlalchemy import or_
 
 from extensions import app
 from auth import role_required
-from models import db, CashbookEntry, AccountTransaction, MemberPenaltyTransaction, User
+from models import db, CashbookEntry, AccountTransaction, MemberPenaltyTransaction, MonthlyContributionPayment, User
 from services.money import cents_to_euro, euro_to_cents, form_euro_to_cents
 from services.audit import audit_log
 
@@ -389,11 +389,50 @@ def cashbook_void(entry_id):
             "\"Strafkonten\" manuell prüfen bzw. korrigieren."
         )
 
+    # Mit einer Monatsbeitrags-Zahlung verknüpfter "Mitgliedsbeitrag" (Kontoauszug-
+    # Import oder Abschluss der Monatsbeiträge): solange der Monat noch nicht
+    # verbucht ist, den Betrag dort wieder herausnehmen, damit Schritt 2 den
+    # Beitrag wieder als offen führt. Einen bereits verbuchten Monat nicht
+    # automatisch wieder öffnen, sondern deutlich darauf hinweisen.
+    contribution_success = None
+    contribution_warning = None
+    if entry.monthly_contribution_payment_id and entry.direction == "income":
+        contribution_payment = db.session.get(MonthlyContributionPayment, entry.monthly_contribution_payment_id)
+        if contribution_payment and contribution_payment.batch:
+            period = contribution_payment.batch.period_label()
+            member_name = contribution_payment.member.display_name() if contribution_payment.member else "Mitglied"
+            if contribution_payment.batch.status != "finalized":
+                contribution_payment.paid_cents = max((contribution_payment.paid_cents or 0) - (entry.amount_cents or 0), 0)
+                if contribution_payment.paid_cents == 0:
+                    contribution_payment.paid_date = None
+                # Hinweis "Per Kontoauszug übernommen (…, Kassenbuch #<id>)" dieser
+                # Buchung aus der Notiz entfernen (sonst wandert er beim Abschluss
+                # in einen neuen Kassenbuch-Eintrag).
+                if contribution_payment.note:
+                    kept = [
+                        part for part in contribution_payment.note.split("; ")
+                        if f"Kassenbuch #{entry.id})" not in part
+                    ]
+                    contribution_payment.note = "; ".join(kept) or None
+                contribution_success = (
+                    f"Monatsbeitrag {period} von {member_name}: bezahlt jetzt "
+                    f"{cents_to_euro(contribution_payment.paid_cents)} € (unter \"Monatsbeiträge\" wieder offen)."
+                )
+            else:
+                contribution_warning = (
+                    f"Achtung: Die Monatsbeiträge {period} sind bereits verbucht. Der Beitrag von {member_name} "
+                    "wird dort weiter als bezahlt geführt - bitte unter \"Monatsbeiträge\" prüfen."
+                )
+
     audit_details = reason
     if penalty_success:
         audit_details += f"\n{penalty_success}"
     elif penalty_warning:
         audit_details += "\nStrafkonto NICHT automatisch zurückgebucht (siehe Hinweis im Storno)."
+    if contribution_success:
+        audit_details += f"\n{contribution_success}"
+    elif contribution_warning:
+        audit_details += "\nMonatsbeitrag NICHT zurückgesetzt (Monat bereits verbucht)."
 
     audit_log(
         "finance",
@@ -409,4 +448,8 @@ def cashbook_void(entry_id):
         flash(penalty_success, "success")
     if penalty_warning:
         flash(penalty_warning, "warning")
+    if contribution_success:
+        flash(contribution_success, "success")
+    if contribution_warning:
+        flash(contribution_warning, "warning")
     return redirect(url_for("cashbook"))

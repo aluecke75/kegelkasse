@@ -54,6 +54,17 @@
         border: 0;
     }
 
+    .split-part { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 6px; }
+    .split-part select.person-select { flex: 1 1 180px; min-width: 150px; margin-top: 0; }
+    .split-part input.person-other { flex: 1 1 100%; margin-top: 0; }
+    .split-amount-wrap { white-space: nowrap; }
+    .split-amount { width: 6.5em; margin-top: 0; text-align: right; }
+    .split-sum { margin-top: 6px; font-size: 0.85rem; font-weight: 700; }
+    .split-sum.ok { color: #146c43; }
+    .split-sum.bad { color: #b91c1c; }
+    .split-add { margin-top: 8px; }
+    .split-parts [hidden] { display: none !important; }
+
     .take-decision-cell .checkbox-row { margin: 0; }
     .take-decision-cell .status-badge.status-warn { margin-bottom: 8px; }
 </style>
@@ -80,7 +91,7 @@
         </div>
     </div>
     <form method="post" style="display:inline;">
-        <input type="hidden" name="statement_type" value="">
+        <input type="hidden" name="action" value="select_statement">
         <label style="margin-right:16px;">
             <input type="radio" name="statement_type" value="csv" {% if statement_pref == 'csv' %}checked{% endif %}>
             CSV ({{ csv_document.original_filename }})
@@ -189,8 +200,43 @@
                                                 {% endfor %}
                                             </select>
 
-                                            <label class="visually-hidden" for="person_{{ row.index }}">Person für Buchung vom {{ row.date_raw }} über {{ row.amount_euro }} €</label>
-                                            <input id="person_{{ row.index }}" class="person-input" type="text" name="person_{{ row.index }}" value="{{ row.person }}" placeholder="Person (optional)">
+                                            {% if row.interest_hint %}
+                                                <div class="row-error-text interest-note">⚠ {{ row.interest_hint }}</div>
+                                            {% elif row.interest_info %}
+                                                <div class="row-source-text interest-note">📈 {{ row.interest_info }}</div>
+                                            {% endif %}
+                                            {# Anteile: ein Anteil = ganze Buchung auf eine Person; mehrere
+                                               Anteile = Betrag auf mehrere Mitglieder aufgeteilt (je ein
+                                               Kassenbuch-Eintrag). Dropdown: Vorschlag zuerst, dann alle
+                                               aktiven Mitglieder A-Z nach Vorname. #}
+                                            <div class="split-parts" data-row="{{ row.index }}" data-total-cents="{{ row.amount_cents|abs }}" data-income="{{ 1 if row.amount_cents >= 0 else 0 }}" {% if row.category == "Zinsen" and row.amount_cents >= 0 %}hidden{% endif %}>
+                                                {% for part in row.parts %}
+                                                    {% set k = loop.index %}
+                                                    <div class="split-part">
+                                                        <label class="visually-hidden" for="person_{{ row.index }}_{{ k }}">Person {{ k }} für Buchung vom {{ row.date_raw }} über {{ row.amount_euro }} €</label>
+                                                        <select id="person_{{ row.index }}_{{ k }}" class="person-select" name="person_{{ row.index }}_{{ k }}">
+                                                            {% if part.person %}
+                                                                <option value="{{ part.person }}" selected>{{ part.person }}</option>
+                                                            {% else %}
+                                                                <option value="" selected>– keine Person –</option>
+                                                            {% endif %}
+                                                            {% for name in member_options if name != part.person %}
+                                                                <option value="{{ name }}">{{ name }}</option>
+                                                            {% endfor %}
+                                                            {% if part.person %}<option value="">– keine Person –</option>{% endif %}
+                                                            <option value="{{ other_person_value }}">Andere Person …</option>
+                                                        </select>
+                                                        <input type="text" class="person-other" name="other_{{ row.index }}_{{ k }}" placeholder="Name der Person" maxlength="160" hidden>
+                                                        <span class="split-amount-wrap" {% if row.parts|length < 2 %}hidden{% endif %}>
+                                                            <label class="visually-hidden" for="amount_{{ row.index }}_{{ k }}">Betrag Anteil {{ k }} in Euro</label>
+                                                            <input id="amount_{{ row.index }}_{{ k }}" class="split-amount" type="text" inputmode="decimal" name="amount_{{ row.index }}_{{ k }}" value="{{ part.amount_euro }}" size="8"> €
+                                                        </span>
+                                                        <button type="button" class="button secondary small-button split-remove" aria-label="Anteil entfernen" {% if row.parts|length < 2 %}hidden{% endif %}>✕</button>
+                                                    </div>
+                                                {% endfor %}
+                                                <div class="split-sum" aria-live="polite" hidden></div>
+                                                <button type="button" class="button secondary small-button split-add">＋ Betrag auf weiteres Mitglied aufteilen</button>
+                                            </div>
                                             {% if row.multi_member_hint %}<div class="row-error-text" style="color:#9a3412;">{{ row.multi_member_hint }}</div>{% endif %}
                                         {% else %}
                                             <div>{{ row.category or "-" }}</div>
@@ -277,6 +323,147 @@
         selectNone.addEventListener("click", function () {
             checkboxes.forEach(function (cb) { cb.checked = false; });
         });
+    }
+
+    // ---- Betrag auf mehrere Mitglieder aufteilen -------------------------
+    var MAX_PARTS = 8;
+    var OTHER = {{ other_person_value|tojson }};
+
+    function centsToText(cents) {
+        var euro = Math.floor(cents / 100), rest = String(cents % 100);
+        if (rest.length < 2) { rest = "0" + rest; }
+        return String(euro).replace(/\B(?=(\d{3})+(?!\d))/g, ".") + "," + rest;
+    }
+
+    function textToCents(text) {
+        var raw = String(text || "").replace(/[€\s]/g, "");
+        if (!/^\d+(?:[.,]\d+)*$/.test(raw)) { return null; }
+        if (raw.indexOf(",") >= 0) { raw = raw.replace(/\./g, "").replace(",", "."); }
+        var value = Number(raw);
+        return isFinite(value) ? Math.round(value * 100) : null;
+    }
+
+    function partsOf(box) { return box.querySelectorAll(".split-part"); }
+
+    // Felder nach dem Hinzufügen/Entfernen neu durchnummerieren (k = 1, 2, ...).
+    function renumber(box) {
+        var row = box.getAttribute("data-row");
+        var parts = partsOf(box), multi = parts.length > 1;
+        parts.forEach(function (part, i) {
+            var k = i + 1;
+            var select = part.querySelector("select"), other = part.querySelector(".person-other");
+            var amount = part.querySelector(".split-amount"), label = part.querySelectorAll("label");
+            select.name = "person_" + row + "_" + k;  select.id = "person_" + row + "_" + k;
+            other.name = "other_" + row + "_" + k;
+            amount.name = "amount_" + row + "_" + k;  amount.id = "amount_" + row + "_" + k;
+            if (label[0]) { label[0].setAttribute("for", select.id); }
+            if (label[1]) { label[1].setAttribute("for", amount.id); }
+            part.querySelector(".split-amount-wrap").hidden = !multi;
+            part.querySelector(".split-remove").hidden = !multi;
+        });
+        box.querySelector(".split-add").hidden = parts.length >= MAX_PARTS;
+        updateSum(box);
+    }
+
+    // Betrag gleichmäßig auf alle Anteile verteilen (Rest-Cent an die ersten).
+    function distributeEvenly(box) {
+        var parts = partsOf(box), total = parseInt(box.getAttribute("data-total-cents"), 10);
+        var base = Math.floor(total / parts.length), remainder = total % parts.length;
+        parts.forEach(function (part, i) {
+            part.querySelector(".split-amount").value = centsToText(base + (i < remainder ? 1 : 0));
+        });
+    }
+
+    function updateSum(box) {
+        var out = box.querySelector(".split-sum");
+        var parts = partsOf(box);
+        if (parts.length < 2) { out.hidden = true; return; }
+        var total = parseInt(box.getAttribute("data-total-cents"), 10), sum = 0, valid = true;
+        parts.forEach(function (part) {
+            var cents = textToCents(part.querySelector(".split-amount").value);
+            if (cents === null || cents <= 0) { valid = false; } else { sum += cents; }
+        });
+        out.hidden = false;
+        if (valid && sum === total) {
+            out.className = "split-sum ok";
+            out.textContent = "Summe " + centsToText(sum) + " € – passt";
+        } else {
+            out.className = "split-sum bad";
+            out.textContent = "Summe " + centsToText(sum) + " € von " + centsToText(total) + " € – muss genau passen";
+        }
+    }
+
+    document.querySelectorAll(".split-parts").forEach(function (box) {
+        updateSum(box);
+
+        box.addEventListener("change", function (event) {
+            if (event.target.classList.contains("person-select")) {
+                var other = event.target.parentNode.querySelector(".person-other");
+                other.hidden = event.target.value !== OTHER;
+                if (!other.hidden) { other.focus(); }
+            }
+        });
+
+        box.addEventListener("input", function (event) {
+            if (event.target.classList.contains("split-amount")) { updateSum(box); }
+        });
+
+        box.addEventListener("click", function (event) {
+            var target = event.target;
+            if (target.classList.contains("split-add")) {
+                var parts = partsOf(box);
+                if (parts.length >= MAX_PARTS) { return; }
+                var copy = parts[parts.length - 1].cloneNode(true);
+                var select = copy.querySelector("select");
+                select.value = "";                       // "– keine Person –"
+                copy.querySelector(".person-other").hidden = true;
+                copy.querySelector(".person-other").value = "";
+                parts[parts.length - 1].after(copy);
+                renumber(box);
+                distributeEvenly(box);
+                updateSum(box);
+            } else if (target.classList.contains("split-remove")) {
+                target.closest(".split-part").remove();
+                renumber(box);
+                distributeEvenly(box);
+                updateSum(box);
+            }
+        });
+    });
+
+    // Kategorie "Zinsen" bei einer Gutschrift: kommt von der Bank, keine Person/
+    // Aufteilung nötig - Personenauswahl ausblenden (und Zins-Hinweis zeigen).
+    document.querySelectorAll("select[name^='category_']").forEach(function (select) {
+        select.addEventListener("change", function () {
+            var row = select.closest("tr");
+            var box = row && row.querySelector(".split-parts");
+            if (!box) { return; }
+            var isInterest = select.value === "Zinsen" && box.getAttribute("data-income") === "1";
+            box.hidden = isInterest;
+            var note = row.querySelector(".interest-note");
+            if (note) { note.hidden = select.value !== "Zinsen"; }
+        });
+    });
+
+    // Vor dem Absenden: übernommene Zeilen mit nicht aufgehender Aufteilung melden.
+    if (form) {
+        form.addEventListener("submit", function (event) {
+            var bad = [];
+            document.querySelectorAll(".split-parts").forEach(function (box) {
+                var row = box.closest("tr");
+                var take = row && row.querySelector(".take-checkbox");
+                if (take && take.checked && partsOf(box).length > 1 && box.querySelector(".split-sum.bad")) {
+                    bad.push(row.querySelector(".date-cell").textContent.trim());
+                }
+            });
+            if (bad.length) {
+                event.preventDefault();
+                event.stopImmediatePropagation();
+                var button = form.querySelector("button[type=submit]");
+                if (button) { button.disabled = false; button.textContent = "Ausgewählte Buchungen übernehmen"; }
+                alert("Die Aufteilung ergibt nicht den Gesamtbetrag (Buchung vom " + bad.join(", ") + "). Bitte die Beträge korrigieren oder die Zeile abwählen.");
+            }
+        }, true);
     }
 })();
 </script>
