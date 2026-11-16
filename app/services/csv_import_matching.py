@@ -35,15 +35,21 @@ def _norm(text):
     return "".join(ch for ch in decomposed if not unicodedata.combining(ch))
 
 
-def normalize_learning_key(text, purpose):
-    """Normalisiert Buchungstext + Verwendungszweck zu einem stabilen Lernschlüssel.
+def normalize_learning_key(text, purpose, recipient=""):
+    """Normalisiert Zahler + Buchungstext + Verwendungszweck zu einem stabilen Lernschlüssel.
 
     Ziffernfolgen (Belegnummern, Mandatsreferenzen, Referenznummern) werden
     entfernt, damit wiederkehrende Lastschriften/Daueraufträge mit leicht
     unterschiedlicher Referenznummer trotzdem denselben Schlüssel ergeben und
     damit als "gelernt" erkannt werden.
+
+    Der Zahler (CSV-Spalte "Beguenstigter/Zahlungspflichtiger") steht vorn im
+    Schlüssel: Viele Mitglieder überweisen mit gleichem Buchungstext und gleichem
+    Zweck ("Kegelkasse"). Ohne den Zahler würde eine einmal bestätigte Person für
+    alle diese Zeilen vorgeschlagen. Vorn, damit der Name beim Kürzen auf
+    255 Zeichen nicht abgeschnitten wird.
     """
-    combined = f"{text or ''} {purpose or ''}"
+    combined = f"{recipient or ''} {text or ''} {purpose or ''}"
     combined = _DIGIT_RUN_RE.sub(" ", combined)
     combined = combined.upper()
     combined = _WHITESPACE_RE.sub(" ", combined).strip()
@@ -58,6 +64,11 @@ def _matching_active_members(haystack_lower):
     sortiert nach Länge absteigend. Bei Namen wie "Anna und Max Muster"
     werden beide Mitglieder erkannt.
     """
+    return [(member, length) for member, length, _ in _ranked_active_members(haystack_lower)]
+
+
+def _ranked_active_members(haystack_lower):
+    """Wie _matching_active_members, liefert aber (Mitglied, Länge, Trefferstärke)."""
     haystack_lower = _norm(haystack_lower)
     scored = []
     seen_ids = set()
@@ -77,16 +88,47 @@ def _matching_active_members(haystack_lower):
         _norm(m.first_name) for m, score, _ in scored if score == _SCORE_FULL
     }
     kept = [
-        (m, length) for m, score, length in scored
+        (m, length, score) for m, score, length in scored
         if score == _SCORE_FULL
         or (score == _SCORE_FIRST and _norm(m.first_name) not in full_first_names)
     ]
     if not kept:
         # Nur Nachnamen-Treffer (z. B. "Familie Muster"): alle Träger des Namens.
-        kept = [(m, length) for m, score, length in scored if score == _SCORE_LAST]
+        kept = [(m, length, score) for m, score, length in scored if score == _SCORE_LAST]
 
     kept.sort(key=lambda x: x[1], reverse=True)
     return kept
+
+
+def limit_members_by_fee(ranked, amount_cents, fee_cents):
+    """Begrenzt die erkannten Mitglieder anhand des Betrags.
+
+    Überweist ein Paar ("Anna und Max Muster") nur einen Monatsbeitrag,
+    ist nur ein Mitglied gemeint - ein zufällig gleicher Vorname eines anderen
+    Mitglieds ("Anna") darf dann nicht als zweite Person vorgeschlagen werden.
+    Ist der Betrag ein Vielfaches des Monatsbeitrags (n x Beitrag) und gibt es
+    mehr als n Kandidaten, bleiben die n mit der stärksten Namenserkennung.
+
+    Rückgabe: (Kandidaten, erwartete_Anzahl_oder_None, mehrdeutig). "mehrdeutig"
+    ist True, wenn mehrere gleich starke Kandidaten um die letzten Plätze
+    konkurrieren (z. B. zwei Mitglieder mit Vor- und Nachname im Text, aber nur
+    ein Beitrag überwiesen) - dann kann nicht automatisch gewählt werden.
+    """
+    if not fee_cents or fee_cents <= 0 or amount_cents <= 0 or amount_cents % fee_cents:
+        return ranked, None, False
+    wanted = amount_cents // fee_cents
+    if wanted >= len(ranked):
+        return ranked, wanted, False
+
+    order = sorted(ranked, key=lambda item: (-item[2], -item[1]))
+    cutoff_score = order[wanted - 1][2]
+    if order[wanted][2] == cutoff_score:
+        # Gleichstand an der Grenze: alle schwächeren Kandidaten verwerfen, die
+        # gleich starken bleiben, aber ohne automatische Auswahl.
+        tied = [item for item in ranked if item[2] >= cutoff_score]
+        return tied, wanted, True
+    chosen_ids = {item[0].id for item in order[:wanted]}
+    return [item for item in ranked if item[0].id in chosen_ids], wanted, False
 
 
 # Trefferstärke eines Mitglieds im Text: Vor- und Nachname > nur Vorname > nur Nachname.
@@ -189,7 +231,7 @@ def _is_interest_booking(text, purpose, recipient):
     return any(kw in haystack for kw in _INTEREST_KEYWORDS)
 
 
-def suggest_for_row(text, purpose, amount_cents, recipient=""):
+def suggest_for_row(text, purpose, amount_cents, recipient="", fee_cents=0):
     """Liefert einen Vorschlag (Konfidenz/Kategorie/Person) für eine CSV-Zeile.
 
     Konfidenz "gelernt" (grün): exakter Treffer im normalisierten
@@ -201,11 +243,25 @@ def suggest_for_row(text, purpose, amount_cents, recipient=""):
     "Zinsen" vorgeschlagen, ohne ein Mitglied zuzuordnen.
     Sonst "kein Treffer" (grau): keine Vorbefüllung außer einer
     Standardkategorie passend zum Vorzeichen.
+
+    fee_cents (aktueller Monatsbeitrag, optional): Ist der Betrag ein Vielfaches
+    davon, bestimmt er, für wie viele Mitglieder gezahlt wurde (siehe
+    limit_members_by_fee). Liefert zusätzlich "needs_choice": True, wenn die
+    Person nicht eindeutig bestimmbar ist.
     """
-    learning_key = normalize_learning_key(text, purpose)
+    learning_key = normalize_learning_key(text, purpose, recipient)
 
     if learning_key:
         rule = CsvImportRule.query.filter_by(learning_key=learning_key).first()
+        if not rule:
+            # Regeln aus der Zeit vor dem Zahler im Schlüssel: nur solche ohne feste
+            # Person weiterverwenden (z. B. Zinsen, Bahnkosten). Eine alte Regel mit
+            # Person würde sonst für jeden Zahler mit gleichem Zweck gelten.
+            legacy_key = normalize_learning_key(text, purpose)
+            if legacy_key and legacy_key != learning_key:
+                legacy_rule = CsvImportRule.query.filter_by(learning_key=legacy_key).first()
+                if legacy_rule and not (legacy_rule.person or "").strip():
+                    rule = legacy_rule
         if rule:
             return {
                 "confidence": CONFIDENCE_LEARNED,
@@ -232,13 +288,35 @@ def suggest_for_row(text, purpose, amount_cents, recipient=""):
         }
 
     haystack_lower = f"{text or ''} {purpose or ''} {recipient or ''}".lower()
-    members = _matching_active_members(haystack_lower)
+    ranked = _ranked_active_members(haystack_lower)
+    ranked, wanted, ambiguous = limit_members_by_fee(ranked, amount_cents, fee_cents)
+    members = [(m, length) for m, length, _ in ranked]
+    if members and ambiguous:
+        # Mehr gleich gute Kandidaten als bezahlte Beiträge: nicht raten.
+        names = ", ".join(m.display_name() for m, _ in members)
+        return {
+            "confidence": CONFIDENCE_GUESSED,
+            "category": "Mitgliedsbeitrag",
+            "person": "",
+            "suggested_persons": [],
+            "learning_key": learning_key,
+            "needs_choice": True,
+            "multi_member_hint": (
+                f" (Achtung: Der Betrag entspricht {wanted} Monatsbeitrag/-beiträgen, im Text passen aber "
+                f"{len(members)} Mitglieder: {names}. Bitte die richtige Person wählen.)"
+            ),
+        }
     if members:
         # Bei mehreren Mitgliedern (z. B. "Anna und Max Muster") alle
         # in das Person-Feld eintragen, getrennt durch " und "
         person_names = " und ".join(m.display_name() for m, _ in members)
         multi_hint = ""
-        if len(members) > 1:
+        if wanted and wanted > len(members):
+            multi_hint = (
+                f" (Achtung: Der Betrag entspricht {wanted} Monatsbeiträgen, erkannt wurde nur "
+                f"{len(members)} Mitglied – bitte prüfen, ob weitere Personen zu ergänzen sind)"
+            )
+        elif len(members) > 1 and wanted != len(members):
             multi_hint = f" (Achtung: {len(members)} Mitglieder erkannt – bitte prüfen, ob Betrag aufgeteilt werden muss)"
         return {
             "confidence": CONFIDENCE_GUESSED,
@@ -258,14 +336,14 @@ def suggest_for_row(text, purpose, amount_cents, recipient=""):
     }
 
 
-def learn_from_confirmation(text, purpose, category, person):
+def learn_from_confirmation(text, purpose, category, person, recipient=""):
     """Legt die (ggf. vom Kassierer korrigierte) Zuordnung als Lernregel an
     oder aktualisiert sie (upsert über den Lernschlüssel, hit_count hoch).
 
     Committet nicht selbst - wie beim übrigen Kassenbuch-Code ist der
     Aufrufer für den Commit verantwortlich (siehe routes/cashbook.py).
     """
-    learning_key = normalize_learning_key(text, purpose)
+    learning_key = normalize_learning_key(text, purpose, recipient)
     if not learning_key or not category:
         return
 

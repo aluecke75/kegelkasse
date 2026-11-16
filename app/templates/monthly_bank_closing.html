@@ -104,6 +104,24 @@
     line-height: 1.25;
 }
 
+.status-mini-card.statement-card .status-badge {
+    margin-top: 0;
+}
+
+.statement-grid {
+    grid-template-columns: repeat(2, minmax(220px, 1fr));
+    align-items: stretch;
+}
+
+.statement-card .statement-rows {
+    width: 100%;
+}
+
+.statement-card .statement-actions {
+    margin-top: auto;
+    padding-top: 6px;
+}
+
     .status-badge {
         display: inline-block;
         padding: 7px 14px;
@@ -264,7 +282,7 @@
             <div class="closing-icon">📄</div>
             <div>
                 <h2>1. Kontoauszug</h2>
-                <p>PDF-Kontoauszug für diesen Zeitraum hochladen und verwalten.</p>
+                <p>Kontoauszug (PDF oder CSV) für diesen Zeitraum hochladen und die Buchungen übernehmen.</p>
             </div>
             <div class="closing-chevron">⌄</div>
         </summary>
@@ -276,58 +294,66 @@
                     <span class="status-badge status-open">{{ checks.statement.status }}</span>
                 {% endif %}
             </p>
-            <div class="status-grid" style="margin-top:14px;">
-                <div class="status-mini-card">
-                    <div class="status-mini-left">📄 PDF-Kontoauszug</div>
-                    {% if statement_pdf_document %}
+            {% if statement_import.count %}
+                <p class="muted">Aus dem Kontoauszug übernommen: {{ statement_import.count }} Buchung(en), Eingänge {{ statement_import.income_euro }} €.</p>
+            {% endif %}
+            {% macro statement_card(icon, title, document, card, source, missing_label) %}
+                <div class="status-mini-card statement-card">
+                    <div class="status-mini-left">{{ icon }} {{ title }}</div>
+                    {% if document %}
                         <span class="status-badge status-done">vorhanden</span>
                         <div class="muted">
-                            {{ statement_pdf_document.original_filename }}<br>
-                            {{ statement_pdf_document.uploaded_at.strftime('%d.%m.%Y %H:%M') if statement_pdf_document.uploaded_at else '' }}
+                            {{ document.original_filename }}<br>
+                            {{ document.uploaded_at.strftime('%d.%m.%Y %H:%M') if document.uploaded_at else '' }}
                         </div>
-                        <div class="actions" style="margin-top:12px;">
+                        {% if card and card.ok %}
+                            <div class="validation-list statement-rows">
+                                <div class="validation-item validation-ok">
+                                    <div class="validation-icon">{{ icon }}</div>
+                                    <div>
+                                        <strong>{{ card.row_count }} Zeilen erkannt</strong>
+                                        <p>
+                                            Eingänge: {{ card.income_euro }} €
+                                            · Ausgänge: {{ card.expense_euro }} €
+                                        </p>
+                                        {% if card.all_done %}
+                                            <p><strong>Alle {{ card.usable_count }} Zeilen sind übernommen{% if card.from_other_files %} (über {{ card.from_other_files | join(", ") }}){% endif %}.</strong></p>
+                                        {% elif card.imported_count %}
+                                            <p>{{ card.imported_count }} von {{ card.usable_count }} Zeilen übernommen{% if card.from_other_files %} (teils über {{ card.from_other_files | join(", ") }}){% endif %}.</p>
+                                        {% else %}
+                                            <p>Noch nichts übernommen.</p>
+                                        {% endif %}
+                                    </div>
+                                    <div class="validation-result">{% if card.all_done %}✓{% endif %}</div>
+                                </div>
+                            </div>
+                        {% elif card %}
+                            <div class="muted statement-rows">{{ card.message or "Datei konnte nicht gelesen werden." }}</div>
+                        {% endif %}
+                        <div class="actions statement-actions">
                             <a class="button secondary"
-                               href="{{ url_for('document_preview', document_id=statement_pdf_document.id) }}"
+                               href="{{ url_for('document_preview', document_id=document.id) }}"
                                target="_blank">
                                 Anzeigen
                             </a>
+                            <a class="button secondary" href="{{ url_for('monthly_bank_closing_csv_import', month=month_value, source=source) }}">
+                                {% if card and card.all_done %}Übernahme ansehen{% else %}Buchungen prüfen &amp; übernehmen{% endif %}
+                            </a>
                         </div>
                     {% else %}
-                        <span class="status-badge status-open">fehlt</span>
+                        <span class="status-badge {{ missing_label.css }}">{{ missing_label.text }}</span>
                     {% endif %}
                 </div>
+            {% endmacro %}
 
-                <div class="status-mini-card">
-                    <div class="status-mini-left">📊 CSV-Importdatei</div>
-                    {% if statement_csv_document %}
-                        <span class="status-badge status-done">vorhanden</span>
-                        <div class="muted">
-                            {{ statement_csv_document.original_filename }}<br>
-                            {{ statement_csv_document.uploaded_at.strftime('%d.%m.%Y %H:%M') if statement_csv_document.uploaded_at else '' }}
-                        </div>
-                        {% if csv_preview and csv_preview.ok %}
-                            <div class="validation-list" style="margin-top:14px;">
-                                <div class="validation-item validation-ok">
-                                    <div class="validation-icon">📊</div>
-                                    <div>
-                                        <strong>{{ csv_preview.row_count }} CSV-Zeilen erkannt</strong>
-                                        <p>
-                                            Eingänge: {{ csv_preview.income_total_euro }} €
-                                            · Ausgänge: {{ csv_preview.expense_total_euro }} €
-                                        </p>
-                                    </div>
-                                    <div class="validation-result">✓</div>
-                                </div>
-                            </div>
-                        {% endif %}
-                        <div class="actions" style="margin-top:12px;">
-                            <a class="button secondary" href="{{ url_for('monthly_bank_closing_csv_import', month=month_value) }}">Buchungen prüfen &amp; übernehmen</a>
-                        </div>
-                    {% else %}
-                        <span class="status-badge status-lock">optional</span>
-                    {% endif %}
-                </div>
+            <div class="status-grid statement-grid" style="margin-top:14px;">
+                {{ statement_card("📄", "PDF-Kontoauszug", statement_pdf_document, pdf_card, "pdf", {"css": "status-open", "text": "fehlt"}) }}
+                {{ statement_card("📊", "CSV-Importdatei", statement_csv_document, csv_card, "csv", {"css": "status-lock", "text": "optional"}) }}
             </div>
+
+            <p class="muted" style="margin-top:10px;">
+                PDF und CSV enthalten dieselben Buchungen – es genügt eine der beiden Dateien. Wurde eine Zeile schon aus der einen Datei übernommen, erkennt die andere sie als „bereits übernommen“ und bucht sie nicht doppelt.
+            </p>
 
             {% if current_user.role in ["admin", "cashier"] %}
                 <form method="post" enctype="multipart/form-data" style="margin-top:16px;">
@@ -361,7 +387,20 @@
                     <span class="status-badge status-open">{{ checks.contributions.status }}</span>
                 {% endif %}
             </p>
-            <p><strong>{{ contribution_total_paid }} €</strong> gebucht</p>
+            <p>
+                <strong>{{ contribution_total_paid }} €</strong> bezahlt ({{ contribution_paid_count }} / {{ contribution_member_count }} Mitglieder),
+                davon <strong>{{ contribution_total_booked }} €</strong> im Kassenbuch gebucht ({{ contribution_booked_count }} / {{ contribution_member_count }}).
+            </p>
+            {% if statement_import.unlinked %}
+                <div class="info-box"><span>🏦</span><div>
+                    {{ statement_import.unlinked }} aus dem Kontoauszug übernommene Mitgliedsbeitrag-Buchung(en) sind in „Monatsbeiträge“ noch nicht eingetragen.
+                    Im Schritt „Monatsbeiträge“ gibt es dafür den Knopf „Aus Kontoauszug übernehmen“.
+                </div></div>
+            {% elif not checks.contributions.done and statement_import.contribution_cents %}
+                <p class="muted">Aus dem Kontoauszug übernommen: {{ statement_import_contribution }} € Mitgliedsbeiträge. Der Monat wird verbucht, sobald alle Mitglieder bezahlt haben – oder von Hand im Schritt „Monatsbeiträge“.</p>
+            {% elif not checks.contributions.done %}
+                <p class="muted">Noch keine Beiträge gebucht. Entweder oben den Kontoauszug übernehmen oder die Beiträge im Schritt „Monatsbeiträge“ von Hand eintragen.</p>
+            {% endif %}
             <a class="button" href="{{ url_for('monthly_contributions', month=month_value) }}">Schritt öffnen</a>
         </div>
     </details>

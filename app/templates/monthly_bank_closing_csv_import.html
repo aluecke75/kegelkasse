@@ -79,6 +79,7 @@
 
 <div class="actions" style="margin-bottom:16px;">
     <a class="button secondary" href="{{ url_for('monthly_bank_closing', month=month_value) }}">← Zurück zum Monatsabschluss</a>
+    <a class="button secondary" href="{{ url_for('monthly_contributions', month=month_value) }}">Monatsbeiträge {{ "%02d"|format(month) }}.{{ year }} ansehen</a>
 </div>
 
 {% if csv_document and pdf_document %}
@@ -112,7 +113,7 @@
 {% else %}
 
     <div class="metric-grid">
-        <div class="metric-card"><span>CSV-Zeilen</span><strong>{{ review_rows | length }}</strong></div>
+        <div class="metric-card"><span>Zeilen im Kontoauszug</span><strong>{{ review_rows | length }}</strong></div>
         <div class="metric-card"><span>Gelernt</span><strong>{{ review_rows | selectattr("confidence", "equalto", "learned") | list | length }}</strong></div>
         <div class="metric-card"><span>Vermutet</span><strong>{{ review_rows | selectattr("confidence", "equalto", "guessed") | list | length }}</strong></div>
         <div class="metric-card"><span>Fehlerhaft</span><strong>{{ review_rows | selectattr("error") | list | length }}</strong></div>
@@ -252,7 +253,7 @@
                                     {% if row.already_imported %}
                                         <label class="checkbox-row muted">
                                             <input type="checkbox" checked disabled aria-label="Buchung vom {{ row.date_raw }} über {{ row.amount_euro }} € - bereits übernommen">
-                                            <span>bereits übernommen</span>
+                                            <span>bereits übernommen{% if row.imported_elsewhere %} (aus „{{ row.imported_elsewhere }}“){% endif %}</span>
                                         </label>
                                     {% elif row.error %}
                                         <label class="checkbox-row muted">
@@ -261,8 +262,8 @@
                                         </label>
                                     {% elif can_book %}
                                         <label class="checkbox-row">
-                                            <input type="checkbox" class="take-checkbox" name="take" value="{{ row.index }}" checked aria-label="Buchung vom {{ row.date_raw }} über {{ row.amount_euro }} € übernehmen">
-                                            <span>Übernehmen</span>
+                                            <input type="checkbox" class="take-checkbox" name="take" value="{{ row.index }}" {% if not row.needs_choice %}checked{% endif %} aria-label="Buchung vom {{ row.date_raw }} über {{ row.amount_euro }} € übernehmen">
+                                            <span>{% if row.needs_choice %}Übernehmen (erst Person wählen){% else %}Übernehmen{% endif %}</span>
                                         </label>
                                     {% else %}
                                         <label class="checkbox-row muted">

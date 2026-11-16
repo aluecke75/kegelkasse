@@ -1260,8 +1260,8 @@ def check_import_monthly_contributions(client):
                       for e in entries for m_id in member_ids if e.person == member_names[m_id]))
             check("Monatsbeiträge-Import A: keine zusätzliche Kontobuchung beim Abschluss", len(transactions) == 0, f"{len(transactions)}")
         body = client.get(f"/finance/monthly-bank-closing?month={test_year}-02").get_data(as_text=True)
-        check("Monatsbeiträge-Import A: Monatsabschluss zeigt alle Beiträge erledigt",
-              f"{len(member_ids)} / {len(member_ids)} erledigt" in body)
+        check("Monatsbeiträge-Import A: Monatsabschluss zeigt alle Beiträge bezahlt und Monat verbucht",
+              f"{len(member_ids)} / {len(member_ids)} bezahlt, Monat verbucht" in body)
 
         # B) Alle bis auf einen per Überweisung, der Letzte wird in Schritt 2 bestätigt.
         last_id, first_id = member_ids[-1], member_ids[0]
@@ -1430,6 +1430,248 @@ def check_import_monthly_contributions(client):
                 pass
 
 
+def check_booking_consistency(client):
+    """"Monatsabschluss Bank" und "Monatsbeiträge" laufen Hand in Hand:
+    - Namenserkennung berücksichtigt den Betrag (ein Beitrag = ein Mitglied) und
+      wählt bei Gleichstand nicht selbst;
+    - der Lernschlüssel enthält den Zahler (gleicher Zweck, andere Person);
+    - übernommene Beiträge stehen in "Monatsbeiträge" als "gebucht (Kontoauszug)",
+      noch nicht übernommene als "noch nicht gebucht"; beide Seiten zeigen dieselben Zahlen;
+    - dieselbe Buchung aus einem zweiten Kontoauszug-Dokument desselben Monats wird nicht
+      noch einmal angeboten und nicht doppelt gebucht;
+    - ein Mitgliedsbeitrag ohne Person wird nicht gebucht.
+    Testdaten liegen im Jahr 2097 und werden am Ende wieder entfernt."""
+    from pathlib import Path
+    from models import (
+        Document, CashbookEntry, AccountTransaction, CsvImportRule, Member,
+        MonthlyContributionBatch, MonthlyContributionPayment,
+    )
+    from services.csv_import_matching import suggest_for_row, learn_from_confirmation, normalize_learning_key
+    from routes.monthly_contributions import build_csv_import_review_rows
+
+    marker = "SELBSTTESTKONSISTENZ"
+    test_year = 2097
+    start, end = datetime(test_year, 1, 1).date(), datetime(test_year, 12, 31).date()
+    document_ids, stored_files, temp_member_ids = [], [], []
+    value_days = {}
+
+    try:
+        # --- 1) Namenserkennung mit Betrag, Lernschlüssel mit Zahler ---
+        with app.app_context():
+            temp_members = [
+                Member(first_name="Selbsttestu", last_name="Pruefling", active=True),
+                Member(first_name="Selbsttesth", last_name="Zufallsname", active=True),
+            ]
+            db.session.add_all(temp_members)
+            db.session.commit()
+            temp_member_ids.extend(m.id for m in temp_members)
+
+            text = "Selbsttestu und Selbsttesth Pruefling"
+            without_fee = suggest_for_row("Überw.", text, 2000, "")
+            check("Betragserkennung: ohne Monatsbeitrag bleiben beide Namenstreffer (wie bisher)",
+                  len(without_fee["suggested_persons"]) == 2, f"{without_fee['suggested_persons']}")
+            one_fee = suggest_for_row("Überw.", text, 2000, "", 2000)
+            check("Betragserkennung: ein Monatsbeitrag = nur das Mitglied mit Vor- und Nachname",
+                  len(one_fee["suggested_persons"]) == 1 and "Selbsttestu" in one_fee["suggested_persons"][0],
+                  f"{one_fee['suggested_persons']}")
+            two_fees = suggest_for_row("Überw.", text, 4000, "", 2000)
+            check("Betragserkennung: zwei Monatsbeiträge = beide Mitglieder",
+                  len(two_fees["suggested_persons"]) == 2, f"{two_fees['suggested_persons']}")
+
+            third = Member(first_name="Selbsttesth", last_name="Pruefling", active=True)
+            db.session.add(third)
+            db.session.commit()
+            temp_member_ids.append(third.id)
+            ambiguous = suggest_for_row("Überw.", text, 2000, "", 2000)
+            check("Betragserkennung: zwei gleich gute Treffer, ein Beitrag - keine Person vorbelegt, Auswahl nötig",
+                  ambiguous.get("needs_choice") is True and ambiguous["suggested_persons"] == [] and ambiguous["person"] == "",
+                  f"{ambiguous}")
+
+            learn_from_confirmation("GUTSCHR", f"{marker} Kegelkasse", "Mitgliedsbeitrag", "Selbsttestu Pruefling", "Zahler Alpha")
+            db.session.add(CsvImportRule(
+                learning_key=normalize_learning_key("GUTSCHR", f"{marker} Bahn"), category="Bahnkosten", person=None))
+            db.session.add(CsvImportRule(
+                learning_key=normalize_learning_key("GUTSCHR", f"{marker} Altregel"),
+                category="Mitgliedsbeitrag", person="Selbsttestu Pruefling"))
+            db.session.commit()
+            same_payer = suggest_for_row("GUTSCHR", f"{marker} Kegelkasse", 2000, "Zahler Alpha")
+            other_payer = suggest_for_row("GUTSCHR", f"{marker} Kegelkasse", 2000, "Zahler Beta")
+            check("Lernschlüssel: derselbe Zahler wird als 'gelernt' erkannt", same_payer["confidence"] == "learned")
+            check("Lernschlüssel: anderer Zahler mit gleichem Zweck erbt die Person NICHT",
+                  other_payer["confidence"] != "learned" and "Selbsttestu" not in (other_payer.get("person") or ""),
+                  f"{other_payer['confidence']} / {other_payer.get('person')}")
+            legacy_plain = suggest_for_row("GUTSCHR", f"{marker} Bahn", -1000, "Irgendwer")
+            legacy_person = suggest_for_row("GUTSCHR", f"{marker} Altregel", 2000, "Irgendwer")
+            check("Lernschlüssel: alte Regel ohne Person gilt weiter", legacy_plain["confidence"] == "learned"
+                  and legacy_plain["category"] == "Bahnkosten", f"{legacy_plain['confidence']}")
+            check("Lernschlüssel: alte Regel mit fester Person gilt nicht für beliebige Zahler",
+                  legacy_person["confidence"] != "learned", f"{legacy_person['confidence']}")
+
+        # --- 2) Zusammenspiel beider Seiten ---
+        with app.app_context():
+            from app import active_database_info, current_rate_cents
+
+            members = Member.query.filter(Member.active == True, ~Member.id.in_(temp_member_ids)).order_by(Member.id).all()  # noqa: E712
+            names = [m.display_name() for m in members]
+            if len(members) < 3 or len(set(names)) != len(names):
+                check("Monatsbeiträge-Zusammenspiel: mind. 3 aktive Mitglieder mit eindeutigem Namen", False, f"{len(members)}")
+                return
+            # Die Testmitglieder aus 1) sind aktiv und würden als Mitglieder des Monats mitzählen.
+            for temp_id in temp_member_ids:
+                temp = db.session.get(Member, temp_id)
+                if temp:
+                    temp.active = False
+            db.session.commit()
+            member_ids = [m.id for m in members]
+            member_names = dict(zip(member_ids, names))
+            value_days = {m.id: m.monthly_value_day for m in members}
+            rate = current_rate_cents("monthly_fee", datetime(test_year, 2, 1).date())
+            if not rate or rate <= 0:
+                check("Monatsbeiträge-Zusammenspiel: Monatsbeitrag > 0 hinterlegt", False, f"Satz: {rate}")
+                return
+            documents_dir = Path(active_database_info()["documents_path"])
+            documents_dir.mkdir(parents=True, exist_ok=True)
+
+        n = len(member_ids)
+
+        def euro(cents):
+            return f"{cents // 100},{cents % 100:02d}"
+
+        def payer(index):
+            # Ziffern fallen im Lernschlüssel weg, deshalb Buchstaben statt Zahlen.
+            return "Zahler " + "".join(chr(97 + int(d)) for d in str(index))
+
+        def make_statement(month, ids, tag):
+            lines = ["Datum;Buchungstext;Verwendungszweck;Beguenstigter/Zahlungspflichtiger;Betrag"]
+            for position, member_id in enumerate(ids, start=1):
+                lines.append(f"02.{month:02d}.{test_year};Gutschrift;{marker} Beitrag;{payer(member_ids.index(member_id) + 1)};{euro(rate)}")
+            with app.app_context():
+                stored = f"selftest_konsistenz_{test_year}_{month:02d}_{tag}.csv"
+                target = documents_dir / stored
+                target.write_text("\n".join(lines) + "\n", encoding="utf-8")
+                stored_files.append(target)
+                document = Document(
+                    title="Selbsttest Kontoauszug Konsistenz", category="Kontoauszug CSV",
+                    document_date=datetime(test_year, month, 1).date(),
+                    description="Automatischer Selbsttest - bitte ignorieren",
+                    original_filename=f"selftest_konsistenz_{month:02d}_{tag}.csv", stored_filename=stored,
+                    mime_type="text/csv", file_size=target.stat().st_size,
+                )
+                db.session.add(document)
+                db.session.commit()
+                document_ids.append(document.id)
+                return document.id
+
+        def import_rows(month, ids):
+            data = {"month": f"{test_year:04d}-{month:02d}", "take": [str(i) for i in range(1, len(ids) + 1)]}
+            for i, member_id in enumerate(ids, start=1):
+                data[f"category_{i}"] = "Mitgliedsbeitrag"
+                data[f"person_{i}"] = member_names[member_id]
+            return client.post("/finance/monthly-bank-closing/csv-import", data=data, follow_redirects=True)
+
+        def contribution_entries(month):
+            return CashbookEntry.query.filter(
+                CashbookEntry.category == "Mitgliedsbeitrag", CashbookEntry.is_void == False,  # noqa: E712
+                CashbookEntry.booking_date.between(datetime(test_year, month, 1).date(), datetime(test_year, month, 28).date()),
+            ).all()
+
+        # A) Voller Monat per Kontoauszug: beide Seiten zeigen "gebucht".
+        make_statement(2, member_ids, "a")
+        import_rows(2, member_ids)
+        body = client.get(f"/finance/monthly-contributions?month={test_year}-02").get_data(as_text=True)
+        check("Zusammenspiel A: Monatsbeiträge zeigt jedes Mitglied als 'gebucht (Kontoauszug)'",
+              body.count("gebucht (Kontoauszug)") == n, f"{body.count('gebucht (Kontoauszug)')} von {n}")
+        check("Zusammenspiel A: Kennzahl 'Im Kassenbuch gebucht' = alle", f"<strong>{n} / {n}</strong>" in body)
+        bank = client.get(f"/finance/monthly-bank-closing?month={test_year}-02").get_data(as_text=True)
+        check("Zusammenspiel A: Monatsabschluss Bank nennt dieselben Zahlen",
+              f"{n} / {n} bezahlt, Monat verbucht" in bank and f"({n} / {n})" in bank)
+
+        # B) Zweites Dokument desselben Monats (z. B. erneut hochgeladen): keine Doppelbuchung.
+        doc2_id = make_statement(2, member_ids, "b")
+        with app.app_context():
+            _, review = build_csv_import_review_rows(db.session.get(Document, doc2_id))
+            check("Zusammenspiel B: alle Zeilen des zweiten Dokuments gelten als bereits übernommen",
+                  len(review) == n and all(r["already_imported"] and r["imported_elsewhere"] for r in review),
+                  f"{[(r['already_imported'], r['imported_elsewhere']) for r in review][:3]}")
+        before = len(contribution_entries(2))
+        import_rows(2, member_ids)
+        with app.app_context():
+            check("Zusammenspiel B: erneuter Import bucht nichts doppelt", len(contribution_entries(2)) == before,
+                  f"{len(contribution_entries(2))} statt {before}")
+
+        # C) Lernen je Zahler: gleicher Zweck, jede Zeile bekommt IHRE Person.
+        doc3_id = make_statement(3, member_ids[:-1], "a")
+        with app.app_context():
+            _, review = build_csv_import_review_rows(db.session.get(Document, doc3_id))
+            correct = [
+                r["person"] == member_names[member_ids[i]] and r["confidence"] == "learned"
+                for i, r in enumerate(review)
+            ]
+            check("Zusammenspiel C: gleicher Zweck, aber jede Zeile erkennt ihre eigene gelernte Person",
+                  len(review) == n - 1 and all(correct), f"{sum(correct)} von {len(review)}")
+        import_rows(3, member_ids[:-1])
+        body = client.get(f"/finance/monthly-contributions?month={test_year}-03").get_data(as_text=True)
+        check("Zusammenspiel C: Teil-Monat: n-1 'gebucht (Kontoauszug)', das fehlende Mitglied 'offen' (nichts zu buchen)",
+              body.count("gebucht (Kontoauszug)") == n - 1 and body.count("noch nicht gebucht") == 0 and ">offen<" in body,
+              f"{body.count('gebucht (Kontoauszug)')} / {body.count('noch nicht gebucht')}")
+        # Von Hand eingetragen, aber nur gespeichert (nicht abgeschlossen): bezahlt, noch nicht gebucht.
+        form = {"month": f"{test_year}-05", "account": "bank", "action": "save"}
+        for i, member_id in enumerate(member_ids):
+            form[f"expected_{member_id}"] = euro(rate)
+            form[f"paid_{member_id}"] = euro(rate) if i == 0 else "0"
+            form[f"paid_date_{member_id}"] = f"{test_year}-05-03"
+        client.post("/finance/monthly-contributions", data=form, follow_redirects=True)
+        body = client.get(f"/finance/monthly-contributions?month={test_year}-05").get_data(as_text=True)
+        check("Zusammenspiel C: von Hand eingetragen, Monat offen = 'noch nicht gebucht'",
+              body.count("noch nicht gebucht") == 1 and body.count("gebucht (Kontoauszug)") == 0,
+              f"{body.count('noch nicht gebucht')} / {body.count('gebucht (Kontoauszug)')}")
+        bank = client.get(f"/finance/monthly-bank-closing?month={test_year}-03").get_data(as_text=True)
+        check("Zusammenspiel C: Monatsabschluss Bank zeigt denselben Teilstand",
+              f"{n - 1} / {n} bezahlt, {n - 1} gebucht" in bank, "Text nicht gefunden")
+
+        # D) Mitgliedsbeitrag ohne Person wird nicht gebucht.
+        make_statement(4, member_ids[:1], "a")
+        r = client.post("/finance/monthly-bank-closing/csv-import", data={
+            "month": f"{test_year}-04", "take": ["1"], "category_1": "Mitgliedsbeitrag", "person_1": "",
+        }, follow_redirects=True)
+        with app.app_context():
+            check("Zusammenspiel D: Mitgliedsbeitrag ohne Person wird nicht gebucht", len(contribution_entries(4)) == 0,
+                  f"{len(contribution_entries(4))}")
+        check("Zusammenspiel D: deutlicher Hinweis", "kein Mitglied gewählt" in r.get_data(as_text=True))
+    finally:
+        with app.app_context():
+            from models import AuditLog
+
+            batch_ids = [b.id for b in MonthlyContributionBatch.query.filter_by(year=test_year).all()]
+            payment_ids = [p.id for p in MonthlyContributionPayment.query.filter(MonthlyContributionPayment.batch_id.in_(batch_ids)).all()] if batch_ids else []
+            entry_ids = [e.id for e in CashbookEntry.query.filter(CashbookEntry.booking_date.between(start, end)).all()]
+            for object_type, ids in (
+                ("MonthlyContributionBatch", batch_ids), ("MonthlyContributionPayment", payment_ids),
+                ("CashbookEntry", entry_ids), ("Document", document_ids),
+            ):
+                if ids:
+                    AuditLog.query.filter(AuditLog.object_type == object_type, AuditLog.object_id.in_(ids)).delete(synchronize_session=False)
+            if batch_ids:
+                MonthlyContributionPayment.query.filter(MonthlyContributionPayment.batch_id.in_(batch_ids)).delete(synchronize_session=False)
+                MonthlyContributionBatch.query.filter(MonthlyContributionBatch.id.in_(batch_ids)).delete(synchronize_session=False)
+            CashbookEntry.query.filter(CashbookEntry.booking_date.between(start, end)).delete(synchronize_session=False)
+            AccountTransaction.query.filter(AccountTransaction.booking_date.between(start, end)).delete(synchronize_session=False)
+            CsvImportRule.query.filter(CsvImportRule.learning_key.like(f"%{marker}%")).delete(synchronize_session=False)
+            if document_ids:
+                Document.query.filter(Document.id.in_(document_ids)).delete(synchronize_session=False)
+            for member in Member.query.filter(Member.id.in_(list(value_days))).all():
+                member.monthly_value_day = value_days[member.id]
+            if temp_member_ids:
+                Member.query.filter(Member.id.in_(temp_member_ids)).delete(synchronize_session=False)
+            db.session.commit()
+        for target in stored_files:
+            try:
+                target.unlink()
+            except OSError:
+                pass
+    check("Selbsttest-Daten (Zusammenspiel Monatsabschluss/Monatsbeiträge) aufgeräumt", True)
+
+
 def check_pwa():
     """PWA: Manifest, Service Worker und Offline-Seite sind ohne Anmeldung abrufbar, der
     Service Worker deckt die ganze App ab und die Seiten enthalten die Einbindung."""
@@ -1512,6 +1754,7 @@ def run():
         check_event_view_no_side_effects(client)
         check_csv_import_review(client)
         check_import_monthly_contributions(client)
+        check_booking_consistency(client)
         check_penalty_payment_void(client)
         check_ranking_ties(client)
         check_excused_participant_penalty_excluded(client)

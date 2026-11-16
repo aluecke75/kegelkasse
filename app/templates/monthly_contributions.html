@@ -19,9 +19,11 @@
 </div>
 
 <div class="metric-grid">
-    <div class="metric-card"><span>Bestätigt</span><strong>{{ paid_count }} / {{ member_count }}</strong></div>
+    <div class="metric-card"><span>Bezahlt</span><strong>{{ paid_count }} / {{ member_count }}</strong></div>
+    <div class="metric-card"><span>Im Kassenbuch gebucht</span><strong>{{ booked_count }} / {{ member_count }}</strong></div>
     <div class="metric-card"><span>Soll gesamt</span><strong>{{ total_expected }} €</strong></div>
     <div class="metric-card"><span>Eingegangen</span><strong>{{ total_paid }} €</strong></div>
+    <div class="metric-card"><span>Davon gebucht</span><strong>{{ total_booked }} €</strong></div>
     <div class="metric-card"><span>Noch offen</span><strong>{{ total_open }} €</strong></div>
     <div class="metric-card"><span>Durchschnitt</span><strong>{{ average_paid }} €</strong></div>
 </div>
@@ -34,6 +36,14 @@
             <p>Der Dauerauftragstag bleibt als Basistag gespeichert. Wochenende wird nur für den konkreten Monat auf Montag verschoben.</p>
         </div>
     </div>
+
+    <p class="muted">
+        Zwei Wege führen zum selben Ergebnis: <strong>automatisch</strong> über
+        <a href="{{ url_for('monthly_bank_closing', month=month_value) }}">Monatsabschluss Bank</a>
+        (Kontoauszug einlesen – bezahlte Beiträge stehen danach hier und im Kassenbuch) oder
+        <strong>von Hand</strong> auf dieser Seite (Beträge eintragen/bestätigen – gebucht wird, sobald alle bezahlt haben).
+        Was per Kontoauszug schon gebucht ist, wird nicht noch einmal gebucht.
+    </p>
 
     {% if batch and batch.status == "finalized" %}
         <div class="info-box"><span>✅</span><div>Dieser Monat ist bereits verbucht.{% if batch.finalized_by_user %} Verbucht von {{ batch.finalized_by_user.username }}.{% endif %}</div></div>
@@ -69,17 +79,21 @@
         <div class="mobile-table-wrap">
             <table>
                 <thead>
-                    <tr><th>Mitglied</th><th>Soll</th><th>Eingegangen</th><th>Wertstellung</th><th>Status</th><th>Differenz</th><th>Notiz</th><th>Aktion</th></tr>
+                    <tr><th>Mitglied</th><th>Soll</th><th>Eingegangen</th><th>Wertstellung</th><th>Status</th><th>Kassenbuch</th><th>Differenz</th><th>Notiz</th><th>Aktion</th></tr>
                 </thead>
                 <tbody>
                     {% for row in rows %}
-                        {% set status_class = 'status-paid' if row.status == 'bezahlt' else 'status-partial' if row.status == 'teilweise bezahlt' else 'status-overpaid' if row.status == 'überzahlt' else 'status-open' %}
+                        {% set status_class = 'status-none' if row.status == 'kein Beitrag' else 'status-paid' if row.status == 'bezahlt' else 'status-partial' if row.status == 'teilweise bezahlt' else 'status-overpaid' if row.status == 'überzahlt' else 'status-open' %}
                         <tr>
                             <td><strong>{{ row.member.display_name() }}</strong></td>
                             <td><input class="money-input money-format" type="text" inputmode="decimal" name="expected_{{ row.member.id }}" value="{{ row.expected_euro }}" {% if batch and batch.status == "finalized" %}readonly{% endif %}></td>
                             <td><input class="money-input money-format paid-input" type="text" inputmode="decimal" name="paid_{{ row.member.id }}" value="{{ row.paid_euro }}" {% if batch and batch.status == "finalized" %}readonly{% endif %}></td>
                             <td><input class="date-input" type="date" name="paid_date_{{ row.member.id }}" value="{{ row.paid_date }}" {% if batch and batch.status == "finalized" %}readonly{% endif %}><br><small class="muted">Basistag: {{ row.monthly_value_day or 'noch offen' }}</small></td>
                             <td class="{{ status_class }}">{{ row.status }}</td>
+                            <td class="booking-{{ 'ok' if row.booking_state == 'gebucht' else 'partial' if row.booking_state == 'teilweise gebucht' else 'open' if row.booking_state == 'noch nicht gebucht' else 'none' }}">
+                                {% if row.booking_state == 'kein Betrag' %}–{% else %}{{ row.booking_label }}{% endif %}
+                                {% if row.booking_state in ('gebucht', 'teilweise gebucht') %}<br><small class="muted">{{ row.booked_euro }} €</small>{% endif %}
+                            </td>
                             <td>{{ row.difference_euro }} €</td>
                             <td><input class="note-input" type="text" name="note_{{ row.member.id }}" value="{{ row.note or '' }}" placeholder="optional" {% if batch and batch.status == "finalized" %}readonly{% endif %}></td>
                             <td>
@@ -123,6 +137,10 @@
 .status-partial { color:#8a5a00; font-weight:800; }
 .status-open { color:#b91c1c; font-weight:800; }
 .status-overpaid { color:#005e8a; font-weight:800; }
+.booking-ok { color:#006b2e; font-weight:700; }
+.booking-partial { color:#8a5a00; font-weight:700; }
+.booking-open { color:#6b7280; }
+.booking-none, .status-none { color:#6b7280; }
 .money-input { width:96px; text-align:right; }
 .date-input { width:140px; }
 .note-input { min-width:160px; max-width:none; }

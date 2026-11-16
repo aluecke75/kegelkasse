@@ -128,6 +128,38 @@ def imported_contribution_summary(payment_id):
     return int(total or 0), first_date
 
 
+def booked_summary_by_payment(payment_ids):
+    """{payment_id: (gebuchter Betrag in Cent, frühestes Buchungsdatum, aus Kontoauszug?)}
+    für alle angegebenen Monatsbeitrags-Zahlungen in einer einzigen Abfrage.
+
+    Gezählt werden aktive Kassenbuch-Einnahmen, die über monthly_contribution_payment_id
+    mit der Zahlung verknüpft sind. "aus Kontoauszug" ist True, wenn mindestens eine
+    davon aus dem Kontoauszug-Import stammt (source_document_id gesetzt), sonst
+    wurde sie beim Abschluss des Monats gebucht."""
+    payment_ids = [pid for pid in payment_ids if pid]
+    if not payment_ids:
+        return {}
+    rows = (
+        db.session.query(
+            CashbookEntry.monthly_contribution_payment_id,
+            db.func.coalesce(db.func.sum(CashbookEntry.amount_cents), 0),
+            db.func.min(CashbookEntry.booking_date),
+            db.func.max(db.case((CashbookEntry.source_document_id.isnot(None), 1), else_=0)),
+        )
+        .filter(CashbookEntry.monthly_contribution_payment_id.in_(payment_ids))
+        .filter(CashbookEntry.is_void == False)  # noqa: E712
+        .filter(CashbookEntry.direction == "income")
+        .group_by(CashbookEntry.monthly_contribution_payment_id)
+        .all()
+    )
+    summary = {}
+    for payment_id, total, first_date, from_statement in rows:
+        if isinstance(first_date, str):
+            first_date = datetime.strptime(first_date, "%Y-%m-%d").date()
+        summary[payment_id] = (int(total or 0), first_date, bool(from_statement))
+    return summary
+
+
 def unlinked_imported_contribution_entries(year, month):
     """Aus dem Kontoauszug dieses Monats übernommene, aktive Einträge
     "Mitgliedsbeitrag", die noch keiner Monatsbeitrags-Zahlung zugeordnet sind."""
@@ -437,6 +469,11 @@ def monthly_contribution_rows(year, month, batch=None):
     if batch:
         existing = {payment.member_id: payment for payment in batch.payments}
 
+    finalized = bool(batch and batch.status == "finalized")
+    booked_by_payment = booked_summary_by_payment(
+        [payment.id for payment in existing.values()]
+    )
+
     rows = []
     for member in members:
         payment = existing.get(member.id)
@@ -450,7 +487,9 @@ def monthly_contribution_rows(year, month, batch=None):
             suggested_date = proposed_member_paid_date(member.id, year, month)
             paid_date_value = suggested_date.isoformat() if suggested_date else ""
 
-        if paid <= 0:
+        if paid <= 0 and expected <= 0:
+            status = "kein Beitrag"
+        elif paid <= 0:
             status = "offen"
         elif paid < expected:
             status = "teilweise bezahlt"
@@ -458,6 +497,28 @@ def monthly_contribution_rows(year, month, batch=None):
             status = "überzahlt"
         else:
             status = "bezahlt"
+
+        # Buchungsstand: Ein Beitrag ist "gebucht", sobald er im Kassenbuch steht -
+        # entweder per Kontoauszug-Import (verknüpfter Eintrag) oder durch den
+        # Abschluss des Monats. Ältere, bereits verbuchte Monate haben keine
+        # Verknüpfung; dort gilt der ganze Monat als gebucht.
+        booked_cents, _first_date, from_statement = (
+            booked_by_payment.get(payment.id, (0, None, False)) if payment else (0, None, False)
+        )
+        if finalized and paid > 0:
+            booked_cents = max(booked_cents, paid)
+        if paid <= 0:
+            booking_state = "kein Betrag"
+        elif booked_cents >= paid:
+            booking_state = "gebucht"
+        elif booked_cents > 0:
+            booking_state = "teilweise gebucht"
+        else:
+            booking_state = "noch nicht gebucht"
+        if booking_state == "gebucht" and from_statement:
+            booking_label = "gebucht (Kontoauszug)"
+        else:
+            booking_label = booking_state
 
         rows.append({
             "member": member,
@@ -471,9 +532,44 @@ def monthly_contribution_rows(year, month, batch=None):
             "note": note,
             "paid_date": paid_date_value,
             "monthly_value_day": member.monthly_value_day,
+            "booked_cents": booked_cents,
+            "booked_euro": cents_to_euro(booked_cents),
+            "booking_state": booking_state,
+            "booking_label": booking_label,
         })
 
     return rows
+
+
+def contribution_month_summary(rows, batch=None):
+    """Gemeinsame Kennzahlen für "Monatsbeiträge" und "Monatsabschluss Bank", damit
+    beide Seiten dieselben Zahlen zeigen.
+
+    "bezahlt": Sollbetrag erreicht (ein Sollbetrag von 0 € zählt als erledigt, wie
+    beim Abschluss). "gebucht": der Betrag steht im Kassenbuch."""
+    member_count = len(rows)
+    paid_count = sum(
+        1 for row in rows
+        if row["expected_cents"] <= 0 or row["paid_cents"] >= row["expected_cents"]
+    )
+    booked_count = sum(
+        1 for row in rows
+        if row["expected_cents"] <= 0 and row["paid_cents"] <= 0 or row["booking_state"] == "gebucht"
+    )
+    expected_cents = sum(row["expected_cents"] for row in rows)
+    paid_cents = sum(row["paid_cents"] for row in rows)
+    booked_cents = sum(row["booked_cents"] for row in rows)
+    return {
+        "member_count": member_count,
+        "paid_count": paid_count,
+        "booked_count": booked_count,
+        "expected_cents": expected_cents,
+        "paid_cents": paid_cents,
+        "booked_cents": booked_cents,
+        "open_cents": max(expected_cents - paid_cents, 0),
+        "finalized": bool(batch and batch.status == "finalized"),
+        "all_paid": member_count > 0 and paid_count == member_count,
+    }
 
 
 def parse_bank_statement_csv(document, max_rows=20):
@@ -690,6 +786,69 @@ def interest_review_info(document, net_cents, parsed):
     )
 
 
+def other_statement_imports(document):
+    """Bereits übernommene Auszugszeilen aus ANDEREN Kontoauszug-Dokumenten
+    desselben Monats (auch ersetzte/gelöschte), gruppiert nach
+    (Buchungsdatum, Gesamtbetrag in Cent, Richtung).
+
+    Rückgabe: {schlüssel: [ {"entries": [...], "filename": str}, ... ]}. Mehrere
+    Zeilen mit gleichem Datum und Betrag (drei Mitglieder zahlen am 01.10. je
+    20,00 €) sind normal und stehen deshalb als Liste - jede übernommene Zeile
+    deckt genau eine Zeile des neuen Auszugs ab."""
+    if not document.document_date:
+        return {}
+    entries = (
+        CashbookEntry.query
+        .join(Document, CashbookEntry.source_document_id == Document.id)
+        .filter(Document.document_date == document.document_date)
+        .filter(Document.category.in_(("Kontoauszug CSV", "Kontoauszug PDF")))
+        .filter(Document.id != document.id)
+        .filter(CashbookEntry.is_void == False)  # noqa: E712
+        .filter(CashbookEntry.source_row_index.isnot(None))
+        .order_by(CashbookEntry.source_document_id, CashbookEntry.source_row_index, CashbookEntry.id)
+        .all()
+    )
+    groups = {}
+    for entry in entries:
+        groups.setdefault((entry.source_document_id, entry.source_row_index), []).append(entry)
+
+    filenames = {}
+    pool = {}
+    for (doc_id, _row_index), group in groups.items():
+        if doc_id not in filenames:
+            source_doc = db.session.get(Document, doc_id)
+            filenames[doc_id] = source_doc.original_filename if source_doc else "anderer Kontoauszug"
+        total = sum(entry.amount_cents for entry in group)
+        key = (group[0].booking_date, total, group[0].direction)
+        pool.setdefault(key, []).append({"entries": group, "filename": filenames[doc_id]})
+    return pool
+
+
+def statement_card_info(document):
+    """Kennzahlen für die Karten "PDF-Kontoauszug"/"CSV-Importdatei" im
+    Monatsabschluss Bank: erkannte Zeilen, Summen und wie viele davon schon
+    im Kassenbuch stehen (auch wenn sie aus der jeweils anderen Datei kamen)."""
+    if not document:
+        return None
+    parsed, review_rows = build_csv_import_review_rows(document)
+    if not parsed["ok"]:
+        return {"ok": False, "message": parsed.get("message", ""), "row_count": 0}
+    usable = [row for row in review_rows if not row["error"]]
+    imported = [row for row in usable if row["already_imported"]]
+    other_files = sorted({row["imported_elsewhere"] for row in imported if row["imported_elsewhere"]})
+    return {
+        "ok": True,
+        "row_count": parsed["row_count"],
+        "income_euro": parsed["income_total_euro"],
+        "expense_euro": parsed["expense_total_euro"],
+        "imported_count": len(imported),
+        "usable_count": len(usable),
+        "from_other_files": other_files,
+        "all_done": bool(usable) and len(imported) == len(usable),
+        "both_done": False,
+    }
+
+
 def build_csv_import_review_rows(document):
     """Baut die Review-Zeilen für den Buchungen-prüfen-Assistenten:
     geparste CSV/PDF-Zeile + Konfidenz-Vorschlag (gelernt/vermutet/kein
@@ -719,12 +878,30 @@ def build_csv_import_review_rows(document):
         if entry.source_row_index is not None:
             existing_entries_by_index.setdefault(entry.source_row_index, []).append(entry)
 
+    # Dieselbe Buchung aus einem anderen Kontoauszug-Dokument desselben Monats
+    # (CSV statt PDF, erneut hochgeladene Datei): sonst würde sie ein zweites Mal
+    # zur Übernahme angeboten und doppelt gebucht.
+    elsewhere_pool = other_statement_imports(document)
+
+    # Aktueller Monatsbeitrag: ist der Betrag ein Vielfaches davon, zeigt er, für
+    # wie viele Mitglieder gezahlt wurde.
+    from app import current_rate_cents
+    fee_cents = current_rate_cents("monthly_fee", document.document_date) if document.document_date else 0
+
     review_rows = []
     for row in parsed["rows"]:
         index = row["index"]
         existing_list = existing_entries_by_index.get(index, [])
         existing_entry = existing_list[0] if existing_list else None
         row_date = parse_bank_statement_row_date(row["date"])
+        imported_elsewhere = None
+        if not existing_list and row_date is not None and not row.get("error"):
+            pool_key = (row_date, abs(row["amount_cents"]), "income" if row["amount_cents"] >= 0 else "expense")
+            candidates = elsewhere_pool.get(pool_key)
+            if candidates:
+                imported_elsewhere = candidates.pop(0)
+                existing_list = imported_elsewhere["entries"]
+                existing_entry = existing_list[0]
 
         error = row.get("error")
         if not error and row_date is None:
@@ -743,6 +920,8 @@ def build_csv_import_review_rows(document):
             "error": error,
             "already_imported": existing_entry is not None,
             "existing_entry": existing_entry,
+            "imported_elsewhere": imported_elsewhere["filename"] if imported_elsewhere else "",
+            "needs_choice": False,
         }
 
         if error:
@@ -755,7 +934,9 @@ def build_csv_import_review_rows(document):
                 "duplicate_hint": None,
             })
         else:
-            suggestion = suggest_for_row(row["text"], row["purpose"], row["amount_cents"], row.get("recipient", ""))
+            suggestion = suggest_for_row(
+                row["text"], row["purpose"], row["amount_cents"], row.get("recipient", ""), fee_cents
+            )
             entry.update(suggestion)
             entry["duplicate_hint"] = monthly_contribution_duplicate_hint(
                 row_date, row["amount_cents"], row["text"], row["purpose"], row.get("recipient", "")
@@ -868,19 +1049,40 @@ def monthly_bank_closing():
     contribution_batch = MonthlyContributionBatch.query.filter_by(year=year, month=month).first()
     contribution_rows = monthly_contribution_rows(year, month, contribution_batch)
 
-    contribution_member_count = len(contribution_rows)
-    contribution_paid_count = sum(
-        1
-        for row in contribution_rows
-        if row["expected_cents"] > 0 and row["paid_cents"] >= row["expected_cents"]
-    )
-    contribution_total_paid_cents = sum(row["paid_cents"] for row in contribution_rows)
+    contribution_summary = contribution_month_summary(contribution_rows, contribution_batch)
+    contribution_member_count = contribution_summary["member_count"]
+    contribution_paid_count = contribution_summary["paid_count"]
+    contribution_booked_count = contribution_summary["booked_count"]
+    contribution_total_paid_cents = contribution_summary["paid_cents"]
+    contribution_total_booked_cents = contribution_summary["booked_cents"]
     contribution_done = (
         contribution_batch is not None
         and contribution_batch.status == "finalized"
         and contribution_member_count > 0
         and contribution_paid_count == contribution_member_count
     )
+
+    # Was aus dem Kontoauszug dieses Monats bereits im Kassenbuch steht (auch aus
+    # inzwischen ersetzten Dokumenten) und was davon noch nicht in
+    # "Monatsbeiträge" eingetragen ist.
+    statement_import_entries = (
+        CashbookEntry.query
+        .join(Document, CashbookEntry.source_document_id == Document.id)
+        .filter(Document.document_date == period_start)
+        .filter(Document.category.in_(("Kontoauszug CSV", "Kontoauszug PDF")))
+        .filter(CashbookEntry.is_void == False)  # noqa: E712
+        .all()
+    )
+    statement_import = {
+        "count": len(statement_import_entries),
+        "income_cents": sum(e.amount_cents for e in statement_import_entries if e.direction == "income"),
+        "income_euro": cents_to_euro(sum(e.amount_cents for e in statement_import_entries if e.direction == "income")),
+        "contribution_cents": sum(
+            e.amount_cents for e in statement_import_entries
+            if e.direction == "income" and e.category == "Mitgliedsbeitrag"
+        ),
+        "unlinked": len(unlinked_imported_contribution_entries(year, month)),
+    }
 
     interest_booking = (
         InterestBooking.query
@@ -910,13 +1112,18 @@ def monthly_bank_closing():
         .first()
     )
 
-    statement_document = statement_pdf_document
-    statement_uploaded = statement_pdf_document is not None
+    # Ein Kontoauszug als PDF oder als CSV genügt - beide lassen sich über
+    # "Buchungen prüfen & übernehmen" einlesen.
+    statement_document = statement_pdf_document or statement_csv_document
+    statement_uploaded = statement_document is not None
 
-    csv_preview = None
-
-    if statement_csv_document:
-        csv_preview = parse_bank_statement_csv(statement_csv_document)
+    pdf_card = statement_card_info(statement_pdf_document)
+    csv_card = statement_card_info(statement_csv_document)
+    # Ist alles über die eine Quelle übernommen, gilt dasselbe für die andere:
+    # deren Zeilen werden als "bereits übernommen" erkannt und nicht doppelt gebucht.
+    if pdf_card and csv_card and pdf_card["all_done"] and csv_card["all_done"]:
+        for card in (pdf_card, csv_card):
+            card["both_done"] = True
 
     checks = {
         "statement": {
@@ -928,7 +1135,12 @@ def monthly_bank_closing():
         "contributions": {
             "label": "Monatsbeiträge",
             "done": contribution_done,
-            "status": f"{contribution_paid_count} / {contribution_member_count} erledigt",
+            "status": (
+                f"{contribution_paid_count} / {contribution_member_count} bezahlt, Monat verbucht"
+                if contribution_done
+                else f"{contribution_paid_count} / {contribution_member_count} bezahlt, "
+                     f"{contribution_booked_count} gebucht"
+            ),
             "url": url_for("monthly_contributions", month=f"{year:04d}-{month:02d}"),
         },
         "interest": {
@@ -950,7 +1162,11 @@ def monthly_bank_closing():
             "icon": "💶",
             "title": "Monatsbeiträge",
             "ok": checks["contributions"]["done"],
-            "message": f"{contribution_paid_count} von {contribution_member_count} Beiträgen verbucht.",
+            "message": (
+                f"{contribution_paid_count} von {contribution_member_count} Beiträgen bezahlt, "
+                f"{contribution_booked_count} davon im Kassenbuch gebucht"
+                + ("; Monat verbucht." if contribution_done else "; Monat noch nicht verbucht.")
+            ),
         },
         {
             "icon": "📈",
@@ -982,7 +1198,11 @@ def monthly_bank_closing():
         contribution_done=contribution_done,
         contribution_paid_count=contribution_paid_count,
         contribution_member_count=contribution_member_count,
+        contribution_booked_count=contribution_booked_count,
         contribution_total_paid=cents_to_euro(contribution_total_paid_cents),
+        contribution_total_booked=cents_to_euro(contribution_total_booked_cents),
+        statement_import=statement_import,
+        statement_import_contribution=cents_to_euro(statement_import["contribution_cents"]),
         interest_done=interest_done,
         checks=checks,
         all_required_done=all_required_done,
@@ -994,7 +1214,8 @@ def monthly_bank_closing():
         statement_pdf_document=statement_pdf_document,
         statement_csv_document=statement_csv_document,
         statement_document=statement_document,
-        csv_preview=csv_preview,
+        pdf_card=pdf_card,
+        csv_card=csv_card,
     )
 
 
@@ -1044,6 +1265,14 @@ def monthly_bank_closing_csv_import():
     pref_key = f"statement_pref_{year}_{month}"
     pref = session.get(pref_key)
 
+    # Die Karten im Monatsabschluss verlinken mit ?source=pdf bzw. ?source=csv:
+    # dann gilt genau diese Datei, nicht die zuletzt gemerkte.
+    requested_source = request.args.get("source")
+    if request.method == "GET" and requested_source == "csv" and csv_document:
+        pref = session[pref_key] = "csv"
+    elif request.method == "GET" and requested_source == "pdf" and pdf_document:
+        pref = session[pref_key] = "pdf"
+
     # Bei POST mit action=select_statement: nur die Auswahl speichern und die
     # Seite neu laden - es wird dabei NICHTS gebucht.
     if request.method == "POST" and request.form.get("action") == "select_statement":
@@ -1089,6 +1318,7 @@ def monthly_bank_closing_csv_import():
         skipped_closed_year = []
         skipped_invalid = 0
         skipped_split = []
+        skipped_no_person = []
         split_row_count = 0
         skipped_interest = []
         interest_row_count = 0
@@ -1145,7 +1375,7 @@ def monthly_bank_closing_csv_import():
                     skipped_interest.append(f"Zeile {index} ({row['date_raw']}): {interest_error}")
                     continue
                 row["already_imported"] = True
-                learn_from_confirmation(row["text"], row["purpose"], "Zinsen", "")
+                learn_from_confirmation(row["text"], row["purpose"], "Zinsen", "", row.get("recipient", ""))
                 booked_count += 1
                 booked_total_cents += total_cents
                 interest_row_count += 1
@@ -1160,6 +1390,14 @@ def monthly_bank_closing_csv_import():
             if len(booking_parts) == 1 and booking_parts[0][0] is None:
                 # Kein Personenfeld übermittelt: Vorschlag der Zeile verwenden.
                 booking_parts = [((row["person"] or "").strip()[:160], total_cents)]
+
+            # Ein Mitgliedsbeitrag ohne Person ließe sich keinem Mitglied zuordnen,
+            # würde im Kassenbuch stehen und den Monat später blockieren.
+            if category == "Mitgliedsbeitrag" and direction == "income" and any(
+                not (person or "").strip() for person, _ in booking_parts
+            ):
+                skipped_no_person.append(f"Zeile {index} ({row['date_raw']}, {row['amount_euro']} €)")
+                continue
 
             note_lines = []
             if row["text"]:
@@ -1216,7 +1454,7 @@ def monthly_bank_closing_csv_import():
                 split_row_count += 1
 
             learned_person = " und ".join(p for p, _ in booking_parts if p)
-            learn_from_confirmation(row["text"], row["purpose"], category, learned_person)
+            learn_from_confirmation(row["text"], row["purpose"], category, learned_person, row.get("recipient", ""))
 
         # Übernommene Mitgliedsbeiträge zusätzlich in "Monatsbeiträge" eintragen
         # (sonst bleibt Schritt 2 auf "0 / n erledigt", und ein späterer Abschluss
@@ -1278,6 +1516,12 @@ def monthly_bank_closing_csv_import():
         # Nicht aufgehende Aufteilungen deutlich melden: die Zeile bleibt offen.
         for message in skipped_split:
             flash(f"Nicht übernommen, Aufteilung stimmt nicht – {message}", "danger")
+        if skipped_no_person:
+            flash(
+                "Nicht übernommen, weil kein Mitglied gewählt ist (Kategorie Mitgliedsbeitrag): "
+                + "; ".join(skipped_no_person) + ". Bitte Person wählen und erneut übernehmen.",
+                "danger",
+            )
 
         return redirect(url_for("monthly_bank_closing_csv_import", month=month_value))
 
@@ -1550,11 +1794,12 @@ def monthly_contributions():
         return redirect(url_for("monthly_contributions", month=period_value))
 
     rows = monthly_contribution_rows(year, month, batch)
-    total_expected = sum(row["expected_cents"] for row in rows)
-    total_paid = sum(row["paid_cents"] for row in rows)
-    total_open = max(total_expected - total_paid, 0)
+    summary = contribution_month_summary(rows, batch)
+    total_expected = summary["expected_cents"]
+    total_paid = summary["paid_cents"]
+    total_open = summary["open_cents"]
     average_paid = int(round(total_paid / len(rows))) if rows else 0
-    paid_count = sum(1 for row in rows if row["paid_cents"] >= row["expected_cents"] and row["expected_cents"] > 0)
+    paid_count = summary["paid_count"]
 
     previous_batches = (
         MonthlyContributionBatch.query
@@ -1581,6 +1826,8 @@ def monthly_contributions():
         total_expected=cents_to_euro(total_expected),
         total_paid=cents_to_euro(total_paid),
         total_open=cents_to_euro(total_open),
+        total_booked=cents_to_euro(summary["booked_cents"]),
+        booked_count=summary["booked_count"],
         average_paid=cents_to_euro(average_paid),
         paid_count=paid_count,
         member_count=len(rows),

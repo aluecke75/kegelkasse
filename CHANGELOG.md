@@ -1,5 +1,50 @@
 # Changelog
 
+## v0.99.37
+
+"Monatsabschluss Bank" und "Monatsbeiträge" laufen Hand in Hand: Beiträge lassen sich entweder
+automatisch über den Kontoauszug oder von Hand buchen, beide Seiten zeigen dieselben Zahlen.
+
+- **PDF- und CSV-Karte im Monatsabschluss angeglichen:** Beide Karten sind jetzt gleich aufgebaut
+  ("vorhanden" auf gleicher Höhe, "Anzeigen" und "Buchungen prüfen & übernehmen" bei beiden) und
+  melden beide, wie viele Zeilen erkannt wurden, mit Eingängen/Ausgängen und dem Übernahmestand
+  ("Noch nichts übernommen" / "x von y Zeilen übernommen" / "Alle y Zeilen sind übernommen").
+  Kam eine Zeile aus der anderen Datei, steht deren Dateiname dabei.
+- **Quelle PDF oder CSV bewusst wählbar:** Der Knopf der CSV-Karte öffnete bisher die PDF, wenn
+  eine vorhanden war. Jetzt öffnet jede Karte genau ihre Datei (`?source=pdf|csv`). Eine Sperre der
+  zweiten Quelle gibt es nicht, aber bereits übernommene Zeilen werden dort als "bereits
+  übernommen" erkannt und nie doppelt gebucht; sind alle übernommen, heißt der Knopf "Übernahme ansehen".
+- **Buchungsstand in "Monatsbeiträge":** Neue Spalte "Kassenbuch" je Mitglied (gebucht
+  (Kontoauszug) / gebucht / teilweise gebucht / noch nicht gebucht) und neue Kennzahlen "Im
+  Kassenbuch gebucht" und "Davon gebucht". Vorher stand dort nur "bezahlt", ob der Betrag auch im
+  Kassenbuch steht, war nicht erkennbar.
+- **Gleiche Zahlen auf beiden Seiten:** "Monatsabschluss Bank" zeigt "x / y bezahlt, z gebucht"
+  mit denselben Werten wie "Monatsbeiträge". Die Zeile "… € gebucht" zählte bisher den bezahlten
+  Betrag, nicht den gebuchten. Mitglieder mit Sollbetrag 0 € zählen jetzt auf beiden Seiten als
+  erledigt (vorher blieb dort "9 / 10", obwohl der Monat abgeschlossen werden konnte).
+- **Einstieg per PDF:** Die PDF-Karte im Monatsabschluss hatte keinen Knopf zum Übernehmen der
+  Buchungen (nur die CSV-Karte). Beide Karten haben jetzt "Buchungen prüfen & übernehmen"; als
+  Kontoauszug genügt PDF oder CSV (vorher galt nur das PDF als "vorhanden"). Neu: Hinweis, wie
+  viele Buchungen schon übernommen sind, und ein Hinweis mit Weg zum Knopf "Aus Kontoauszug
+  übernehmen", wenn Beiträge im Kassenbuch stehen, aber in "Monatsbeiträge" noch fehlen. Die
+  Übernahme-Seite verlinkt zurück auf "Monatsbeiträge".
+- **Keine Doppelbuchung bei CSV und PDF desselben Monats:** Eine Buchung, die schon aus einem
+  anderen Kontoauszug-Dokument desselben Monats übernommen wurde (CSV statt PDF, Datei neu
+  hochgeladen), wird als "bereits übernommen (aus …)" gezeigt und nicht erneut angeboten.
+- **Zuordnung je Zahler:** Der Lernschlüssel enthält jetzt den Zahler. Vorher erbten alle Zeilen
+  mit gleichem Zweck ("Kegelkasse") die zuletzt bestätigte Person, bei CSV-Dateien also meist die
+  falsche. Alte Lernregeln ohne feste Person (z. B. Zinsen) gelten weiter, alte Regeln mit fester
+  Person nicht mehr für beliebige Zahler.
+- **Betrag bestimmt die Personenzahl:** Ist der Betrag ein Vielfaches des Monatsbeitrags, werden
+  höchstens so viele Mitglieder vorgeschlagen ("Anna und Max Muster" mit 20 € = ein
+  Mitglied, ein zufällig gleicher Vorname eines anderen Mitglieds wird nicht mehr als zweite
+  Person vorgeschlagen). Bei zwei gleich guten Treffern für einen Beitrag wird keine Person
+  geraten: Die Zeile ist nicht vorausgewählt, "Person wählen" erscheint.
+- **Mitgliedsbeitrag ohne Person wird nicht mehr gebucht** (er hätte den Monat später blockiert);
+  stattdessen ein deutlicher Hinweis.
+- Testskript: neue Prüfungen "Zusammenspiel" (Buchungsstand auf beiden Seiten, Dublette über
+  zwei Dokumente, Lernen je Zahler, Betragserkennung).
+
 ## v0.99.36
 
 Kontoauszug-Import im Monatsabschluss ("Buchungen aus Kontoauszug prüfen & übernehmen"):
