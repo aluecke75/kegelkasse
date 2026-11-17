@@ -1,5 +1,30 @@
 # Changelog
 
+## v0.99.38
+
+Sicherheit (Fehlerprüfung 2026-11-12, Funde T1, T2, T7, T9, T10) und Datenschutz.
+
+- **Passwort-Reset-Link (T1):** Der Link in der Mail wird aus der neuen Einstellung `PUBLIC_BASE_URL`
+  gebaut und nicht mehr aus dem Host-Header der Anfrage. Ohne diese Einstellung gilt wie bisher
+  der Host-Header (mit Warnung im Log) - bitte in der `.env` setzen.
+- **Eigener Schlüssel für die Demo (T2):** Der Demo-Container nutzt `SECRET_KEY_DEMO`, damit ein
+  Sitzungscookie der Demo nicht in der Produktion gilt. Ohne Angabe wird weiter `SECRET_KEY`
+  verwendet. Nach der Umstellung müssen sich Demo-Benutzer einmal neu anmelden.
+- **Mitgliederliste (T7):** `/members` ist nur noch für Admin, Kassierer und Kassenprüfer
+  erreichbar. Vorher konnte jedes angemeldete Mitglied per Adresse E-Mail-Adressen und interne
+  Notizen aller lesen.
+- **Gesperrte Konten (T9):** Ein deaktiviertes Konto ist sofort abgemeldet, auch mit noch
+  gültigem Sitzungscookie.
+- **Admin-Konten geschützt (T10):** Das Login eines Admins (Rolle, Passwort, aktiv) und das
+  Löschen eines Mitglieds mit Admin-Login kann nur noch ein Admin. Der einzige aktive Admin kann
+  nicht deaktiviert, herabgestuft oder gelöscht werden.
+- **Kassenprüfung:** "Barkasse laut System" und "Bank laut System" erscheinen als schreibgeschützte
+  Felder im Stil der Eingabefelder.
+- **Datenschutz:** Die Git-Historie wurde bereinigt (Arbeitsprotokoll mit Echtnamen entfernt, Namen
+  in Kommentaren, Test und Commit-Texten durch erfundene ersetzt). Dabei haben sich alle
+  Commit-Prüfsummen geändert; die Tags und Releases sind erhalten.
+- Neue Prüfungen: `check_security_hardening` (12 Prüfungen).
+
 ## v0.99.37
 
 "Monatsabschluss Bank" und "Monatsbeiträge" laufen Hand in Hand: Beiträge lassen sich entweder

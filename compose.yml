@@ -30,6 +30,7 @@ services:
       PUID: ${PUID}
       PGID: ${PGID}
       SECRET_KEY: ${SECRET_KEY}
+      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-}
       ADMIN_USERNAME: ${ADMIN_USERNAME}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD}
       SESSION_COOKIE_SECURE: ${SESSION_COOKIE_SECURE:-false}
@@ -81,7 +82,10 @@ services:
       TZ: ${TZ}
       PUID: ${PUID}
       PGID: ${PGID}
-      SECRET_KEY: ${SECRET_KEY}
+      # Eigener Schlüssel für die Demo: sonst wäre ein Demo-Sitzungscookie auch in der
+      # Produktion gültig. Ohne SECRET_KEY_DEMO wird der Produktiv-Schlüssel genutzt (nicht empfohlen).
+      SECRET_KEY: ${SECRET_KEY_DEMO:-${SECRET_KEY}}
+      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-}
       ADMIN_USERNAME: ${ADMIN_USERNAME}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD}
       SESSION_COOKIE_SECURE: ${SESSION_COOKIE_SECURE:-false}

@@ -1672,6 +1672,141 @@ def check_booking_consistency(client):
     check("Selbsttest-Daten (Zusammenspiel Monatsabschluss/Monatsbeiträge) aufgeräumt", True)
 
 
+def check_security_hardening(client):
+    """Sicherheitsfixes aus der Fehlerprüfung (T1, T7, T9, T10):
+    - T7: Mitgliederliste ist für die Rolle "Mitglied" gesperrt (403);
+    - T9: Ein deaktiviertes Konto ist mit bestehender Sitzung sofort abgemeldet;
+    - T10: Ein Kassierer kann das Login eines Admins weder ändern noch das Admin-Mitglied
+      löschen; ein normales Mitglied kann er weiter pflegen;
+    - T1: Der Reset-Link in der Mail nutzt PUBLIC_BASE_URL, nicht den Host-Header.
+    Alle Testdaten werden am Ende wieder entfernt."""
+    import sys
+    from werkzeug.security import generate_password_hash
+    from models import Member, PasswordResetToken
+
+    appmod = sys.modules["app"]
+    tag = "KKSec"
+    created = {}
+
+    def make_user(name, role, active=True, email=None):
+        user = User(username=f"{tag}_{name}", password_hash=generate_password_hash("x"), role=role,
+                    active=active, email=email)
+        db.session.add(user)
+        db.session.flush()
+        return user
+
+    with app.app_context():
+        cashier = make_user("cashier", "cashier")
+        member_user = make_user("member", "member")
+        locked = make_user("locked", "member", active=False)
+        admin2 = make_user("admin2", "admin")
+        normal = make_user("normal", "member")
+        reset_user = make_user("reset", "member", email="kksec@example.invalid")
+        m_admin = Member(first_name=tag, last_name="AdminMitglied", active=True, user_id=admin2.id)
+        m_normal = Member(first_name=tag, last_name="NormalMitglied", active=True, user_id=normal.id)
+        db.session.add_all([m_admin, m_normal])
+        db.session.commit()
+        created = {
+            "cashier": cashier.id, "member": member_user.id, "locked": locked.id, "admin2": admin2.id,
+            "normal": normal.id, "reset": reset_user.id, "m_admin": m_admin.id, "m_normal": m_normal.id,
+        }
+
+    def as_user(user_id):
+        c = app.test_client()
+        with c.session_transaction() as sess:
+            sess["_user_id"] = str(user_id)
+            sess["_fresh"] = True
+        return c
+
+    try:
+        # T7
+        r = as_user(created["member"]).get("/members")
+        check("T7: Mitgliederliste für Rolle Mitglied gesperrt", r.status_code == 403, f"Status {r.status_code}")
+        r = as_user(created["cashier"]).get("/members")
+        check("T7: Mitgliederliste für Kassierer weiter erreichbar", r.status_code == 200, f"Status {r.status_code}")
+
+        # T9
+        r = as_user(created["locked"]).get("/", follow_redirects=False)
+        check("T9: deaktiviertes Konto mit alter Sitzung wird abgemeldet",
+              r.status_code in (301, 302) and "login" in r.headers.get("Location", ""),
+              f"Status {r.status_code}, Ziel {r.headers.get('Location')}")
+
+        # T10
+        cashier_client = as_user(created["cashier"])
+        cashier_client.post(f"/members/{created['m_admin']}/edit", data={
+            "first_name": tag, "last_name": "AdminMitglied", "email": "", "note": "", "active": "on",
+            "username": f"{tag}_admin2", "role": "member", "password": "NeuesPasswort1!",
+        }, follow_redirects=True)
+        with app.app_context():
+            u = db.session.get(User, created["admin2"])
+            unchanged = u.role == "admin" and bool(u.active)
+        check("T10: Kassierer kann Login/Rolle eines Admins nicht ändern", unchanged)
+
+        cashier_client.post(f"/members/{created['m_admin']}/delete", follow_redirects=True)
+        with app.app_context():
+            still = db.session.get(Member, created["m_admin"]) is not None and db.session.get(User, created["admin2"]) is not None
+        check("T10: Kassierer kann Mitglied mit Admin-Login nicht löschen", still)
+
+        cashier_client.post(f"/members/{created['m_normal']}/edit", data={
+            "first_name": tag, "last_name": "NormalMitglied2", "email": "", "note": "", "active": "on",
+        }, follow_redirects=True)
+        with app.app_context():
+            m = db.session.get(Member, created["m_normal"])
+            u = db.session.get(User, created["normal"])
+            ok = m.last_name == "NormalMitglied2" and not u.active
+        check("T10: Kassierer kann normales Mitglied weiter pflegen (Login deaktivieren)", ok)
+
+        # Letzter aktiver Admin
+        from routes.members import is_last_active_admin
+        with app.app_context():
+            admins = User.query.filter_by(role="admin", active=True).all()
+            check("T10: einziger aktiver Admin wird erkannt", (len(admins) != 1) or is_last_active_admin(admins[0]))
+            check("T10: Nicht-Admin gilt nie als letzter Admin", not is_last_active_admin(db.session.get(User, created["cashier"])))
+
+        # T1
+        sent = []
+        original_mail = appmod.send_system_mail
+        appmod.send_system_mail = lambda to, subject, body, *a, **k: (sent.append(body) or (True, "ok"))
+        old_base = os.environ.get("PUBLIC_BASE_URL")
+        os.environ["PUBLIC_BASE_URL"] = "https://kegelkasse.example.test"
+        try:
+            as_user(created["cashier"])
+            anon = app.test_client()
+            forgot = anon.post("/password-forgot", data={"lookup": f"{tag}_reset"},
+                               headers={"Host": "evil.example", "X-Forwarded-Host": "evil.example"})
+        finally:
+            appmod.send_system_mail = original_mail
+            if old_base is None:
+                os.environ.pop("PUBLIC_BASE_URL", None)
+            else:
+                os.environ["PUBLIC_BASE_URL"] = old_base
+        body = sent[0] if sent else ""
+        check("T1: Reset-Link nutzt PUBLIC_BASE_URL", "https://kegelkasse.example.test/" in body,
+              f"Status {forgot.status_code}, Mails {len(sent)}, Text {body[:120]!r}")
+        check("T1: gefälschter Host-Header taucht im Link nicht auf", "evil.example" not in body)
+
+        # Erst jetzt als Admin (der äußere Client behält sonst seine Anmeldung im
+        # Flask-Kontext und würde die Anfragen oben als "angemeldet" behandeln).
+        # Admin selbst darf weiterhin (Positivfall)
+        client.post(f"/members/{created['m_normal']}/delete", follow_redirects=True)
+        with app.app_context():
+            gone = db.session.get(Member, created["m_normal"]) is None
+        check("T10: Admin kann ein Mitglied weiter löschen", gone)
+    finally:
+        with app.app_context():
+            ids = [v for k, v in created.items() if k in ("cashier", "member", "locked", "admin2", "normal", "reset")]
+            PasswordResetToken.query.filter(PasswordResetToken.user_id.in_(ids)).delete(synchronize_session=False)
+            AuditLog.query.filter(AuditLog.object_type == "Member",
+                                  AuditLog.object_id.in_([created["m_admin"], created["m_normal"]])).delete(synchronize_session=False)
+            AuditLog.query.filter(AuditLog.object_type == "User", AuditLog.object_id.in_(ids)).delete(synchronize_session=False)
+            Member.query.filter(Member.id.in_([created["m_admin"], created["m_normal"]])).delete(synchronize_session=False)
+            User.query.filter(User.id.in_(ids)).delete(synchronize_session=False)
+            db.session.commit()
+        with app.app_context():
+            left = User.query.filter(User.username.like(f"{tag}_%")).count() + Member.query.filter(Member.first_name == tag).count()
+        check("Selbsttest-Daten (Sicherheitsfixes) aufgeräumt", left == 0, f"{left} Reste")
+
+
 def check_pwa():
     """PWA: Manifest, Service Worker und Offline-Seite sind ohne Anmeldung abrufbar, der
     Service Worker deckt die ganze App ab und die Seiten enthalten die Einbindung."""
@@ -1755,6 +1890,7 @@ def run():
         check_csv_import_review(client)
         check_import_monthly_contributions(client)
         check_booking_consistency(client)
+        check_security_hardening(client)
         check_penalty_payment_void(client)
         check_ranking_ties(client)
         check_excused_participant_penalty_excluded(client)

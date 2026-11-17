@@ -14,6 +14,13 @@ from services.validation import validate_email_format
 ASSIGNABLE_MEMBER_ROLES = ("member", "cashier", "admin")
 
 
+def is_last_active_admin(user):
+    """True, wenn dieses Konto der einzige aktive Admin ist."""
+    if not user or user.role != "admin" or not user.active:
+        return False
+    return User.query.filter(User.role == "admin", User.active.is_(True)).count() <= 1
+
+
 def update_member_login(member):
     create_login = request.form.get("create_login") == "on"
     username = request.form.get("username", "").strip()
@@ -22,6 +29,18 @@ def update_member_login(member):
 
     if role not in ASSIGNABLE_MEMBER_ROLES:
         role = "member"
+
+    # Das Login eines Admin-Kontos (Rolle, Passwort, aktiv/inaktiv) dürfen nur
+    # Admins ändern - sonst könnte ein Kassierer Admins aussperren oder deren
+    # Passwort überschreiben.
+    if member.user and member.user.role == "admin" and current_user.role != "admin":
+        flash("Das Login eines Admins darf nur ein Admin ändern. Die übrigen Angaben wurden gespeichert.", "warning")
+        return
+
+    # Es muss immer mindestens ein aktiver Admin übrig bleiben.
+    if member.user and is_last_active_admin(member.user) and (not create_login or role != "admin"):
+        flash("Der einzige aktive Admin kann nicht deaktiviert oder herabgestuft werden.", "danger")
+        return
 
     # Nur ein Admin darf die Admin-Rolle vergeben - sonst könnte sich ein
     # Kassierer-Konto über dieses ganz normale Formular selbst (oder ein
@@ -76,6 +95,7 @@ def update_member_login(member):
 
 @app.route("/members")
 @login_required
+@role_required("admin", "cashier", "auditor")
 def members():
     members_list = Member.query.order_by(
         Member.active.desc(),
@@ -214,6 +234,14 @@ def member_edit(member_id):
 @role_required("admin", "cashier")
 def member_delete(member_id):
     member = Member.query.get_or_404(member_id)
+
+    if member.user and member.user.role == "admin" and current_user.role != "admin":
+        flash("Ein Mitglied mit Admin-Login darf nur ein Admin löschen.", "danger")
+        return redirect(url_for("members"))
+
+    if member.user and is_last_active_admin(member.user):
+        flash("Der einzige aktive Admin kann nicht gelöscht werden.", "danger")
+        return redirect(url_for("members"))
 
     if member.user:
         db.session.delete(member.user)

@@ -238,7 +238,12 @@ def inject_nav_badges():
 
 @login_manager.user_loader
 def load_user(user_id):
-    return User.query.get(int(user_id))
+    user = User.query.get(int(user_id))
+    # Gesperrte (inaktive) Konten sind sofort draußen, auch wenn ihr
+    # Sitzungscookie noch gültig wäre.
+    if user is not None and not user.active:
+        return None
+    return user
 
 
 def installation_needs_setup():
@@ -1098,7 +1103,16 @@ def password_forgot():
 
         if user:
             reset = create_password_reset_token(user)
-            reset_url = url_for("password_reset", token=reset.token, _external=True)
+            # Feste Basisadresse aus PUBLIC_BASE_URL, damit ein gefälschter
+            # Host-Header keinen Link auf eine fremde Domain in die Mail bringt.
+            public_base = (os.getenv("PUBLIC_BASE_URL") or "").strip().rstrip("/")
+            if public_base.startswith(("http://", "https://")):
+                reset_url = public_base + url_for("password_reset", token=reset.token)
+            else:
+                app.logger.warning(
+                    "PUBLIC_BASE_URL ist nicht gesetzt: Der Reset-Link wird aus dem Host-Header gebaut."
+                )
+                reset_url = url_for("password_reset", token=reset.token, _external=True)
             mail_sent, mail_message = send_system_mail(
                 user.email,
                 "Passwort zurücksetzen – Kegelkasse",

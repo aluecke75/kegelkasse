@@ -18,12 +18,12 @@
     <form method="post">
         <div class="form-grid">
             <label class="field-stack"><span>Prüfdatum</span><input type="date" name="audit_date" value="{{ today }}" required></label>
-            <div class="metric-card"><span>Barkasse laut System</span><strong>{{ expected_cash }} €</strong></div>
+            <label class="field-stack"><span>Barkasse laut System</span><input type="text" value="{{ expected_cash }} €" readonly tabindex="-1"></label>
             <label class="field-stack"><span>Barkasse gezählt</span><input class="euro-input" type="text" name="counted_cash" value="{{ expected_cash }}" inputmode="decimal" required></label>
-            <div class="metric-card"><span>Bank laut System</span><strong>{{ expected_bank }} €</strong></div>
+            <label class="field-stack"><span>Bank laut System</span><input type="text" value="{{ expected_bank }} €" readonly tabindex="-1"></label>
             <label class="field-stack"><span>Bank laut Auszug</span><input class="euro-input" type="text" name="statement_bank" value="{{ expected_bank }}" inputmode="decimal" required></label>
         </div>
-        <label>Notiz / Bemerkung<textarea name="note" rows="3" placeholder="z. B. Kasse gezählt, Bankauszug geprüft, Differenz geklärt..."></textarea></label>
+        <label class="field-stack"><span>Notiz / Bemerkung</span><textarea name="note" rows="3" placeholder="z. B. Kasse gezählt, Bankauszug geprüft, Differenz geklärt..."></textarea></label>
         <button type="submit">Kassenprüfung speichern</button>
     </form>
 </div>
@@ -85,6 +85,7 @@
 </div>
 <style>
 .field-stack span { display:block; margin-bottom:0.3rem; font-weight:800; color:var(--text); }
+.field-stack input[readonly] { background:#f2f4f7; cursor:default; }
 .confirm-audit-box { margin-top:8px; }
 .confirm-audit-box form { margin-top:10px; display:grid; gap:8px; min-width:260px; }
 </style>
